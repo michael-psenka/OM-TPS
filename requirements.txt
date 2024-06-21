@@ -1,0 +1,12 @@
+torch
+torchvision
+tqdm
+argparse
+diffusers 
+transformers 
+xformers 
+accelerate
+numpy 
+scipy 
+ftfy 
+Pillow
