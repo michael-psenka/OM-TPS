@@ -1,3 +1,6 @@
 *.gif
 log
 *.pt
+mnist_data/
+*.png
+*.pyc
