@@ -7,6 +7,7 @@ from torchvision.utils import save_image
 from torchvision import transforms
 
 import argparse
+import os
 
 from model import MNISTDiffusion
 
@@ -19,6 +20,8 @@ parser.add_argument("--cpu", action="store_true", help="cpu training")
 args = parser.parse_args()
 
 device = "cpu" if args.cpu else "cuda"
+
+os.makedirs("interpolated/enhanced", exist_ok=True)
 
 init_im = (
     torchvision.io.read_image(
@@ -54,7 +57,7 @@ model = MNISTDiffusion(
     dim_mults=dim_mults,
 )
 
-ckpt = torch.load("results/best_models/best_model.pt")
+ckpt = torch.load("best_model.pt")
 model.load_state_dict(ckpt["model"])
 
 model = model.to(device)

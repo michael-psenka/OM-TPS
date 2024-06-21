@@ -1,4 +1,5 @@
 import math
+import os
 
 import torch
 import torchvision
@@ -8,6 +9,9 @@ from unet import Unet
 from model import MNISTDiffusion
 
 from train_mnist import create_mnist_dataloaders
+
+os.makedirs("interpolated/OM2", exist_ok=True)
+os.makedirs("interpolated/linear", exist_ok=True)
 
 sampling = 32
 images = []
@@ -39,7 +43,7 @@ model = MNISTDiffusion(
     dim_mults=dim_mults,
 )
 
-ckpt = torch.load("results/best_models/best_model.pt")
+ckpt = torch.load("best_model.pt")
 model.load_state_dict(ckpt["model"])
 # print(model.model(images_tensor))
 

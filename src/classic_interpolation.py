@@ -54,7 +54,7 @@ model = MNISTDiffusion(
     dim_mults=dim_mults,
 )
 
-ckpt = torch.load("results/best_models/best_model.pt")
+ckpt = torch.load("best_model.pt")
 model.load_state_dict(ckpt["model"])
 model.eval()
 
