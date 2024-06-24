@@ -1,19 +1,23 @@
+"""
+Linear interpolation in the latent space of a diffusion model. 
+This script loads a pretrained MNIST diffusion model and uses it to interpolate between two images in the latent space.
+We do forward diffusion for both images and then linearly interpolate between the two latent representations.
+Then, we sample from the model via reverse diffusion at each interpolated latent representation to get the corresponding image.
+"""
+
 import math
+import argparse
 
 import torch
 import torchvision
 from torchvision.utils import save_image
-
 from torchvision import transforms
-
-import argparse
 
 from model import MNISTDiffusion
 
+
 parser = argparse.ArgumentParser(description="Training MNISTDiffusion")
-
 parser.add_argument("--cpu", action="store_true", help="cpu training")
-
 args = parser.parse_args()
 
 device = "cpu" if args.cpu else "cuda"

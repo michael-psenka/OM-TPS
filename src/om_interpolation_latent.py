@@ -1,22 +1,27 @@
+"""
+Interpolation via Onsager-Machlup action minimization in the latent space of a diffusion model. 
+This script loads a pretrained MNIST diffusion model and uses it to interpolate between two images in the latent space.
+We do forward diffusion for both images and then start with a linear interpolation path between the two latent representation as an initial guess.
+Then, we optimize the path by minimizing the Onsager-Machlup action.
+Finally, we sample from the model via reverse diffusion along the optimized latent path to get the corresponding image.
+"""
+
 import math
+import argparse
+import os
+import argparse
+from tqdm import tqdm
 
 import torch
 import torchvision
 from torchvision.utils import save_image
-
 from torchvision import transforms
-
-import argparse
-import os
 
 from model import MNISTDiffusion
 
-from tqdm import tqdm
 
 parser = argparse.ArgumentParser(description="Training MNISTDiffusion")
-
 parser.add_argument("--cpu", action="store_true", help="cpu training")
-
 args = parser.parse_args()
 
 device = "cpu" if args.cpu else "cuda"
@@ -78,8 +83,9 @@ heated_final = model._forward_diffusion(final_im, t, noise_1)
 
 # Generate a range of interpolation factors
 alphas = torch.linspace(0, 1, num_samples)
-# Linearly interpolate between the two images at each alpha
 
+# Linearly interpolate between the two images at each alpha
+# This path serves as the initial guess for the optimization.
 interpolated_images = torch.cat(
     [torch.lerp(heated_init.cpu(), heated_final.cpu(), alpha) for alpha in alphas],
     axis=0,
@@ -91,7 +97,10 @@ dt_xi = const_time / num_samples
 
 
 def simple_action(path, forces):
-    # print(path)
+    """
+    Simple Onsager-Machlup action.
+    TODO: add equation and reference.
+    """
 
     result = 0.0
     for i in range(path.shape[0] - 1):
@@ -103,7 +112,6 @@ def simple_action(path, forces):
         result = result + torch.sum(first_term + second_term + third_term)
 
     return result / torch.tensor(4.0)
-
 
 alpha = 1e-2
 interpolated_images = interpolated_images.to(device)
@@ -119,30 +127,37 @@ save_image(
     nrow=int(math.sqrt(20)),
 )
 
-steps = 300
+steps = 300 # number of optimization steps
 save_every = 100
 
 print(interpolated_images.shape)
 
 for i in tqdm(range(steps), desc="applying OM principle"):
 
+    # compute diffusion model score estimates
     forces = model.model(interpolated_images, t)
 
+    # compute the OM action from these forces
     total_action = simple_action(interpolated_images, forces)
 
     optimizer.zero_grad()
 
+    # compute gradient of the action w.r.t. the images
     (grads,) = torch.autograd.grad(total_action, interpolated_images)
 
     with torch.no_grad():
-
+        
+        # zero out the gradients of the first and last images on the path (they are fixed)
         grads[0], grads[-1] = torch.zeros_like(
             interpolated_images[0]
         ), torch.zeros_like(interpolated_images[-1])
 
+        #assign gradients and take a gradient descent step
         interpolated_images.grad = grads
         optimizer.step()
 
+        # add noise to the non-endpoint images (to keep it in the distribution of the model)
+        # TODO: what is the exact reasoning behind this?
         noise = torch.randn_like(interpolated_images)
         noise[0], noise[-1] = torch.zeros_like(
             interpolated_images[0]
@@ -171,6 +186,8 @@ for i in tqdm(range(steps), desc="applying OM principle"):
 
 
 # interpolated_images = interpolated_images.detach().clamp(-1,1)
+
+# run reverse diffusion on the final, optimized path
 interpolated_images = model.sample_from_t(t, interpolated_images.to(device))
 
 save_image(inv_normalizer(heated_init), "interpolated/enhanced/example.png")

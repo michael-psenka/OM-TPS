@@ -1,3 +1,11 @@
+"""
+Interpolation via Onsager-Machlup action minimization in raw image space. 
+This script loads a pretrained MNIST diffusion model and uses it to interpolate between two images in the latent space.
+We start with a linear interpolation path between the two images.
+Then, we optimize the path by minimizing the Onsager-Machlup action.
+TODO: consolidate this with the om_interpolation_latent.py script (can set reverse diffusion steps accordingly).
+"""
+
 import math
 import os
 
