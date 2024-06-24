@@ -62,7 +62,6 @@ dt = 0.01  # apparently a very important parameter that requires scientific reas
 
 
 def simple_action(path, forces):
-    # print(path)
 
     result = 0.0
     for i in range(path.shape[0] - 1):
@@ -74,7 +73,6 @@ def simple_action(path, forces):
         result = result + torch.sum(first_term + second_term + third_term)
 
     return result / torch.tensor(4.0)
-
 
 alpha = 1e-1
 images_tensor.requires_grad = True

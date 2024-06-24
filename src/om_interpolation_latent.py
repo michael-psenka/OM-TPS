@@ -18,6 +18,7 @@ from torchvision.utils import save_image
 from torchvision import transforms
 
 from model import MNISTDiffusion
+from actions import SimpleAction
 
 
 parser = argparse.ArgumentParser(description="Training MNISTDiffusion")
@@ -92,26 +93,7 @@ interpolated_images = torch.cat(
 )
 
 const_time = 4.0
-
-dt_xi = const_time / num_samples
-
-
-def simple_action(path, forces):
-    """
-    Simple Onsager-Machlup action.
-    TODO: add equation and reference.
-    """
-
-    result = 0.0
-    for i in range(path.shape[0] - 1):
-        first_term = torch.square((path[i + 1, :] - path[i, :])) * (1 / dt_xi)
-        f_n = forces[i]
-        f_np = forces[i + 1]
-        second_term = (torch.square(f_n) + torch.square(f_np)) * (dt_xi / 2.0)
-        third_term = (path[i + 1, :] - path[i, :]) * (f_np - f_n)
-        result = result + torch.sum(first_term + second_term + third_term)
-
-    return result / torch.tensor(4.0)
+simple_action = SimpleAction(dt_xi = const_time / num_samples)
 
 alpha = 1e-2
 interpolated_images = interpolated_images.to(device)

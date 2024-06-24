@@ -1,3 +1,7 @@
+"""
+Produce linear interpolation between two images.
+"""
+
 import torch
 import torchvision
 from torchvision.utils import save_image
@@ -29,9 +33,6 @@ im_2 = (
 )
 
 
-# print(im_1.shape)
-# print(im_1)
-
 # Number of interpolation steps
 num_samples = 32
 
@@ -42,5 +43,4 @@ alphas = torch.linspace(0, 1, num_samples)
 interpolated_images = [torch.lerp(im_1, im_2, alpha) for alpha in alphas]
 
 for i, image in enumerate(interpolated_images):
-
     save_image(image, "interpolated/linear/interp_{}.png".format(i))

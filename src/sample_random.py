@@ -1,3 +1,7 @@
+"""
+This script is used to sample random images from the trained model.
+"""
+
 import torch
 import argparse
 import torchvision
