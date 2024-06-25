@@ -74,6 +74,7 @@ def simple_action(path, forces):
 
     return result / torch.tensor(4.0)
 
+
 alpha = 1e-1
 images_tensor.requires_grad = True
 optimizer = torch.optim.Adam([images_tensor], lr=alpha)

@@ -4,6 +4,7 @@ import time
 import numpy as np
 from IPython import display as IPdisplay
 
+
 # torchvision ema implementation
 # https://github.com/pytorch/vision/blob/main/references/classification/utils.py#L159
 class ExponentialMovingAverage(torch.optim.swa_utils.AveragedModel):
@@ -19,10 +20,11 @@ class ExponentialMovingAverage(torch.optim.swa_utils.AveragedModel):
 
         super().__init__(model, device, ema_avg, use_buffers=True)
 
+
 def display_images(images, save_path):
-    """The `display_images` function converts a list of 
-    image arrays into a GIF, saves it to a specified path 
-    and returns the GIF object for display. It names the GIF 
+    """The `display_images` function converts a list of
+    image arrays into a GIF, saves it to a specified path
+    and returns the GIF object for display. It names the GIF
     file using the current time and handles any errors by printing them out."""
 
     try:
@@ -33,10 +35,7 @@ def display_images(images, save_path):
 
         # Generate a file name based on the current time, replacing colons with hyphens
         # to ensure the filename is valid for file systems that don't allow colons.
-        filename = (
-            time.strftime("%H:%M:%S", time.localtime())
-            .replace(":", "-")
-        )
+        filename = time.strftime("%H:%M:%S", time.localtime()).replace(":", "-")
         # Save the first image in the list as a GIF file at the 'save_path' location.
         # The rest of the images in the list are added as subsequent frames to the GIF.
         # The GIF will play each frame for 100 milliseconds and will loop indefinitely.

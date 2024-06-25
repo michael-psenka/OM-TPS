@@ -16,7 +16,7 @@ train_iterator = iter(train_dataloader)
 im_1, target = next(train_iterator)
 im_2, target = next(train_iterator)
 
-save_image(im_1,"interpolated/linear/start.png")
+save_image(im_1, "interpolated/linear/start.png")
 save_image(im_2, "interpolated/linear/end.png")
 
 im_1 = (

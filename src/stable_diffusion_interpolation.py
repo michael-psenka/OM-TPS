@@ -56,7 +56,12 @@ built on top of SD1.5. However, you are free to experiment with other models and
 
 model_name_or_path = "runwayml/stable-diffusion-v1-5"
 
-scheduler = LMSDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
+scheduler = LMSDiscreteScheduler(
+    beta_start=0.00085,
+    beta_end=0.012,
+    beta_schedule="scaled_linear",
+    num_train_timesteps=1000,
+)
 
 pipe = StableDiffusionPipeline.from_pretrained(
     model_name_or_path,
@@ -146,7 +151,9 @@ negative_prompt_tokens = pipe.tokenizer(
     truncation=True,
     return_tensors="pt",
 )
-negative_prompt_embeds = pipe.text_encoder(negative_prompt_tokens.input_ids.to(device))[0]
+negative_prompt_embeds = pipe.text_encoder(negative_prompt_tokens.input_ids.to(device))[
+    0
+]
 
 """Now let's look at the code part that generates a random initial vector using a normal distribution that is structured to match the dimensions expected by the diffusion model (UNet). This allows for the reproducibility of the results by optionally using a random number generator. After creating the initial vector, the code performs a series of interpolations between the two embeddings (positive and negative prompts), by incrementally adding a small step size for each iteration. The results are stored in a list named "walked_embeddings"."""
 
@@ -197,6 +204,7 @@ The source is from Andrej Karpathy's gist: https://gist.github.com/karpathy/0010
 A more detailed explanation of this method can be found at: https://en.wikipedia.org/wiki/Slerp.
 """
 
+
 def slerp(v0, v1, num, t0=0, t1=1):
     v0 = v0.detach().cpu().numpy()
     v1 = v1.detach().cpu().numpy()
@@ -221,6 +229,7 @@ def slerp(v0, v1, num, t0=0, t1=1):
     v3 = torch.tensor(np.array([interpolation(t[i], v0, v1) for i in range(num)]))
 
     return v3
+
 
 # The text prompt that describes the desired output image.
 prompt = "Sci-fi digital painting of an alien landscape with otherworldly plants, strange creatures, and distant planets."
@@ -289,9 +298,7 @@ prompts_tokens = pipe.tokenizer(
     truncation=True,
     return_tensors="pt",
 )
-prompts_embeds = pipe.text_encoder(
-    prompts_tokens.input_ids.to(device)
-)[0]
+prompts_embeds = pipe.text_encoder(prompts_tokens.input_ids.to(device))[0]
 
 # Tokenizing and encoding negative prompts into embeddings.
 if negative_prompts is None:
@@ -321,11 +328,7 @@ interpolated_prompt_embeds = []
 interpolated_negative_prompts_embeds = []
 for i in range(batch_size - 1):
     interpolated_prompt_embeds.append(
-        slerp(
-            prompts_embeds[i],
-            prompts_embeds[i + 1],
-            num_interpolation_steps
-        )
+        slerp(prompts_embeds[i], prompts_embeds[i + 1], num_interpolation_steps)
     )
     interpolated_negative_prompts_embeds.append(
         slerp(
@@ -335,9 +338,7 @@ for i in range(batch_size - 1):
         )
     )
 
-interpolated_prompt_embeds = torch.cat(
-    interpolated_prompt_embeds, dim=0
-).to(device)
+interpolated_prompt_embeds = torch.cat(interpolated_prompt_embeds, dim=0).to(device)
 
 interpolated_negative_prompts_embeds = torch.cat(
     interpolated_negative_prompts_embeds, dim=0
