@@ -32,7 +32,7 @@ if __name__ == "__main__":
         "--ckpt_path", type=str, help="define checkpoint path", default="best_model.pt"
     )
     parser.add_argument(
-        "--num_samples", type=int, help="length of interpolation path", default=8
+        "--path_length", type=int, help="length of interpolation path", default=8
     )
     parser.add_argument(
         "--timesteps",
@@ -58,32 +58,40 @@ if __name__ == "__main__":
     parser.add_argument(
         "--lr", type=float, help="learning rate for OM optimization", default=1e-2
     )
+    parser.add_argument(
+        "--batch_size",
+        type=int,
+        help="batch_size for doing the optimization",
+        default=192,  # this saturates GPU memory on Sanjeev's Germain server
+    )
 
     args = parser.parse_args()
     device = "cpu" if args.cpu else "cuda"
 
     # Get arguments
     ckpt_path = args.ckpt_path
-    num_samples = args.num_samples
+    path_length = args.path_length
     timesteps = args.timesteps
     steps = args.steps
     max_pairs = args.max_pairs
     save_every = args.save_every
     const_time = args.const_time
     lr = args.lr
+    batch_size = args.batch_size
+    max_batches = math.ceil(max_pairs / batch_size)
 
-    t = torch.tensor(timesteps).to(device)
+    t = torch.tensor(timesteps).unsqueeze(-1).to(device)
 
     os.makedirs("interpolated/enhanced", exist_ok=True)
 
     # Instantiate dataloader
-    # TODO: make this work with larger batch sizes
-    train_dataloader, test_dataloader = create_mnist_dataloaders(batch_size=1)
+    train_dataloader, test_dataloader = create_mnist_dataloaders(batch_size=batch_size)
     train_iterator = iter(train_dataloader)
     test_iterator = iter(test_dataloader)
 
-    init_im, _ = next(train_iterator)
-    final_im, _ = next(train_iterator)
+    init_im, _ = next(test_iterator)
+    final_im, _ = next(test_iterator)
+    _, C, H, W = init_im.shape
 
     # Un-normalize images from [-1, 1]  to [0, 1]
     inv_normalizer = transforms.Normalize([-1.0], [2.0])
@@ -111,14 +119,14 @@ if __name__ == "__main__":
     model.eval()
 
     # Define OM Action
-    simple_action = SimpleAction(dt_xi=const_time / num_samples)
+    simple_action = SimpleAction(dt_xi=const_time / path_length)
 
     # Initialize metrics
     fid_calculator = FrechetInceptionDistance(device=device)
 
     iters = 0
     # loop through test dataset
-    while init_im is not None and final_im is not None and iters < max_pairs:
+    while init_im is not None and final_im is not None and iters < max_batches:
         iters += 1
 
         init_im = init_im.to(device)
@@ -128,22 +136,22 @@ if __name__ == "__main__":
         noise_2 = torch.randn_like(final_im)
 
         # Forward diffusion for both images
-        heated_init = model._forward_diffusion(init_im, t, noise_1)
-        heated_final = model._forward_diffusion(final_im, t, noise_1)
-        save_image(inv_normalizer(heated_init), "interpolated/enhanced/example.png")
+        heated_init = model._forward_diffusion(init_im, t.repeat(batch_size), noise_1)
+        heated_final = model._forward_diffusion(final_im, t.repeat(batch_size), noise_1)
+        save_image(inv_normalizer(heated_init)[0], "interpolated/enhanced/example.png")
 
         # Generate a range of interpolation factors
-        alphas = torch.linspace(0, 1, num_samples)
+        alphas = torch.linspace(0, 1, path_length)
 
         # Linearly interpolate between the two images at each alpha
         # This path serves as the initial guess for the optimization.
         # TODO: add option for spherical or exponential interpolation as initial guess
-        interpolated_images = torch.cat(
+        interpolated_images = torch.stack(
             [
                 torch.lerp(heated_init.cpu(), heated_final.cpu(), alpha)
                 for alpha in alphas
             ],
-            axis=0,
+            axis=1,
         )
 
         interpolated_images = interpolated_images.to(device)
@@ -153,33 +161,39 @@ if __name__ == "__main__":
         saved = interpolated_images.detach().clone()
         to_draw = torch.clamp((saved + 1.0) / 2.0, -1, 1)
         save_image(
-            inv_normalizer(interpolated_images),
+            inv_normalizer(interpolated_images)[0],
             "interpolated/enhanced/OMinitial.png",
             format="png",
             nrow=int(math.sqrt(20)),
         )
 
-        for i in tqdm(
+        pbar = tqdm(
             range(steps), desc="applying OM principle to optimize interpolation path"
-        ):
+        )
+
+        for i in pbar:
 
             # compute diffusion model score estimates
-            forces = model.model(interpolated_images, t)
+            forces = model.model(
+                interpolated_images.reshape(-1, C, H, W),
+                t.repeat(batch_size * path_length),
+            )
+            forces = forces.reshape(batch_size, path_length, C, H, W)
 
-            # compute the OM action from these forces
-            total_action = simple_action(interpolated_images, forces)
+            # compute the OM action from these forces (vmaped over the batch dimension)
+            total_action = torch.vmap(simple_action)(interpolated_images, forces).mean()
+            pbar.set_description(f"Optimizing OM action: {total_action.item()}")
 
             optimizer.zero_grad()
 
             # compute gradient of the action w.r.t. the images
             (grads,) = torch.autograd.grad(total_action, interpolated_images)
-
             with torch.no_grad():
 
                 # zero out the gradients of the first and last images on the path (they are fixed)
-                grads[0], grads[-1] = torch.zeros_like(
-                    interpolated_images[0]
-                ), torch.zeros_like(interpolated_images[-1])
+                grads[:, 0], grads[:, -1] = torch.zeros_like(
+                    interpolated_images[:, 0]
+                ), torch.zeros_like(interpolated_images[:, -1])
 
                 # assign gradients and take a gradient descent step
                 interpolated_images.grad = grads
@@ -188,9 +202,9 @@ if __name__ == "__main__":
                 # add noise to the non-endpoint images (to keep it in the distribution of the model)
                 # TODO: what is the exact reasoning behind this?
                 noise = torch.randn_like(interpolated_images)
-                noise[0], noise[-1] = torch.zeros_like(
-                    interpolated_images[0]
-                ), torch.zeros_like(interpolated_images[-1])
+                noise[:, 0], noise[:, -1] = torch.zeros_like(
+                    interpolated_images[:, 0]
+                ), torch.zeros_like(interpolated_images[:, -1])
                 interpolated_images += 0.06 * noise
 
             if i % save_every == 0:
@@ -205,20 +219,25 @@ if __name__ == "__main__":
                         (torch.cat((saved, interpolated_images)) + 1.0) / 2.0, 0.0, 1.0
                     )
                 save_image(
-                    to_draw,
+                    to_draw[0],
                     "interpolated/enhanced/OMsteps_{}.png".format(i),
                     format="png",
                     nrow=int(math.sqrt(20)),
                 )
 
         # run reverse diffusion on the final, optimized path
-        interpolated_images = model.sample_from_t(t, interpolated_images.to(device))
+        interpolated_images = model.sample_from_t(
+            t, interpolated_images.reshape(-1, C, H, W)
+        )
+        interpolated_images = interpolated_images.reshape(
+            batch_size, path_length, C, H, W
+        )
         unnormalized_images = inv_normalizer(
             torch.clamp(interpolated_images, -1.0, 1.0)
         )
 
         save_image(
-            unnormalized_images,
+            unnormalized_images[0],
             "interpolated/enhanced/enhanced_result{}.png".format(t),
             nrow=int(math.sqrt(20)),
         )
@@ -227,19 +246,24 @@ if __name__ == "__main__":
         init_im = inv_normalizer(init_im)
         final_im = inv_normalizer(final_im)
 
-        # Repeat grayscale channel 3 times if necessary
-        if unnormalized_images.shape[1] == 1:
-            unnormalized_images = unnormalized_images.repeat(1, 3, 1, 1)
+        # Repeat grayscale channel 3 times
+        if unnormalized_images.shape[-3] == 1:
+            unnormalized_images = unnormalized_images.repeat(1, 1, 3, 1, 1)
             init_im = init_im.repeat(1, 3, 1, 1)
             final_im = final_im.repeat(1, 3, 1, 1)
 
         # Update fid calculator
         fid_calculator.update(torch.cat([init_im, final_im]), True)
-        fid_calculator.update(unnormalized_images[1:-1], False)
+        fid_calculator.update(
+            unnormalized_images[:, 1:-1].reshape(
+                -1, unnormalized_images.shape[-3], H, W
+            ),
+            False,
+        )
 
         # go to next pair of images
-        init_im, _ = next(train_iterator)
-        final_im, _ = next(train_iterator)
+        init_im, _ = next(test_iterator)
+        final_im, _ = next(test_iterator)
 
     # FID
     fid = fid_calculator.compute()

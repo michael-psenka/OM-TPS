@@ -17,10 +17,12 @@ class SimpleAction(torch.nn.Module):
     def forward(self, path: torch.Tensor, forces: torch.Tensor):
         """
         Args:
-            path: torch.Tensor of images of shape [N, C, H, W], where N is the number of images on the path.
-            forces: torch.Tensor of diffusion model score estimates of shape [N, C, H, W], where N is the number of points on the path.
+            path: torch.Tensor of images of shape [P, C, H, W], where P is the number of images on the path.
+            forces: torch.Tensor of diffusion model score estimates of shape [P, C, H, W], where N is the number of points on the path.
         Returns the OM action of the path (torch.Tensor of shape [1]).
         """
+
+        assert path.shape == forces.shape, "path and forces must have the same shape"
 
         result = 0.0
         for i in range(path.shape[0] - 1):
