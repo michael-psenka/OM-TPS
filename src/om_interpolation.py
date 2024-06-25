@@ -3,7 +3,7 @@ Interpolation via Onsager-Machlup action minimization of a diffusion model.
 We do forward diffusion for two images and then start with a linear/spherical interpolation path as an initial guess.
 Then, we optimize the path by minimizing the Onsager-Machlup action.
 Finally, we sample from the model via reverse diffusion along the optimized latent path to get the corresponding image.
-We can intepolate in image space or in pure Gaussian noise space by setting the latent_time parameter.
+We can interpolate in image space or in pure Gaussian noise space by setting the latent_time parameter.
 We can also default to vanilla linear or spherical interpolation by setting the steps parameter to 0.
 """
 
@@ -103,7 +103,7 @@ if __name__ == "__main__":
 
     t = torch.tensor(latent_time).unsqueeze(-1).to(device)
 
-    os.makedirs("interpolated/enhanced", exist_ok=True)
+    os.makedirs("../mnist_outputs/enhanced", exist_ok=True)
 
     # Instantiate dataloader
     train_dataloader, test_dataloader = create_mnist_dataloaders(batch_size=batch_size)
@@ -159,7 +159,9 @@ if __name__ == "__main__":
         # Forward diffusion for both images
         heated_init = model._forward_diffusion(init_im, t.repeat(batch_size), noise_1)
         heated_final = model._forward_diffusion(final_im, t.repeat(batch_size), noise_1)
-        save_image(inv_normalizer(heated_init)[0], "interpolated/enhanced/example.png")
+        save_image(
+            inv_normalizer(heated_init)[0], "../mnist_outputs/enhanced/example.png"
+        )
 
         # Generate a range of interpolation factors
         alphas = torch.linspace(0, 1, path_length)
@@ -182,7 +184,7 @@ if __name__ == "__main__":
         to_draw = torch.clamp((saved + 1.0) / 2.0, -1, 1)
         save_image(
             inv_normalizer(interpolated_images)[0],
-            "interpolated/enhanced/OMinitial.png",
+            "../mnist_outputs/enhanced/OMinitial.png",
             format="png",
             nrow=int(math.sqrt(20)),
         )
@@ -238,7 +240,7 @@ if __name__ == "__main__":
                     )
                 save_image(
                     to_draw[0],
-                    "interpolated/enhanced/OMsteps_{}.png".format(i),
+                    "../mnist_outputs/enhanced/OMsteps_{}.png".format(i),
                     format="png",
                     nrow=int(math.sqrt(20)),
                 )
@@ -256,7 +258,7 @@ if __name__ == "__main__":
 
         save_image(
             unnormalized_images[0],
-            "interpolated/enhanced/enhanced_result{}.png".format(t),
+            "../mnist_outputs/enhanced/enhanced_result{}.png".format(t),
             nrow=int(math.sqrt(20)),
         )
 
