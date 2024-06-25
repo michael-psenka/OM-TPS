@@ -13,8 +13,7 @@ import torch
 import torchvision
 from torchvision.utils import save_image
 
-from unet import Unet
-from model import MNISTDiffusion
+from model import MNISTDiffusion, Unet
 
 from train_mnist import create_mnist_dataloaders
 

@@ -15,7 +15,6 @@ from torchvision import transforms
 
 from model import MNISTDiffusion
 
-
 parser = argparse.ArgumentParser(description="Training MNISTDiffusion")
 parser.add_argument("--cpu", action="store_true", help="cpu training")
 args = parser.parse_args()

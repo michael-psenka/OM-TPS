@@ -39,3 +39,24 @@ class SimpleAction(torch.nn.Module):
             result = result + torch.sum(first_term + second_term + third_term)
 
         return result / torch.tensor(4.0)
+
+
+"""
+Slightly different action, TODO: understand the difference
+"""
+
+# def simple_action(path, forces):
+#     # print(path)
+
+#     result = 0.0
+#     for i in range(path.shape[0] - 1):
+#         first_term = torch.square((path[i + 1, :] - path[i, :])) * (xi / 4 / dt)
+#         f_n = forces[i]
+#         f_np = forces[i + 1]
+#         second_term = (torch.square(f_n) + torch.square(f_np)) * (dt / 4 / xi)
+#         third_term = (
+#             (path[i + 1, :] - path[i, :]) * (f_np - f_n) * (dt * D / torch.tensor(2.0))
+#         )
+#         result = result + torch.sum(first_term + second_term + third_term)
+
+#     return result / torch.tensor(4.0)
