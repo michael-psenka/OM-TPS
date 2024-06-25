@@ -5,6 +5,41 @@ import numpy as np
 from IPython import display as IPdisplay
 
 
+def get_initial_guess_fn(initial_guess_method):
+    if initial_guess_method == "spherical":
+        return slerp
+    elif initial_guess_method == "linear":
+        return torch.lerp
+    else:
+        raise ValueError("initial_guess_method must be 'spherical' or 'linear'")
+
+
+def slerp(v0, v1, t, DOT_THRESHOLD=0.9995):
+    """
+    Spherical linear interpolation between two vectors.
+    Source: Andrej Karpathy's gist: https://gist.github.com/karpathy/00103b0037c5aaea32fe1da1af553355
+    Args:
+        v0 (torch.Tensor): the first vector
+        v1 (torch.Tensor): the second vector
+        t (torch.Tensor): scalar from 0 to 1 parameterizing the interpolation
+    """
+    v0 = v0.detach().cpu().numpy()
+    v1 = v1.detach().cpu().numpy()
+
+    dot = np.sum(v0 * v1 / (np.linalg.norm(v0) * np.linalg.norm(v1)))
+    if np.abs(dot) > DOT_THRESHOLD:
+        v2 = (1 - t) * v0 + t * v1  # simple linear interpolation
+    else:
+        theta_0 = np.arccos(dot)  # angle between latent vectors
+        sin_theta_0 = np.sin(theta_0)
+        theta_t = theta_0 * t
+        sin_theta_t = np.sin(theta_t)
+        s0 = np.sin(theta_0 - theta_t) / sin_theta_0
+        s1 = sin_theta_t / sin_theta_0
+        v2 = s0 * v0 + s1 * v1
+    return v2
+
+
 # torchvision ema implementation
 # https://github.com/pytorch/vision/blob/main/references/classification/utils.py#L159
 class ExponentialMovingAverage(torch.optim.swa_utils.AveragedModel):

@@ -9,7 +9,7 @@ Metrics for evaluating interpolation paths produced by the diffusion model.
 
 def perceptual_path_length(path: torch.Tensor) -> torch.Tensor:
     """
-    Computes the length of the path.
+    Computes the length of the path based on the LPIPS metric.
 
     Args:
 
