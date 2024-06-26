@@ -1,8 +1,8 @@
+from typing import Callable
 import torch
 import torchvision
 from torcheval.metrics import FrechetInceptionDistance
 from tqdm import tqdm
-from lpips import LPIPS
 
 """
 Metrics for evaluating interpolation paths produced by the diffusion model.
@@ -10,7 +10,8 @@ Metrics for evaluating interpolation paths produced by the diffusion model.
 
 
 def perceptual_path_length_and_variance(
-    paths: torch.Tensor, net="alex"
+    paths: torch.Tensor,
+    loss_fn: Callable,
 ) -> torch.Tensor:
     """
     Computes the length of the interpolation path and variance of pairwise distances based on the LPIPS metric.
@@ -18,6 +19,7 @@ def perceptual_path_length_and_variance(
 
     Args:
         paths: torch.Tensor of images of shape [B, P, C, H, W], where B is the batch size and P is the number of images on each path.
+        loss_fn: LPIPS loss function.
         Images MUST be normalized to [-1, 1], and must be in RGB format.
     Returns the length of the paths (torch.Tensor of shape [B]).
     """
@@ -27,7 +29,6 @@ def perceptual_path_length_and_variance(
     assert paths.shape[-3] == 3, "Images must be in RGB format"
 
     epsilon = 1 / paths.shape[-4]  # spacing between images
-    loss_fn = LPIPS(net=net).to(paths.device)
 
     # pad the path to 224x224 to be compatible with LPIPS (TODO: fix this)
     pad_amt = int((224 - paths.shape[-1]) / 2)

@@ -15,7 +15,6 @@ import argparse
 from tqdm import tqdm
 
 import torch
-import torchvision
 from torchvision.utils import save_image
 from torchvision import transforms
 
@@ -27,6 +26,7 @@ from utils import get_initial_guess_fn
 
 from torcheval.metrics import FrechetInceptionDistance
 from metrics import perceptual_path_length_and_variance
+from lpips import LPIPS
 
 
 if __name__ == "__main__":
@@ -150,6 +150,7 @@ if __name__ == "__main__":
     simple_action = SimpleAction(dt_xi=const_time / path_length)
 
     # Initialize metrics
+    lpips_loss_fn = LPIPS(net="alex").to(device)
     fid_calculator = FrechetInceptionDistance(device=device)
     ppl = 0
     pdv = 0
@@ -288,7 +289,7 @@ if __name__ == "__main__":
 
         # Calculate PPL/PDV metrics (on [-1, 1] images)
         _ppl, _pdv = perceptual_path_length_and_variance(
-            clamped_interpolated_images
+            clamped_interpolated_images, lpips_loss_fn
         )
         ppl += _ppl.mean()
         pdv += _pdv.mean()
