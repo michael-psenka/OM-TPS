@@ -24,7 +24,7 @@ class SimpleAction(torch.nn.Module):
         Note: we omit the term which involves the difference of the energy at the endpoints of the path,
         because it is constant and does not affect the optimization.
         """
-
+        # Note dt_xi is dt / gamma in the paper
         assert path.shape == forces.shape, "path and forces must have the same shape"
 
         result = 0.0
