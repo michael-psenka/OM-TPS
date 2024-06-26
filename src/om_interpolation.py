@@ -22,7 +22,7 @@ from train_mnist import create_mnist_dataloaders
 
 from model import MNISTDiffusion
 from actions import SimpleAction
-from utils import get_initial_guess_fn
+from utils import get_initial_guess_fn, print_active_torch_tensors
 
 from torcheval.metrics import FrechetInceptionDistance
 from metrics import perceptual_path_length_and_variance
@@ -158,6 +158,7 @@ if __name__ == "__main__":
     iters = 0
     # loop through test dataset
     while init_im is not None and final_im is not None and iters < max_batches:
+
         iters += 1
 
         init_im = init_im.to(device)
@@ -167,8 +168,13 @@ if __name__ == "__main__":
         noise_2 = torch.randn_like(final_im)
 
         # Forward diffusion for both images
-        heated_init = model._forward_diffusion(init_im, t.repeat(batch_size), noise_1)
-        heated_final = model._forward_diffusion(final_im, t.repeat(batch_size), noise_1)
+        with torch.no_grad():
+            heated_init = model._forward_diffusion(
+                init_im, t.repeat(batch_size), noise_1
+            )
+            heated_final = model._forward_diffusion(
+                final_im, t.repeat(batch_size), noise_1
+            )
         save_image(
             inv_normalizer(heated_init)[0], "../mnist_outputs/enhanced/example.png"
         )
@@ -258,51 +264,51 @@ if __name__ == "__main__":
                     nrow=int(math.sqrt(20)),
                 )
 
-        interpolated_images = interpolated_images.detach().requires_grad_(False)
-        # run reverse diffusion on the final, optimized path
-        interpolated_images = model.sample_from_t(
-            t, interpolated_images.reshape(-1, C, H, W)
-        )
-        interpolated_images = interpolated_images.reshape(
-            batch_size, path_length, C, H, W
-        )
-
-        clamped_interpolated_images = torch.clamp(interpolated_images, -1.0, 1.0)
-
-        # Repeat grayscale channel 3 times
-        if clamped_interpolated_images.shape[-3] == 1:
-            clamped_interpolated_images = clamped_interpolated_images.repeat(
-                1, 1, 3, 1, 1
+        with torch.no_grad():
+            # run reverse diffusion on the final, optimized path
+            interpolated_images = model.sample_from_t(
+                t, interpolated_images.reshape(-1, C, H, W)
             )
-            init_im = init_im.repeat(1, 3, 1, 1)
-            final_im = final_im.repeat(1, 3, 1, 1)
+            interpolated_images = interpolated_images.reshape(
+                batch_size, path_length, C, H, W
+            )
 
-        # Unnormalize images back to [0, 1]
-        unnormalized_images = inv_normalizer(clamped_interpolated_images)
-        init_im = inv_normalizer(init_im)
-        final_im = inv_normalizer(final_im)
+            clamped_interpolated_images = torch.clamp(interpolated_images, -1.0, 1.0)
 
-        save_image(
-            unnormalized_images[0],
-            "../mnist_outputs/enhanced/enhanced_result{}.png".format(t),
-            nrow=int(math.sqrt(20)),
-        )
+            # Repeat grayscale channel 3 times
+            if clamped_interpolated_images.shape[-3] == 1:
+                clamped_interpolated_images = clamped_interpolated_images.repeat(
+                    1, 1, 3, 1, 1
+                )
+                init_im = init_im.repeat(1, 3, 1, 1)
+                final_im = final_im.repeat(1, 3, 1, 1)
 
-        # Calculate PPL/PDV metrics (on [-1, 1] images)
-        _ppl, _pdv = perceptual_path_length_and_variance(
-            clamped_interpolated_images, lpips_loss_fn
-        )
-        ppl += _ppl.mean()
-        pdv += _pdv.mean()
+            # Unnormalize images back to [0, 1]
+            unnormalized_images = inv_normalizer(clamped_interpolated_images)
+            init_im = inv_normalizer(init_im)
+            final_im = inv_normalizer(final_im)
 
-        # Update fid calculator (on [0, 1] images)
-        fid_calculator.update(torch.cat([init_im, final_im]), True)
-        fid_calculator.update(
-            unnormalized_images[:, 1:-1].reshape(
-                -1, unnormalized_images.shape[-3], H, W
-            ),
-            False,
-        )
+            save_image(
+                unnormalized_images[0],
+                "../mnist_outputs/enhanced/enhanced_result{}.png".format(t),
+                nrow=int(math.sqrt(20)),
+            )
+
+            # Calculate PPL/PDV metrics (on [-1, 1] images)
+            _ppl, _pdv = perceptual_path_length_and_variance(
+                clamped_interpolated_images, lpips_loss_fn
+            )
+            ppl += _ppl.mean()
+            pdv += _pdv.mean()
+
+            # Update fid calculator (on [0, 1] images)
+            fid_calculator.update(torch.cat([init_im, final_im]), True)
+            fid_calculator.update(
+                unnormalized_images[:, 1:-1].reshape(
+                    -1, unnormalized_images.shape[-3], H, W
+                ),
+                False,
+            )
 
         # go to next pair of images
         init_im, _ = next(test_iterator)

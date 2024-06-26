@@ -1,6 +1,7 @@
 import torch
 from PIL import Image
 import time
+import gc
 import numpy as np
 from IPython import display as IPdisplay
 
@@ -87,3 +88,21 @@ def display_images(images, save_path):
 
     # Return the saved GIF as an IPython display object so it can be displayed in a notebook.
     return IPdisplay.Image(f"{save_path}/{filename}.gif")
+
+
+def print_active_torch_tensors():
+    """
+    Utility debugging function to print the number of active torch tensors in memory.
+    """
+    count = 0
+    for obj in gc.get_objects():
+        try:
+            if torch.is_tensor(obj) or (
+                hasattr(obj, "data") and torch.is_tensor(obj.data)
+            ):
+                # print(type(obj), obj.size())
+                count += 1
+                del obj
+        except:
+            pass
+    print(f"{count} tensors in memory")
