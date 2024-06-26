@@ -258,6 +258,7 @@ if __name__ == "__main__":
                     nrow=int(math.sqrt(20)),
                 )
 
+        interpolated_images = interpolated_images.detach().requires_grad_(False)
         # run reverse diffusion on the final, optimized path
         interpolated_images = model.sample_from_t(
             t, interpolated_images.reshape(-1, C, H, W)
