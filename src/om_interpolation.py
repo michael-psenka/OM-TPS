@@ -8,6 +8,7 @@ We can also default to vanilla linear or spherical interpolation by setting the 
 """
 
 import math
+import numpy as np
 import argparse
 import os
 import argparse
@@ -25,11 +26,13 @@ from actions import SimpleAction
 from utils import get_initial_guess_fn
 
 from torcheval.metrics import FrechetInceptionDistance
+from metrics import perceptual_path_length_and_variance
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Training MNISTDiffusion")
     parser.add_argument("--cpu", action="store_true", help="cpu training")
+    parser.add_argument("--seed", type=int, help="random seed", default=0)
     parser.add_argument(
         "--ckpt_path", type=str, help="define checkpoint path", default="best_model.pt"
     )
@@ -79,6 +82,10 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+
     device = "cpu" if args.cpu else "cuda"
 
     # Get arguments
@@ -144,6 +151,8 @@ if __name__ == "__main__":
 
     # Initialize metrics
     fid_calculator = FrechetInceptionDistance(device=device)
+    ppl = 0
+    pdv = 0
 
     iters = 0
     # loop through test dataset
@@ -179,6 +188,9 @@ if __name__ == "__main__":
         interpolated_images = interpolated_images.to(device)
         interpolated_images.requires_grad = True
         optimizer = torch.optim.Adam([interpolated_images], lr=lr)
+        scheduler = (
+            None  # torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.75)
+        )
 
         saved = interpolated_images.detach().clone()
         to_draw = torch.clamp((saved + 1.0) / 2.0, -1, 1)
@@ -194,11 +206,13 @@ if __name__ == "__main__":
         for i in pbar:
 
             # compute diffusion model score estimates
-            forces = model.model(
+            noise_pred = model.model(
                 interpolated_images.reshape(-1, C, H, W),
                 t.repeat(batch_size * path_length),
             )
-            forces = forces.reshape(batch_size, path_length, C, H, W)
+
+            # TODO: should there be a negative sign? And what is the correct scaling (will be sampler dependent) ?
+            forces = -noise_pred.reshape(batch_size, path_length, C, H, W)
 
             # compute the OM action from these forces (vmaped over the batch dimension)
             total_action = torch.vmap(simple_action)(interpolated_images, forces).mean()
@@ -218,6 +232,8 @@ if __name__ == "__main__":
                 # assign gradients and take a gradient descent step
                 interpolated_images.grad = grads
                 optimizer.step()
+                if scheduler is not None:
+                    scheduler.step()
 
                 # add noise to the non-endpoint images (to keep it in the distribution of the model)
                 # TODO: what is the exact reasoning behind this?
@@ -228,16 +244,12 @@ if __name__ == "__main__":
                 interpolated_images += 0.06 * noise
 
             if i % save_every == 0:
-                clamp = True
-                if clamp:
-                    to_draw = (
-                        torch.clamp(torch.cat((saved, interpolated_images)), -1.0, 1.0)
-                        + 1.0
-                    ) / 2.0
-                else:
-                    to_draw = torch.clamp(
-                        (torch.cat((saved, interpolated_images)) + 1.0) / 2.0, 0.0, 1.0
-                    )
+
+                clamped_interpolated_images = torch.clamp(
+                    torch.cat((saved, interpolated_images)), -1.0, 1.0
+                )
+                to_draw = (clamped_interpolated_images + 1.0) / 2.0
+
                 save_image(
                     to_draw[0],
                     "../mnist_outputs/enhanced/OMsteps_{}.png".format(i),
@@ -252,9 +264,21 @@ if __name__ == "__main__":
         interpolated_images = interpolated_images.reshape(
             batch_size, path_length, C, H, W
         )
-        unnormalized_images = inv_normalizer(
-            torch.clamp(interpolated_images, -1.0, 1.0)
-        )
+
+        clamped_interpolated_images = torch.clamp(interpolated_images, -1.0, 1.0)
+
+        # Repeat grayscale channel 3 times
+        if clamped_interpolated_images.shape[-3] == 1:
+            clamped_interpolated_images = clamped_interpolated_images.repeat(
+                1, 1, 3, 1, 1
+            )
+            init_im = init_im.repeat(1, 3, 1, 1)
+            final_im = final_im.repeat(1, 3, 1, 1)
+
+        # Unnormalize images back to [0, 1]
+        unnormalized_images = inv_normalizer(clamped_interpolated_images)
+        init_im = inv_normalizer(init_im)
+        final_im = inv_normalizer(final_im)
 
         save_image(
             unnormalized_images[0],
@@ -262,17 +286,14 @@ if __name__ == "__main__":
             nrow=int(math.sqrt(20)),
         )
 
-        # Unnormalize init_im and final_im
-        init_im = inv_normalizer(init_im)
-        final_im = inv_normalizer(final_im)
+        # Calculate PPL/PDV metrics (on [-1, 1] images)
+        _ppl, _pdv = perceptual_path_length_and_variance(
+            clamped_interpolated_images
+        )
+        ppl += _ppl.mean()
+        pdv += _pdv.mean()
 
-        # Repeat grayscale channel 3 times
-        if unnormalized_images.shape[-3] == 1:
-            unnormalized_images = unnormalized_images.repeat(1, 1, 3, 1, 1)
-            init_im = init_im.repeat(1, 3, 1, 1)
-            final_im = final_im.repeat(1, 3, 1, 1)
-
-        # Update fid calculator
+        # Update fid calculator (on [0, 1] images)
         fid_calculator.update(torch.cat([init_im, final_im]), True)
         fid_calculator.update(
             unnormalized_images[:, 1:-1].reshape(
@@ -285,11 +306,14 @@ if __name__ == "__main__":
         init_im, _ = next(test_iterator)
         final_im, _ = next(test_iterator)
 
-    # FID
-    print("Calculating FID Score")
-    fid = fid_calculator.compute()
-    print("FID Score: ", fid.item())
-
     # PPL
+    ppl = ppl / iters
+    print("Perceptual Path Length (PPL) Score: ", ppl.item())
 
-    # PPV
+    # PDV
+    pdv = pdv / iters
+    print("Perceptual Distance Variance (PDV) Score: ", pdv.item())
+
+    # FID
+    fid = fid_calculator.compute()
+    print("Frechet Inception Distance (FID) Score: ", fid.item())
