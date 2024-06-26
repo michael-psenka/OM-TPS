@@ -1,40 +1,16 @@
 import torch
 import torch.nn as nn
-from torchvision.datasets import MNIST
-from torchvision import transforms
 from torchvision.utils import save_image
 from torch.utils.data import DataLoader
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import OneCycleLR
+
+from data.dataloaders import create_mnist_dataloaders
 from model import MNISTDiffusion
 from utils import ExponentialMovingAverage
 import os
 import math
 import argparse
-
-
-def create_mnist_dataloaders(batch_size, image_size=28, num_workers=4):
-
-    preprocess = transforms.Compose(
-        [
-            transforms.Resize(image_size),
-            transforms.ToTensor(),
-            transforms.Normalize([0.5], [0.5]),
-        ]
-    )  # [0,1] to [-1,1]
-
-    train_dataset = MNIST(
-        root="../mnist_data", train=True, download=True, transform=preprocess
-    )
-    test_dataset = MNIST(
-        root="../mnist_data", train=False, download=True, transform=preprocess
-    )
-
-    return DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
-    ), DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
-    )
 
 
 def parse_args():
@@ -79,7 +55,7 @@ def parse_args():
     return args
 
 
-def main(args):
+def train(args):
     device = "cpu" if args.cpu else "cuda"
     train_dataloader, test_dataloader = create_mnist_dataloaders(
         batch_size=args.batch_size, image_size=28
@@ -159,4 +135,4 @@ def main(args):
 
 if __name__ == "__main__":
     args = parse_args()
-    main(args)
+    train(args)

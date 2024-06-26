@@ -12,3 +12,4 @@ scipy
 ftfy 
 Pillow
 black
+matplotlib

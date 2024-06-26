@@ -13,6 +13,10 @@ import argparse
 import os
 import argparse
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+import wandb
+
+wandb.login()
 
 import torch
 from torchvision.utils import save_image
@@ -32,6 +36,12 @@ from lpips import LPIPS
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Training MNISTDiffusion")
     parser.add_argument("--cpu", action="store_true", help="cpu training")
+    parser.add_argument(
+        "--disable_logging", action="store_true", help="disable wandb logging"
+    )
+    parser.add_argument(
+        "--exp_name", type=str, default="om_interpolation", help="wandb experiment name"
+    )
     parser.add_argument("--seed", type=int, help="random seed", default=0)
     parser.add_argument(
         "--ckpt_path", type=str, help="define checkpoint path", default="best_model.pt"
@@ -88,6 +98,8 @@ if __name__ == "__main__":
 
     device = "cpu" if args.cpu else "cuda"
 
+    run = wandb.init(project="om-diffusion", config=args, name=args.exp_name)
+
     # Get arguments
     ckpt_path = args.ckpt_path
     path_length = args.path_length
@@ -110,7 +122,7 @@ if __name__ == "__main__":
 
     t = torch.tensor(latent_time).unsqueeze(-1).to(device)
 
-    os.makedirs("../mnist_outputs/enhanced", exist_ok=True)
+    os.makedirs("../mnist_outputs/", exist_ok=True)
 
     # Instantiate dataloader
     train_dataloader, test_dataloader = create_mnist_dataloaders(batch_size=batch_size)
@@ -154,6 +166,7 @@ if __name__ == "__main__":
     fid_calculator = FrechetInceptionDistance(device=device)
     ppl = 0
     pdv = 0
+    om_actions = []
 
     iters = 0
     # loop through test dataset
@@ -209,7 +222,7 @@ if __name__ == "__main__":
         )
 
         pbar = tqdm(range(steps))
-
+        actions = []
         for i in pbar:
 
             # compute diffusion model score estimates
@@ -223,6 +236,7 @@ if __name__ == "__main__":
 
             # compute the OM action from these forces (vmaped over the batch dimension)
             total_action = torch.vmap(simple_action)(interpolated_images, forces).mean()
+            actions.append(total_action.unsqueeze(0).cpu().detach())
             pbar.set_description(f"Optimizing OM action: {total_action.item()}")
 
             optimizer.zero_grad()
@@ -310,6 +324,13 @@ if __name__ == "__main__":
                 False,
             )
 
+        # Plot and log actions
+        plt.plot(np.arange(steps), torch.stack(actions).cpu().detach())
+        plt.xlabel("Optimization Steps")
+        plt.ylabel("OM Action")
+        plt.title("OM Action vs Optimization Steps")
+        wandb.log({"OM Action": wandb.Image(plt)})
+
         # go to next pair of images
         init_im, _ = next(test_iterator)
         final_im, _ = next(test_iterator)
@@ -325,3 +346,5 @@ if __name__ == "__main__":
     # FID
     fid = fid_calculator.compute()
     print("Frechet Inception Distance (FID) Score: ", fid.item())
+    wandb.log({"PPL": ppl.item(), "PDV": pdv.item(), "FID": fid.item()})
+    wandb.run.summary.update({"PPL": ppl.item(), "PDV": pdv.item(), "FID": fid.item()})

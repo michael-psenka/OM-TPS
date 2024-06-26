@@ -5,3 +5,4 @@ mnist_data/
 *.png
 *.pyc
 *ipynb_checkpoints/
+wandb/
