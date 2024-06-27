@@ -307,13 +307,15 @@ if __name__ == "__main__":
                 False,
             )
 
-        # Plot and log actions
+        # Plot and log actions and images
         if not args.disable_logging:
-            plt.plot(np.arange(steps), torch.stack(actions).cpu().detach())
-            plt.xlabel("Optimization Steps")
-            plt.ylabel("OM Action")
-            plt.title("OM Action vs Optimization Steps")
-            wandb.log({"OM Action": wandb.Image(plt)})
+            if steps != 0:
+                plt.plot(np.arange(steps), torch.stack(actions).cpu().detach())
+                plt.xlabel("Optimization Steps")
+                plt.ylabel("OM Action")
+                plt.title("OM Action vs Optimization Steps")
+                wandb.log({"OM Action": wandb.Image(plt)})
+
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             save_image(
                 torch.cat(final_draw),
