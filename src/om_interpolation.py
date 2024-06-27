@@ -76,7 +76,7 @@ if __name__ == "__main__":
         "--max_pairs",
         type=int,
         help="number of data pairs to do interpolation with",
-        default=float("inf"),
+        default=1000,
     )
     parser.add_argument(
         "--save_every", type=int, help="save images every n steps", default=10
