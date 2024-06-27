@@ -87,7 +87,7 @@ if __name__ == "__main__":
         default=1000,
     )
     parser.add_argument(
-        "--save_every", type=int, help="save images every n steps", default=10
+        "--save_every", type=int, help="save images every n steps", default=50
     )
 
     parser.add_argument(
