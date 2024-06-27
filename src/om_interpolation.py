@@ -228,8 +228,8 @@ if __name__ == "__main__":
                 t.repeat(batch_size * path_length),
             )
 
-            # scaling factor between predicted noise and force 
-            # See Slide 31 of https://docs.google.com/presentation/d/1hVOlNwF1ZEeOfgR7IpU7vETmQ9x7z_dLfWuIaLqqe-w/edit?usp=sharing 
+            # scaling factor between predicted noise and force
+            # See Slide 31 of https://docs.google.com/presentation/d/1hVOlNwF1ZEeOfgR7IpU7vETmQ9x7z_dLfWuIaLqqe-w/edit?usp=sharing
             # TODO: don't think this is quite right: the energy based model of our data also should have a temperature dependence,
             # so the scaling factor should be more complicated (maybe an alpha term in the numerator or something)
             # Including the scaling factor makes the actions much higher (2-3k) to start out
