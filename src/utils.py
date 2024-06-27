@@ -16,7 +16,7 @@ def validate_git_status():
 
     assert (
         not repo_is_dirty
-    ), "Git repository is dirty! Please commit your changes before running wandb online experiments."
+    ), "Git repository is dirty! Please commit your changes before running wandb online experiments. Set the --disable_logging flag to test locally."
 
 
 def get_initial_guess_fn(initial_guess_method):
