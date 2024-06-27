@@ -228,8 +228,17 @@ if __name__ == "__main__":
                 t.repeat(batch_size * path_length),
             )
 
-            # TODO: should there be a negative sign? And what is the correct scaling (will be sampler dependent) ?
-            forces = -noise_pred.reshape(batch_size, path_length, C, H, W)
+            # scaling factor between predicted noise and force 
+            # See Slide 31 of https://docs.google.com/presentation/d/1hVOlNwF1ZEeOfgR7IpU7vETmQ9x7z_dLfWuIaLqqe-w/edit?usp=sharing 
+            # TODO: don't think this is quite right: the energy based model of our data also should have a temperature dependence,
+            # so the scaling factor should be more complicated (maybe an alpha term in the numerator or something)
+            # Including the scaling factor makes the actions much higher (2-3k) to start out
+            sqrt_one_minus_alpha_cumprod_t = model.sqrt_one_minus_alphas_cumprod.gather(
+                -1, t.repeat(batch_size * path_length)
+            ).reshape(batch_size * path_length, 1, 1, 1)
+
+            forces = -noise_pred / sqrt_one_minus_alpha_cumprod_t
+            forces = forces.reshape(batch_size, path_length, C, H, W)
 
             # compute the OM action from these forces (vmaped over the batch dimension)
             total_action = torch.vmap(simple_action)(interpolated_images, forces).mean()

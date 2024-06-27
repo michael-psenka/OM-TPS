@@ -102,6 +102,7 @@ class MNISTDiffusion(nn.Module):
     @torch.no_grad()
     def _reverse_diffusion(self, x_t, t, noise):
         """
+        Classic DDPM sampling.
         p(x_{t-1}|x_{t})-> mean,std
 
         pred_noise-> pred_mean and pred_std
@@ -135,6 +136,7 @@ class MNISTDiffusion(nn.Module):
     @torch.no_grad()
     def _reverse_diffusion_with_clip(self, x_t, t, noise):
         """
+        Classic DDPM sampling.
         p(x_{0}|x_{t}),q(x_{t-1}|x_{0},x_{t})->mean,std
 
         pred_noise -> pred_x_0 (clip to [-1.0,1.0]) -> pred_mean and pred_std
