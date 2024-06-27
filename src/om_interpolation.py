@@ -203,7 +203,9 @@ if __name__ == "__main__":
         ).to(device)
 
         # save initial guess
-        saved = model.sample_from_t(t, interpolated_images[0]).detach().cpu()
+        # choose random batch element to plot
+        batch_idx = np.random.randint(0, batch_size)
+        saved = model.sample_from_t(t, interpolated_images[batch_idx]).detach().cpu()
         to_draw = inv_normalizer(torch.clamp(saved, -1, 1))
         final_draw = []
         final_draw.append(to_draw)
@@ -261,7 +263,7 @@ if __name__ == "__main__":
 
                 if i % save_every == 0:
                     # save interpolation path
-                    save = model.sample_from_t(t, interpolated_images[0])
+                    save = model.sample_from_t(t, interpolated_images[batch_idx])
                     save = torch.clamp(save, -1.0, 1.0)
                     final_draw.append(save.cpu())
 
