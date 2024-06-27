@@ -69,6 +69,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--const_time", type=float, help="constant time for OM action", default=4.0
     )
+
+    parser.add_argument(
+        "--noise_perturb_scale",
+        type=float,
+        help="scale of noise perturbing OM path after every optimization step",
+        default=0.06,
+    )
+
     parser.add_argument(
         "--lr", type=float, help="learning rate for OM optimization", default=1e-2
     )
@@ -117,6 +125,7 @@ if __name__ == "__main__":
     max_pairs = args.max_pairs
     save_every = args.save_every
     const_time = args.const_time
+    noise_perturb_scale = args.noise_perturb_scale
     lr = args.lr
     batch_size = args.batch_size
     max_batches = math.ceil(max_pairs / batch_size)
@@ -263,12 +272,12 @@ if __name__ == "__main__":
                     scheduler.step()
 
                 # add noise to the non-endpoint images (to keep it in the distribution of the model)
-                # TODO: what is the exact reasoning behind this?
+                # TODO: what is the exact reasoning behind this? And how is the noise scale determined? Is it just undoing the OM optimization?
                 noise = torch.randn_like(interpolated_images)
                 noise[:, 0], noise[:, -1] = torch.zeros_like(
                     interpolated_images[:, 0]
                 ), torch.zeros_like(interpolated_images[:, -1])
-                interpolated_images += 0.06 * noise
+                interpolated_images += noise_perturb_scale * noise
 
                 if i % save_every == 0:
                     # save interpolation path
