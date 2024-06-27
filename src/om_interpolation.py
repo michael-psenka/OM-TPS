@@ -166,12 +166,11 @@ if __name__ == "__main__":
     fid_calculator = FrechetInceptionDistance(device=device)
     ppl = 0
     pdv = 0
-    
 
     iters = 0
     # loop through test dataset
     while init_im is not None and final_im is not None and iters < max_batches:
-    
+
         iters += 1
 
         init_im = init_im.to(device)
@@ -203,9 +202,7 @@ if __name__ == "__main__":
         ).to(device)
 
         # save initial guess
-        saved = model.sample_from_t(
-                t, interpolated_images[0]
-            ).detach().cpu()
+        saved = model.sample_from_t(t, interpolated_images[0]).detach().cpu()
         to_draw = inv_normalizer(torch.clamp(saved, -1, 1))
         final_draw = []
         final_draw.append(to_draw)
@@ -217,10 +214,9 @@ if __name__ == "__main__":
         scheduler = (
             None  # torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.75)
         )
-        
 
         pbar = tqdm(range(steps))
-        
+
         for i in pbar:
 
             # compute diffusion model score estimates
@@ -264,9 +260,7 @@ if __name__ == "__main__":
 
                 if i % save_every == 0:
                     # save interpolation path
-                    save = model.sample_from_t(
-                            t, interpolated_images[0]
-                        )
+                    save = model.sample_from_t(t, interpolated_images[0])
                     save = torch.clamp(save, -1.0, 1.0)
                     final_draw.append(save.cpu())
 
@@ -280,8 +274,6 @@ if __name__ == "__main__":
             )
 
             clamped_interpolated_images = torch.clamp(interpolated_images, -1.0, 1.0)
-
-            
 
             # Repeat grayscale channel 3 times
             if clamped_interpolated_images.shape[-3] == 1:
@@ -311,7 +303,7 @@ if __name__ == "__main__":
                 ),
                 False,
             )
-        
+
         # Plot and log actions
         if not args.disable_logging:
             plt.plot(np.arange(steps), torch.stack(actions).cpu().detach())
@@ -319,15 +311,23 @@ if __name__ == "__main__":
             plt.ylabel("OM Action")
             plt.title("OM Action vs Optimization Steps")
             wandb.log({"OM Action": wandb.Image(plt)})
-            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            save_image(torch.cat(final_draw), f"../mnist_outputs/grid_{now}.png", nrow = final_draw[0].shape[0])
-            wandb.log({f"Decoded Interpolation Path Every {save_every} Steps": wandb.Image(f"../mnist_outputs/grid_{now}.png")})
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            save_image(
+                torch.cat(final_draw),
+                f"../mnist_outputs/grid_{now}.png",
+                nrow=final_draw[0].shape[0],
+            )
+            wandb.log(
+                {
+                    f"Decoded Interpolation Path Every {save_every} Steps": wandb.Image(
+                        f"../mnist_outputs/grid_{now}.png"
+                    )
+                }
+            )
 
-    
         # go to next pair of images
         init_im, _ = next(test_iterator)
         final_im, _ = next(test_iterator)
-
 
     # PPL
     ppl = ppl / iters
@@ -342,4 +342,6 @@ if __name__ == "__main__":
     print("Frechet Inception Distance (FID) Score: ", fid.item())
     if not args.disable_logging:
         wandb.log({"PPL": ppl.item(), "PDV": pdv.item(), "FID": fid.item()})
-        wandb.run.summary.update({"PPL": ppl.item(), "PDV": pdv.item(), "FID": fid.item()})
+        wandb.run.summary.update(
+            {"PPL": ppl.item(), "PDV": pdv.item(), "FID": fid.item()}
+        )
