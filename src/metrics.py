@@ -39,7 +39,7 @@ def perceptual_path_length_and_variance(
     ).reshape(B, P, C, 224, 224)
 
     dists = torch.stack([loss_fn(path[:-1], path[1:]) for path in paths])
-    dists /= P # normalize for path length
+    dists /= P  # normalize for path length
     lengths = dists.sum(dim=1).squeeze()
     vars = dists.var(dim=1).squeeze()
 

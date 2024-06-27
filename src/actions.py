@@ -10,15 +10,21 @@ class SimpleAction(torch.nn.Module):
     They provide a simplified Onsager-Machlup action, which avoids computing the Hessian of the energy and is thus more efficient.
     """
 
-    def __init__(self, dt_xi):
+    def __init__(self, dt, gamma):
+        """
+        Args:
+            dt: float, time step
+            gamma: float, diffusion coefficient
+        """
         super(SimpleAction, self).__init__()
-        self.dt_xi = dt_xi
+        self.dt = dt
+        self.gamma = gamma
 
     def forward(self, path: torch.Tensor, forces: torch.Tensor):
         """
         Args:
             path: torch.Tensor of images of shape [P, C, H, W], where P is the number of images on the path.
-            forces: torch.Tensor of diffusion model score estimates of shape [P, C, H, W], where N is the number of points on the path.
+            forces: torch.Tensor of forces (derived from diffusion model score estimates) of shape [P, C, H, W], where N is the number of points on the path.
         Returns the OM action of the path (torch.Tensor of shape [1]).
 
         Note: we omit the term which involves the difference of the energy at the endpoints of the path,
@@ -26,22 +32,25 @@ class SimpleAction(torch.nn.Module):
         """
 
         assert path.shape == forces.shape, "path and forces must have the same shape"
+        assert len(path.shape) == 4, "path and forces must have shape [P, C, H, W]"
 
         result = 0.0
         for i in range(path.shape[0] - 1):
-            # (x_{i+1} - x_i)^2 / dt
-            first_term = torch.square((path[i + 1, :] - path[i, :])) * (1 / self.dt_xi)
+            first_term = torch.square(
+                self.gamma / self.dt * (path[i + 1, :] - path[i, :])
+            )
 
-            f_n = forces[i]
-            f_np = forces[i + 1]
-            # (f_n^2 + f_{n+1}^2) * dt / 2 (squared force term)
-            second_term = (torch.square(f_n) + torch.square(f_np)) * (self.dt_xi / 2.0)
+            f_i = forces[i]
+            f_iplus1 = forces[i + 1]
 
-            # term
-            third_term = (path[i + 1, :] - path[i, :]) * (f_np - f_n)
+            second_term = (torch.square(f_i) + torch.square(f_iplus1)) / 2.0
+
+            third_term = (
+                -self.gamma / self.dt * (path[i + 1, :] - path[i, :]) * (f_i - f_iplus1)
+            )
             result = result + torch.sum(first_term + second_term + third_term)
 
-        return result / torch.tensor(4.0)
+        return result * self.dt / (4 * self.gamma)
 
 
 class HessianAction(torch.nn.Module):

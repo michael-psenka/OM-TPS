@@ -160,7 +160,7 @@ if __name__ == "__main__":
     model.eval()
 
     # Define OM Action
-    simple_action = SimpleAction(dt_xi=const_time / path_length)
+    simple_action = SimpleAction(dt=const_time, gamma=path_length)
 
     # Initialize metrics
     lpips_loss_fn = LPIPS(net="alex").to(device)
