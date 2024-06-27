@@ -27,7 +27,7 @@ def create_mnist_dataloaders(batch_size, image_size=28, num_workers=4):
     )
 
 
-def create_imagenet_dataloaders(batch_size, image_size=224, num_workers=4):
+def create_imagenet_dataloaders(batch_size, image_size=256, num_workers=4):
 
     preprocess = transforms.Compose(
         [

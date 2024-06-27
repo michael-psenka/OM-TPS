@@ -319,7 +319,7 @@ if __name__ == "__main__":
             )
             wandb.log(
                 {
-                    f"Decoded Interpolation Path Every {save_every} Steps": wandb.Image(
+                    f"Decoded Interpolation Path Steps": wandb.Image(
                         f"../mnist_outputs/grid_{now}.png"
                     )
                 }
