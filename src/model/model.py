@@ -64,7 +64,7 @@ class MNISTDiffusion(nn.Module):
     def sample_from_t(
         self, start_t, x_t, clipped_reverse_diffusion=True, device="cuda"
     ):
-        for i in tqdm(range(start_t - 1, -1, -1), desc="Sampling"):
+        for i in range(start_t - 1, -1, -1):
             noise = torch.randn_like(x_t).to(device)
             t = torch.tensor([i for _ in range(x_t.shape[0])]).to(device)
 

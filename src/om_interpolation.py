@@ -8,6 +8,7 @@ We can also default to vanilla linear or spherical interpolation by setting the 
 """
 
 import math
+from datetime import datetime
 import numpy as np
 import argparse
 import os
@@ -15,11 +16,8 @@ import argparse
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import wandb
-
-wandb.login()
-
 import torch
-from torchvision.utils import save_image
+from torchvision.utils import save_image, make_grid
 from torchvision import transforms
 
 from train_mnist import create_mnist_dataloaders
@@ -81,7 +79,7 @@ if __name__ == "__main__":
         default=float("inf"),
     )
     parser.add_argument(
-        "--save_every", type=int, help="save images every n steps", default=100
+        "--save_every", type=int, help="save images every n steps", default=10
     )
 
     parser.add_argument(
@@ -98,7 +96,9 @@ if __name__ == "__main__":
 
     device = "cpu" if args.cpu else "cuda"
 
-    run = wandb.init(project="om-diffusion", config=args, name=args.exp_name)
+    if not args.disable_logging:
+        wandb.login()
+        wandb.init(project="om-diffusion", config=args, name=args.exp_name)
 
     # Get arguments
     ckpt_path = args.ckpt_path
@@ -166,12 +166,12 @@ if __name__ == "__main__":
     fid_calculator = FrechetInceptionDistance(device=device)
     ppl = 0
     pdv = 0
-    om_actions = []
+    
 
     iters = 0
     # loop through test dataset
     while init_im is not None and final_im is not None and iters < max_batches:
-
+    
         iters += 1
 
         init_im = init_im.to(device)
@@ -188,9 +188,6 @@ if __name__ == "__main__":
             heated_final = model._forward_diffusion(
                 final_im, t.repeat(batch_size), noise_1
             )
-        save_image(
-            inv_normalizer(heated_init)[0], "../mnist_outputs/enhanced/example.png"
-        )
 
         # Generate a range of interpolation factors
         alphas = torch.linspace(0, 1, path_length)
@@ -203,26 +200,27 @@ if __name__ == "__main__":
                 for alpha in alphas
             ],
             axis=1,
-        )
+        ).to(device)
 
-        interpolated_images = interpolated_images.to(device)
+        # save initial guess
+        saved = model.sample_from_t(
+                t, interpolated_images[0]
+            ).detach().cpu()
+        to_draw = inv_normalizer(torch.clamp(saved, -1, 1))
+        final_draw = []
+        final_draw.append(to_draw)
+
+        actions = []
+
         interpolated_images.requires_grad = True
         optimizer = torch.optim.Adam([interpolated_images], lr=lr)
         scheduler = (
             None  # torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.75)
         )
-
-        saved = interpolated_images.detach().clone()
-        to_draw = torch.clamp((saved + 1.0) / 2.0, -1, 1)
-        save_image(
-            inv_normalizer(interpolated_images)[0],
-            "../mnist_outputs/enhanced/OMinitial.png",
-            format="png",
-            nrow=int(math.sqrt(20)),
-        )
+        
 
         pbar = tqdm(range(steps))
-        actions = []
+        
         for i in pbar:
 
             # compute diffusion model score estimates
@@ -264,19 +262,13 @@ if __name__ == "__main__":
                 ), torch.zeros_like(interpolated_images[:, -1])
                 interpolated_images += 0.06 * noise
 
-            if i % save_every == 0:
-
-                clamped_interpolated_images = torch.clamp(
-                    torch.cat((saved, interpolated_images)), -1.0, 1.0
-                )
-                to_draw = (clamped_interpolated_images + 1.0) / 2.0
-
-                save_image(
-                    to_draw[0],
-                    "../mnist_outputs/enhanced/OMsteps_{}.png".format(i),
-                    format="png",
-                    nrow=int(math.sqrt(20)),
-                )
+                if i % save_every == 0:
+                    # save interpolation path
+                    save = model.sample_from_t(
+                            t, interpolated_images[0]
+                        )
+                    save = torch.clamp(save, -1.0, 1.0)
+                    final_draw.append(save.cpu())
 
         with torch.no_grad():
             # run reverse diffusion on the final, optimized path
@@ -288,6 +280,8 @@ if __name__ == "__main__":
             )
 
             clamped_interpolated_images = torch.clamp(interpolated_images, -1.0, 1.0)
+
+            
 
             # Repeat grayscale channel 3 times
             if clamped_interpolated_images.shape[-3] == 1:
@@ -301,12 +295,6 @@ if __name__ == "__main__":
             unnormalized_images = inv_normalizer(clamped_interpolated_images)
             init_im = inv_normalizer(init_im)
             final_im = inv_normalizer(final_im)
-
-            save_image(
-                unnormalized_images[0],
-                "../mnist_outputs/enhanced/enhanced_result{}.png".format(t),
-                nrow=int(math.sqrt(20)),
-            )
 
             # Calculate PPL/PDV metrics (on [-1, 1] images)
             _ppl, _pdv = perceptual_path_length_and_variance(
@@ -323,17 +311,23 @@ if __name__ == "__main__":
                 ),
                 False,
             )
-
+        
         # Plot and log actions
-        plt.plot(np.arange(steps), torch.stack(actions).cpu().detach())
-        plt.xlabel("Optimization Steps")
-        plt.ylabel("OM Action")
-        plt.title("OM Action vs Optimization Steps")
-        wandb.log({"OM Action": wandb.Image(plt)})
+        if not args.disable_logging:
+            plt.plot(np.arange(steps), torch.stack(actions).cpu().detach())
+            plt.xlabel("Optimization Steps")
+            plt.ylabel("OM Action")
+            plt.title("OM Action vs Optimization Steps")
+            wandb.log({"OM Action": wandb.Image(plt)})
+            now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            save_image(torch.cat(final_draw), f"../mnist_outputs/grid_{now}.png", nrow = final_draw[0].shape[0])
+            wandb.log({f"Decoded Interpolation Path Every {save_every} Steps": wandb.Image(f"../mnist_outputs/grid_{now}.png")})
 
+    
         # go to next pair of images
         init_im, _ = next(test_iterator)
         final_im, _ = next(test_iterator)
+
 
     # PPL
     ppl = ppl / iters
@@ -346,5 +340,6 @@ if __name__ == "__main__":
     # FID
     fid = fid_calculator.compute()
     print("Frechet Inception Distance (FID) Score: ", fid.item())
-    wandb.log({"PPL": ppl.item(), "PDV": pdv.item(), "FID": fid.item()})
-    wandb.run.summary.update({"PPL": ppl.item(), "PDV": pdv.item(), "FID": fid.item()})
+    if not args.disable_logging:
+        wandb.log({"PPL": ppl.item(), "PDV": pdv.item(), "FID": fid.item()})
+        wandb.run.summary.update({"PPL": ppl.item(), "PDV": pdv.item(), "FID": fid.item()})
