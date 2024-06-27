@@ -64,7 +64,7 @@ if __name__ == "__main__":
         "--path_length", type=int, help="length of interpolation path", default=8
     )
     parser.add_argument(
-        "--steps", type=int, help="number of OM optimization steps", default=300
+        "--steps", type=int, help="number of OM optimization steps", default=500
     )
     parser.add_argument(
         "--const_time", type=float, help="constant time for OM action", default=4.0
