@@ -2,8 +2,22 @@ import torch
 from PIL import Image
 import time
 import gc
+from git import Repo
 import numpy as np
 from IPython import display as IPdisplay
+
+
+def validate_git_status():
+    """
+    Check if the git repository is clean to run experiments.
+    """
+    repo = Repo(".", search_parent_directories=True)
+    repo_is_dirty = repo.is_dirty()
+    
+    assert (
+        not repo_is_dirty
+    ), "Git repository is dirty! Please commit your changes before running wandb online experiments."
+    
 
 
 def get_initial_guess_fn(initial_guess_method):

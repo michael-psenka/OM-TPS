@@ -24,7 +24,7 @@ from train_mnist import create_mnist_dataloaders
 
 from model import MNISTDiffusion
 from actions import SimpleAction
-from utils import get_initial_guess_fn, print_active_torch_tensors
+from utils import get_initial_guess_fn, validate_git_status
 
 from torcheval.metrics import FrechetInceptionDistance
 from metrics import perceptual_path_length_and_variance
@@ -97,6 +97,7 @@ if __name__ == "__main__":
     device = "cpu" if args.cpu else "cuda"
 
     if not args.disable_logging:
+        validate_git_status()
         wandb.login()
         wandb.init(project="om-diffusion", config=args, name=args.exp_name)
 
