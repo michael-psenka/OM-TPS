@@ -13,11 +13,10 @@ def validate_git_status():
     """
     repo = Repo(".", search_parent_directories=True)
     repo_is_dirty = repo.is_dirty()
-    
+
     assert (
         not repo_is_dirty
     ), "Git repository is dirty! Please commit your changes before running wandb online experiments."
-    
 
 
 def get_initial_guess_fn(initial_guess_method):
