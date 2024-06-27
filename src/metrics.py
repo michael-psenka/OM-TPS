@@ -30,8 +30,6 @@ def perceptual_path_length_and_variance(
     B, P, C, H, W = paths.shape
     assert C == 3, "Images must be in RGB format"
 
-    epsilon = 1 / P  # spacing between images
-
     # interpolate the images to 224x224 to be compatible with LPIPS (TODO: fix this)
     paths = F.interpolate(
         paths.reshape(-1, C, H, W),
@@ -41,7 +39,7 @@ def perceptual_path_length_and_variance(
     ).reshape(B, P, C, 224, 224)
 
     dists = torch.stack([loss_fn(path[:-1], path[1:]) for path in paths])
-    dists /= epsilon**2  # TODO: revisit this
+    dists /= P # normalize for path length
     lengths = dists.sum(dim=1).squeeze()
     vars = dists.var(dim=1).squeeze()
 
