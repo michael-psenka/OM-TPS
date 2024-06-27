@@ -107,7 +107,7 @@ if __name__ == "__main__":
     latent_time = args.latent_time
     if latent_time >= 1000:
         raise ValueError(
-            "latent_time must be less than or equal to total diffusion model time of 1000"
+            "latent_time must be less than total diffusion model time of 1000"
         )
     initial_guess_method = args.initial_guess_method
     if initial_guess_method not in ["spherical", "linear"]:
