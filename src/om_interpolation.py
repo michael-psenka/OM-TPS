@@ -23,7 +23,7 @@ from torchvision import transforms
 from train_mnist import create_mnist_dataloaders
 
 from model import MNISTDiffusion
-from actions import SimpleAction
+from actions import SimpleAction, HessianAction
 from utils import get_initial_guess_fn, validate_git_status
 
 from torcheval.metrics import FrechetInceptionDistance
@@ -169,7 +169,7 @@ if __name__ == "__main__":
     model.eval()
 
     # Define OM Action
-    simple_action = SimpleAction(dt=const_time, gamma=path_length)
+    action_fn = SimpleAction(dt=const_time, gamma=path_length)
 
     # Initialize metrics
     lpips_loss_fn = LPIPS(net="alex").to(device)
@@ -250,7 +250,7 @@ if __name__ == "__main__":
             forces = forces.reshape(batch_size, path_length, C, H, W)
 
             # compute the OM action from these forces (vmaped over the batch dimension)
-            total_action = torch.vmap(simple_action)(interpolated_images, forces).mean()
+            total_action = torch.vmap(action_fn)(interpolated_images, forces).mean()
             actions.append(total_action.unsqueeze(0).cpu().detach())
             pbar.set_description(f"Optimizing OM action: {total_action.item()}")
 
