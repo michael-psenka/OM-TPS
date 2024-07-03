@@ -65,17 +65,9 @@ class HessianAction(torch.nn.Module):
     because it is constant and does not affect the optimization.
     """
 
-    def __init__(self, dt, xi, D):
-        """
-        Args:
-            dt: float, time step
-            xi: float, inverse temperature
-            D: float, diffusion coefficient
-        """
+    def __init__(self, dt_xi):
         super(HessianAction, self).__init__()
-        self.dt = dt
-        self.xi = xi
-        self.D = D
+        self.dt_xi = dt_xi
 
     def forward(self, path: torch.Tensor, forces: torch.Tensor):
         """
@@ -84,22 +76,7 @@ class HessianAction(torch.nn.Module):
             forces: torch.Tensor of diffusion model score estimates of shape [P, C, H, W], where N is the number of points on the path.
         Returns the OM action of the path (torch.Tensor of shape [1]).
         """
-        assert path.shape == forces.shape, "path and forces must have the same shape"
-        assert len(path.shape) == 4, "path and forces must have shape [P, C, H, W]"
-
-        result = 0.0
-        for i in range(path.shape[0] - 1):
-            first_term = torch.square(1 / self.dt * (path[i + 1, :] - path[i, :]))
-
-            second_term = torch.square(forces[i] / self.xi)
-
-            # TODO: think about how this force gradient should be computed
-            third_term = (
-                2 * self.D / self.xi * torch.autograd.grad(forces[i], path[i])[0]
-            )
-            result = result + torch.sum(first_term + second_term + third_term)
-
-        return result * self.dt / 2
+        raise NotImplementedError("HessianAction is not implemented yet.")
 
 
 """
