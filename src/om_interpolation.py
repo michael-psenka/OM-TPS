@@ -336,6 +336,12 @@ if __name__ == "__main__":
             )
 
         # Plot and log actions and images
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        save_image(
+            torch.cat(final_draw),
+            f"../mnist_outputs/grid_{now}.png",
+            nrow=final_draw[0].shape[0],
+        )
         if not args.disable_logging:
             if steps != 0:
                 plt.plot(np.arange(steps), torch.stack(actions).cpu().detach())
@@ -344,12 +350,6 @@ if __name__ == "__main__":
                 plt.title("OM Action vs Optimization Steps")
                 wandb.log({"OM Action": wandb.Image(plt)})
 
-            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            save_image(
-                torch.cat(final_draw),
-                f"../mnist_outputs/grid_{now}.png",
-                nrow=final_draw[0].shape[0],
-            )
             wandb.log(
                 {
                     f"Decoded Interpolation Path Steps": wandb.Image(
