@@ -23,39 +23,28 @@ class SimpleAction(torch.nn.Module):
     def forward(self, path: torch.Tensor, forces: torch.Tensor):
         """
         Args:
-            path: torch.Tensor of images of shape [B, P, C, H, W], where B is the batch size and P is the number of images on the path.
-            forces: torch.Tensor of forces (derived from diffusion model score estimates) of shape [B, P, C, H, W], where B is the batch size and P is the number of points on the path.
-        Returns the OM action of the path (torch.Tensor of shape [B]).
+            path: torch.Tensor of images of shape [P, C, H, W], where P is the number of images on the path.
+            forces: torch.Tensor of forces (derived from diffusion model score estimates) of shape [P, C, H, W], where N is the number of points on the path.
+        Returns the OM action of the path (torch.Tensor of shape [1]).
 
         Note: we omit the term which involves the difference of the energy at the endpoints of the path,
         because it is constant and does not affect the optimization.
         """
 
         assert path.shape == forces.shape, "path and forces must have the same shape"
-        assert len(path.shape) == 5, "path and forces must have shape [B, P, C, H, W]"
-        assert (
-            path.is_leaf
-        ), "path is not a leaf tensor, gradients won't be tracked correctly."
-        assert (
-            not forces.is_leaf
-        ), "forces is a leaf tensor, gradients won't be tracked through the diffusion model."
+        assert len(path.shape) == 4, "path and forces must have shape [P, C, H, W]"
 
         result = 0.0
-        first_term = torch.square(self.gamma / self.dt * (path[:, 1:] - path[:, :-1]))
+        first_term = torch.square(self.gamma / self.dt * (path[1:] - path[:-1]))
 
-        second_term = (torch.square(forces[:, :-1]) + torch.square(forces[:, 1:])) / 2.0
+        second_term = (torch.square(forces[:-1]) + torch.square(forces[1:])) / 2.0
 
         third_term = (
-            -self.gamma
-            / self.dt
-            * (path[:, 1:] - path[:, :-1])
-            * (forces[:, :-1] - forces[:, 1:])
+            -self.gamma / self.dt * (path[1:] - path[:-1]) * (forces[:-1] - forces[1:])
         )
-        result = torch.sum(first_term + second_term + third_term, dim=(1, 2, 3, 4))
-        result = result * self.dt / (4 * self.gamma)
+        result = torch.sum(first_term + second_term + third_term)
 
-        # compute mean over batch
-        return result
+        return result * self.dt / (4 * self.gamma)
 
 
 class HessianAction(torch.nn.Module):

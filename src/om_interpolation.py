@@ -250,7 +250,7 @@ if __name__ == "__main__":
             forces = forces.reshape(batch_size, path_length, C, H, W)
 
             # compute the OM action from these forces (vmaped over the batch dimension)
-            total_action = simple_action(interpolated_images, forces).mean()
+            total_action = torch.vmap(simple_action)(interpolated_images, forces).mean()
             actions.append(total_action.unsqueeze(0).cpu().detach())
             pbar.set_description(f"Optimizing OM action: {total_action.item()}")
 
