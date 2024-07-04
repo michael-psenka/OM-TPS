@@ -35,20 +35,14 @@ class SimpleAction(torch.nn.Module):
         assert len(path.shape) == 4, "path and forces must have shape [P, C, H, W]"
 
         result = 0.0
-        for i in range(path.shape[0] - 1):
-            first_term = torch.square(
-                self.gamma / self.dt * (path[i + 1, :] - path[i, :])
-            )
+        first_term = torch.square(self.gamma / self.dt * (path[1:] - path[:-1]))
 
-            f_i = forces[i]
-            f_iplus1 = forces[i + 1]
+        second_term = (torch.square(forces[:-1]) + torch.square(forces[1:])) / 2.0
 
-            second_term = (torch.square(f_i) + torch.square(f_iplus1)) / 2.0
-
-            third_term = (
-                -self.gamma / self.dt * (path[i + 1, :] - path[i, :]) * (f_i - f_iplus1)
-            )
-            result = result + torch.sum(first_term + second_term + third_term)
+        third_term = (
+            -self.gamma / self.dt * (path[1:] - path[:-1]) * (forces[:-1] - forces[1:])
+        )
+        result = torch.sum(first_term + second_term + third_term)
 
         return result * self.dt / (4 * self.gamma)
 
