@@ -1,15 +1,15 @@
 torch
 torchvision
-pytorch-ignite
+pytorch - ignite
 tqdm
 argparse
-diffusers 
-transformers 
-xformers 
+diffusers
+transformers
+xformers
 accelerate
-numpy 
-scipy 
-ftfy 
+numpy
+scipy
+ftfy
 Pillow
 black
 matplotlib

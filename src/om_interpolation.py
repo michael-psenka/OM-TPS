@@ -251,6 +251,16 @@ if __name__ == "__main__":
 
             # compute the OM action from these forces (vmaped over the batch dimension)
             total_action = torch.vmap(simple_action)(interpolated_images, forces).mean()
+            test_model_grads = torch.autograd.grad(
+                total_action,
+                model.model.parameters(),
+                retain_graph=True,
+                allow_unused=True,
+            )[0]
+            assert all(
+                [grad is not None for grad in test_model_grads]
+            ), "Action gradient w.r.t model parameters is None. Gradients wont be tracked correctly through the diffusion model."
+
             actions.append(total_action.unsqueeze(0).cpu().detach())
             pbar.set_description(f"Optimizing OM action: {total_action.item()}")
 
