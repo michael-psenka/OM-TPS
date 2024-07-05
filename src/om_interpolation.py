@@ -343,13 +343,6 @@ if __name__ == "__main__":
             nrow=final_draw[0].shape[0],
         )
         if not args.disable_logging:
-            if steps != 0:
-                plt.plot(np.arange(steps), torch.stack(actions).cpu().detach())
-                plt.xlabel("Optimization Steps")
-                plt.ylabel("OM Action")
-                plt.title("OM Action vs Optimization Steps")
-                wandb.log({"OM Action": wandb.Image(plt)})
-
             wandb.log(
                 {
                     f"Decoded Interpolation Path Steps": wandb.Image(
@@ -357,6 +350,15 @@ if __name__ == "__main__":
                     )
                 }
             )
+
+            if steps != 0:
+                plt.figure()
+                plt.plot(np.arange(steps), torch.stack(actions).cpu().detach())
+                plt.xlabel("Optimization Steps")
+                plt.ylabel("OM Action")
+                plt.title("OM Action vs Optimization Steps")
+                wandb.log({"OM Action": wandb.Image(plt)})
+                plt.close()
 
         # go to next pair of images
         init_im, _ = next(test_iterator)
