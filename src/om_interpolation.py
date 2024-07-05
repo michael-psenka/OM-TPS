@@ -343,13 +343,11 @@ if __name__ == "__main__":
             nrow=final_draw[0].shape[0],
         )
         if not args.disable_logging:
-            wandb.log(
-                {
-                    f"Decoded Interpolation Path Steps": wandb.Image(
-                        f"../mnist_outputs/grid_{now}.png"
-                    )
-                }
-            )
+            im_dict = {
+                f"Decoded Interpolation Path Steps": wandb.Image(
+                    f"../mnist_outputs/grid_{now}.png"
+                )
+            }
 
             if steps != 0:
                 plt.figure()
@@ -357,8 +355,10 @@ if __name__ == "__main__":
                 plt.xlabel("Optimization Steps")
                 plt.ylabel("OM Action")
                 plt.title("OM Action vs Optimization Steps")
-                wandb.log({"OM Action": wandb.Image(plt)})
+                im_dict.update({"OM Action": wandb.Image(plt)})
                 plt.close()
+
+            wandb.log(im_dict, step=iters - 1)
 
         # go to next pair of images
         init_im, _ = next(test_iterator)
