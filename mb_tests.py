@@ -54,6 +54,16 @@ def simple_action(path, xi, dt, D=None):
 line_density = 30  # number of points on the line
 
 # Loop over a bunch of different action parameters
+
+
+# Evaluate the action with the same hyperparams regardless of the optimization
+evaluation_action = lambda path: simple_action(
+                    path,
+                    xi=torch.tensor(0.1).to(args.device),
+                    dt=0.1,
+                    D=torch.tensor(10).to(args.device),
+                )
+
 for action_f in [simple_action, S2_action]:
     for xi in torch.logspace(-2, 1, 5).to(args.device):
         for dt in torch.logspace(-2, 0, 5):
@@ -75,12 +85,7 @@ for action_f in [simple_action, S2_action]:
                 action_str = "simple" if action_f == simple_action else "S2"
                 print(f"MB_{action_str}_xi={round(xi.item(), 1)}_dt={dt}_D={D.item()}")
                 action_func = lambda path: action_f(path, xi, dt, D)
-                evaluation_action = lambda path: action_f(
-                    path,
-                    xi=torch.tensor(0.1).to(args.device),
-                    dt=0.1,
-                    D=torch.tensor(10).to(args.device),
-                )
+                
                 line_x = torch.linspace(x0[1], xf[1], line_density)
                 line_y = torch.linspace(x0[0], xf[0], line_density)
                 line_points = torch.stack((line_x, line_y), axis=-1).to(args.device)
