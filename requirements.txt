@@ -13,3 +13,7 @@ ftfy
 Pillow
 black
 matplotlib
+torcheval
+wandb
+jupyter
+lpips
