@@ -80,11 +80,14 @@ class HessianAction(torch.nn.Module):
             forces: torch.Tensor of diffusion model score estimates of shape [P, C, H, W], where N is the number of points on the path.
             force_grads: torch.Tensor of gradients of the forces w.r.t. the path, of shape [P, C, H, W], where N is the number of points on the path.
             We only use the diagonal elements of the force grads. That is, how does the image at each point affect the force at that same point.
-            We only use the diagonal elements of the force grads. That is, how does the image at each point affect the force at that same point.
         Returns the OM action of the path (torch.Tensor of shape [1]).
         """
         # assert path.shape == forces.shape, "path and forces must have the same shape"
-        assert len(path.shape) == 4, "path and forces must have shape [P, C, H, W]"
+        # Path and forces have different shapes in the term-by-term case - path has shape [2, C, H, W] and forces has shape [1, C, H, W]
+        assert len(path.shape) == 4, "path must have shape [P, C, H, W]"
+        assert len(forces.shape) == 4, "forces must have shape [P, C, H, W]"
+        assert len(force_grads.shape) == 4, "force grads must have shape [P, C, H, W]"
+
         assert (
             forces.shape == force_grads.shape
         ), "forces and force_grads must have the same shape"
