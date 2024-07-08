@@ -4,8 +4,18 @@ from functorch import grad
 
 
 class SimpleMB:
+    """
+    Simple Muller-Brown Potential to test transition path optimization.
+    """
 
     def __init__(self, args, n_in=2, barrier=1.0):
+        """
+        Args:
+            args: Arguments object
+            n_in (int): Number of input dimensions
+            barrier (float): Barrier height
+        """
+        self.device = args.device
         self.n_in = n_in
 
         self.barrier = barrier
@@ -41,31 +51,29 @@ class SimpleMB:
 
         self.U_min, self.U_max = -2 * barrier, 1 * barrier
 
-        total_potential = lambda X: torch.sum(self.U(X))
-        self.force_func = lambda X: (torch.tensor(0), -grad(total_potential)(X))
+        total_potential = lambda X: torch.sum(self.U(X.to(self.device)))
+        self.force_func = lambda X: (
+            torch.tensor(0).to(self.device),
+            -grad(total_potential)(X.to(self.device)),
+        )
 
-        self.to_(args.device)
+        self.A = self.A.to(self.device)
+        self.alpha = self.alpha.to(self.device)
+        self.a = self.a.to(self.device)
 
-    def to_(self, device):
-
-        self.A = self.A.to(device)
-        self.alpha = self.alpha.to(device)
-        self.a = self.a.to(device)
-
-        self.beta = self.beta.to(device)
-        self.b = self.b.to(device)
-        self.gamma = self.gamma.to(device)
+        self.beta = self.beta.to(self.device)
+        self.b = self.b.to(self.device)
+        self.gamma = self.gamma.to(self.device)
 
         # self.initial_point = self.initial_point.to(device)
         # self.final_point = self.final_point.to(device)
 
-    """Simple potential that represents a transition avoiding a barrier. 
-
-    Args:
-        x (Tensor): Position of the particle       
-    """
-
     def U(self, X):
+        """Simple potential that represents a transition avoiding a barrier.
+
+        Args:
+            x (Tensor): Position of the particle
+        """
         if not torch.is_tensor(X):
             X = torch.tensor(X, requires_grad=True)
 
@@ -96,15 +104,14 @@ class SimpleMB:
         projected = torch.stack((x, y), dim=-1)
         return projected
 
-    """Simple potential that represents a transition avoiding a barrier. 
-
-    Args:
-        x (Tensor): Position coordinate x
-        y (Tensor): Position coordinate y    
- 
-    """
-
     def U_split(self, x, y):
+        """Simple potential that represents a transition avoiding a barrier for the 2D case.
+
+        Args:
+            x (Tensor): Position coordinate x
+            y (Tensor): Position coordinate y
+
+        """
 
         u = (
             torch.sum(
@@ -124,6 +131,10 @@ class SimpleMB:
         return u
 
     def laplace(self, X):
+        """
+        Compute the second derivatives of the potential at a given point X.
+        I.e U_xx, U_yy. These will be added together in the action to form the laplacian.
+        """
         assert self.n_in == 2
         x, y = torch.split(X, 1, dim=-1)
 
