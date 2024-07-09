@@ -5,9 +5,6 @@ Use the same parameters to evaluate the actions so that we have a one-to-one com
 
 import torch
 import os
-
-os.environ["CUDA_VISIBLE_DEVICES"] = "2"
-
 from simpleMB import SimpleMB
 
 import numpy as np
@@ -73,7 +70,7 @@ for action_f in [SimpleAction, S2Action]:
                     "D": D.item(),
                     "action": action_f.__name__,
                 }
-                wandb.init(project="mb-tests", config=config, name="MB_test")
+                wandb.init(project="mb-tests-100points", config=config, name="MB_test")
 
                 action_str = "simple" if action_f == SimpleAction else "S2"
                 print(
