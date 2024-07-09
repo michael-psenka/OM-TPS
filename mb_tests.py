@@ -1,3 +1,8 @@
+"""
+Loop over a bunch of different action parameters and log the optimization paths/final actions
+Use the same parameters to evaluate the actions so that we have a one-to-one comparison.
+"""
+
 import torch
 import os
 
@@ -12,7 +17,13 @@ from tqdm import tqdm
 import imageio
 import wandb
 
+from mb_actions import SimpleAction, S2Action
+from src.utils import validate_git_status
+
+validate_git_status()
 wandb.login()
+
+os.makedirs("MB_tests", exist_ok=True)
 
 
 class Args:
@@ -28,71 +39,53 @@ potential = SimpleMB(args, n_in=2)
 x0, xf = potential.initial_point.detach(), potential.final_point.detach()
 
 
-def S2_action(path, xi, dt, D):
-    """Action containing hessian."""
-    first_term = torch.square((path[1:, :] - path[:-1, :])) * (xi / 4 / dt)
-    second_term = torch.square(potential.force_func(path[:-1, :])[1]) * (dt / 4 / xi)
-    third_term = potential.laplace(path[:-1, :]) * (dt * D / torch.tensor(2.0))
-    result = torch.sum(first_term + second_term + third_term)
-    return result
-
-
-def simple_action(path, xi, dt, D=None):
-    """Action without hessian."""
-    # for i in range(path.shape[0]-1):
-    first_term = torch.square((path[1:] - path[:-1])) * (xi / dt)
-    f_n = potential.force_func(path[:-1])[1]
-    f_np = potential.force_func(path[1:])[1]
-    second_term = (torch.square(f_n) + torch.square(f_np)) * (dt / xi / 2.0)
-    third_term = (path[1:] - path[:-1]) * (f_np - f_n)
-    result = torch.sum(first_term + second_term + third_term)
-    return result / torch.tensor(4.0)
-
-
 # Action parameters
 
-line_density = 30  # number of points on the line
+line_density = 100  # number of points on the line
+iterations = 1000
+alpha = 2e-1
+write_every = 100
 
 # Loop over a bunch of different action parameters
 
-
 # Evaluate the action with the same hyperparams regardless of the optimization
-evaluation_action = lambda path: simple_action(
-                    path,
-                    xi=torch.tensor(0.1).to(args.device),
-                    dt=0.1,
-                    D=torch.tensor(10).to(args.device),
-                )
+evaluation_action_cls = SimpleAction(
+    potential=potential,
+    gamma=torch.tensor(0.1).to(args.device),
+    dt=0.1,
+    D=torch.tensor(10).to(args.device),
+)
+evaluation_action = lambda path: evaluation_action_cls(path)
 
-for action_f in [simple_action, S2_action]:
-    for xi in torch.logspace(-2, 1, 5).to(args.device):
+for action_f in [SimpleAction, S2Action]:
+    for gamma in torch.logspace(-2, 1, 5).to(args.device):
         for dt in torch.logspace(-2, 0, 5):
 
-            if action_f == simple_action:
+            if action_f == SimpleAction:
                 D_loop = [torch.tensor(0.0).to(args.device)]
             else:
                 D_loop = torch.logspace(-1, 2, 5).to(args.device)
 
             for D in D_loop:
                 config = {
-                    "xi": xi.item(),
+                    "gamma": gamma.item(),
                     "dt": dt.item(),
                     "D": D.item(),
                     "action": action_f.__name__,
                 }
                 wandb.init(project="mb-tests", config=config, name="MB_test")
 
-                action_str = "simple" if action_f == simple_action else "S2"
-                print(f"MB_{action_str}_xi={round(xi.item(), 1)}_dt={dt}_D={D.item()}")
-                action_func = lambda path: action_f(path, xi, dt, D)
-                
+                action_str = "simple" if action_f == SimpleAction else "S2"
+                print(
+                    f"MB_{action_str}_gamma={round(gamma.item(), 1)}_dt={dt}_D={D.item()}"
+                )
+                action_func = lambda path: action_f(
+                    potential=potential, gamma=gamma, dt=dt, D=D
+                )(path)
+
                 line_x = torch.linspace(x0[1], xf[1], line_density)
                 line_y = torch.linspace(x0[0], xf[0], line_density)
                 line_points = torch.stack((line_x, line_y), axis=-1).to(args.device)
-
-                iterations = 500
-                alpha = 2e-1
-                write_every = 50
 
                 optimizer = torch.optim.Adam([line_points], lr=alpha)
 
@@ -178,15 +171,15 @@ for action_f in [simple_action, S2_action]:
                         gif_data.append(image)
                         actions.append(total_action.item())
 
-                action_str = "simple" if action_f == simple_action else "S2"
+                action_str = "simple" if action_f == SimpleAction else "S2"
                 imageio.mimsave(
-                    f"MB_tests/MB_{action_str}_xi={round(xi.item(), 3)}_dt={round(dt.item(), 3)}_D={round(D.item(), 3)}.gif",
+                    f"MB_tests/MB_{action_str}_gamma={round(gamma.item(), 3)}_dt={round(dt.item(), 3)}_D={round(D.item(), 3)}.gif",
                     gif_data,
                     fps=3,
                 )
                 log_dict = {
                     "gif": wandb.Video(
-                        f"MB_tests/MB_{action_str}_xi={round(xi.item(), 3)}_dt={round(dt.item(), 3)}_D={round(D.item(), 3)}.gif"
+                        f"MB_tests/MB_{action_str}_gamma={round(gamma.item(), 3)}_dt={round(dt.item(), 3)}_D={round(D.item(), 3)}.gif"
                     )
                 }
                 plt.close(fig)
