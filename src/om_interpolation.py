@@ -67,7 +67,10 @@ if __name__ == "__main__":
         "--steps", type=int, help="number of OM optimization steps", default=500
     )
     parser.add_argument(
-        "--const_time", type=float, help="constant time for OM action", default=4.0
+        "--const_time", type=float, help="timestep for OM action", default=4.0
+    )
+    parser.add_argument(
+        "--gamma", type=float, help="friction coefficient for OM action", default=8.0
     )
 
     parser.add_argument(
@@ -125,6 +128,7 @@ if __name__ == "__main__":
     max_pairs = args.max_pairs
     save_every = args.save_every
     const_time = args.const_time
+    gamma = args.gamma
     noise_perturb_scale = args.noise_perturb_scale
     lr = args.lr
     batch_size = args.batch_size
@@ -169,7 +173,7 @@ if __name__ == "__main__":
     model.eval()
 
     # Define OM Action
-    simple_action = SimpleAction(dt=const_time, gamma=path_length)
+    simple_action = SimpleAction(dt=const_time, gamma=gamma)
 
     # Initialize metrics
     lpips_loss_fn = LPIPS(net="alex").to(device)
