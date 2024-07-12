@@ -93,6 +93,11 @@ class MBDataset(Dataset):
             [self.data[i]["pos"] for i in range(len(self.data))], axis=0
         )
 
+        # TODO: filter out points with values greater than bounds of the calculator
+        # import pdb; pdb.set_trace()
+        # mask = np.nonzero(self.all_pos[:, :, 0] > self.calculator.Hx )
+
+
         # train val split
         if self.train:
             self.all_pos = self.all_pos[: int(0.8 * len(self.all_pos))]
