@@ -113,7 +113,7 @@ class MBDataset(Dataset):
                 np.concatenate([np.array(positions), np.zeros((1,))]), axis=0
             )
 
-            positions += np.random.normal(0, 3, positions.shape)
+            positions += np.random.normal(0, 1, positions.shape)
 
             atoms = Atoms(
                 f"{self.default_atom}",

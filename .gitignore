@@ -1,4 +1,5 @@
 *.gif
+*.traj
 log
 *.pt
 mnist_data/
