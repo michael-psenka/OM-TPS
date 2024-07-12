@@ -1,14 +1,21 @@
-import torch
+from ase.calculators.calculator import Calculator, all_changes
 import numpy as np
+import torch
 from functorch import grad
 
 
-class SimpleMB:
+class MullerBrownPotential(Calculator):
     """
-    Simple Muller-Brown Potential to test transition path optimization.
+    Muller-Brown potential calculator.
     """
 
-    def __init__(self, device, n_in=2, barrier=1.0):
+    implemented_properties = ["energy", "forces"]
+
+    nolabel = True
+
+    def __init__(self, device, n_in=2, barrier=1.0, **kwargs):
+
+        Calculator.__init__(self, **kwargs)
         """
         Args:
             args: Arguments object
@@ -51,12 +58,6 @@ class SimpleMB:
 
         self.U_min, self.U_max = -2 * barrier, 1 * barrier
 
-        total_potential = lambda X: torch.sum(self.U(X.to(self.device)))
-        self.force_func = lambda X: (
-            torch.tensor(0).to(self.device),
-            -grad(total_potential)(X.to(self.device)),
-        )
-
         self.A = self.A.to(self.device)
         self.alpha = self.alpha.to(self.device)
         self.a = self.a.to(self.device)
@@ -67,42 +68,6 @@ class SimpleMB:
 
         # self.initial_point = self.initial_point.to(device)
         # self.final_point = self.final_point.to(device)
-
-    def U(self, X):
-        """Simple potential that represents a transition avoiding a barrier.
-
-        Args:
-            x (Tensor): Position of the particle
-        """
-        if not torch.is_tensor(X):
-            X = torch.tensor(X, requires_grad=True)
-
-        if self.n_in == 2:
-            if len(X.shape) == 1:
-                x = X[0]
-                y = X[1]
-            else:
-                x = X[:, 0]
-                y = X[:, 1]
-            u = self.U_split(x, y)
-        else:
-            if len(X.shape) == 1:
-                x1, x2, x3, x4, x5 = torch.split(X, 1, dim=0)
-            else:
-                x1, x2, x3, x4, x5 = torch.split(X, 1, dim=-1)
-
-            x = x1
-            y = x3
-            u = self.U_split(x, y) + self.spring * (
-                (x2 - 25.0) ** 2 + (x4 - 25.0) ** 2 + (x5 - 25.0) ** 2
-            )
-        return u
-
-    def project2D(self, X):
-        x = X[..., 0]
-        y = X[..., 2]
-        projected = torch.stack((x, y), dim=-1)
-        return projected
 
     def U_split(self, x, y):
         """Simple potential that represents a transition avoiding a barrier for the 2D case.
@@ -130,36 +95,67 @@ class SimpleMB:
         )
         return u
 
-    def laplace(self, X):
+    def get_energy(self, X):
+        """Simple potential that represents a transition avoiding a barrier.
+
+        Args:
+            x (Tensor): Position of the particle
         """
-        Compute the second derivatives of the potential at a given point X.
-        I.e U_xx, U_yy. These will be added together in the action to form the laplacian.
-        """
-        assert self.n_in == 2
-        x, y = torch.split(X, 1, dim=-1)
+        if not torch.is_tensor(X):
+            X = torch.tensor(X, requires_grad=True)
 
-        U_xx = grad(
-            lambda x, y: torch.sum(
-                grad(lambda x, y: torch.sum(self.U_split(x, y)), argnums=(0, 1))(x, y)[
-                    0
-                ]
-            ),
-            argnums=0,
-        )(x, y)
-        U_yy = grad(
-            lambda x, y: torch.sum(
-                grad(lambda x, y: torch.sum(self.U_split(x, y)), argnums=(0, 1))(x, y)[
-                    1
-                ]
-            ),
-            argnums=1,
-        )(x, y)
+        X = X.to(self.device)
 
-        return torch.stack((U_xx, U_yy), axis=-1)
+        if self.n_in == 2:
+            if len(X.shape) == 1:
+                x = X[0]
+                y = X[1]
+            else:
+                x = X[:, 0]
+                y = X[:, 1]
+            u = self.U_split(x, y)
+        else:
+            if len(X.shape) == 1:
+                x1, x2, x3, x4, x5 = torch.split(X, 1, dim=0)
+            else:
+                x1, x2, x3, x4, x5 = torch.split(X, 1, dim=-1)
 
-    def get_init_point(self, batch_size):
+            x = x1
+            y = x3
+            u = self.U_split(x, y) + self.spring * (
+                (x2 - 25.0) ** 2 + (x4 - 25.0) ** 2 + (x5 - 25.0) ** 2
+            )
+        return u
 
-        basin1 = self.initial_point.repeat(batch_size, 1)
-        basin2 = self.final_point.repeat(batch_size, 1)
-        sim_init = torch.cat((basin1, basin2))
-        return sim_init
+    def get_force(self, X):
+        return -grad(self.get_energy)(X)
+
+    def calculate(
+        self,
+        atoms=None,
+        properties=None,
+        system_changes=all_changes,
+    ):
+        if properties is None:
+            properties = self.implemented_properties
+
+        Calculator.calculate(self, atoms, properties, system_changes)
+
+        natoms = len(self.atoms)
+
+        assert natoms == 1
+
+        energies = np.zeros(natoms)
+        forces = np.zeros((natoms, 3))
+
+        energies[0] = (
+            self.get_energy(torch.tensor(self.atoms[0].position)).cpu().numpy()
+        )
+        forces[0] = self.get_force(torch.tensor(self.atoms[0].position)).cpu().numpy()
+
+        energy = energies.sum()
+        self.results["energy"] = energy
+        self.results["energies"] = energies
+
+        self.results["free_energy"] = energy
+        self.results["forces"] = forces
