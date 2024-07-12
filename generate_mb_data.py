@@ -125,11 +125,11 @@ from mb_calculator import MullerBrownPotential
 
 calculator = MullerBrownPotential(device="cpu")
 dataset = MBDataset(
-    save_path="data",
+    save_path="data_final",
     transition_path_guess=np.fliplr(draw_points.numpy()),
     timestep=20.0,
     temperature=800,
-    n_steps=10000,
+    n_steps=100000,
     n_sims=100,
     gamma=0.01,
 )

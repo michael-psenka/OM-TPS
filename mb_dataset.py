@@ -49,6 +49,7 @@ class MBDataset(Dataset):
         save_path: Optional[str] = None,
         use_langevin: bool = True,
         transition_path_guess: np.array = None,
+        train: bool = True,
     ):
 
         np.random.seed(seed)
@@ -66,6 +67,7 @@ class MBDataset(Dataset):
         self.save_path = save_path
         self.use_langevin = use_langevin
         self.transition_path_guess = transition_path_guess
+        self.train = train
 
         self.calculator = MullerBrownPotential(device=device)
 
@@ -90,6 +92,15 @@ class MBDataset(Dataset):
         self.all_pos = np.concatenate(
             [self.data[i]["pos"] for i in range(len(self.data))], axis=0
         )
+
+        # train val split
+        if self.train:
+            self.all_pos = self.all_pos[: int(0.8 * len(self.all_pos))]
+        else:
+            self.all_pos = self.all_pos[int(0.8 * len(self.all_pos)) :]
+
+        self.mean = torch.tensor(np.mean(self.all_pos, axis=0)[:, :2])
+        self.std = torch.tensor(np.std(self.all_pos, axis=0)[:, :2])
 
     def run_and_save_sims(self):
         def update_fu(atom, traj_n):
