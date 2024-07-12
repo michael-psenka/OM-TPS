@@ -69,6 +69,26 @@ class MullerBrownPotential(Calculator):
         # self.initial_point = self.initial_point.to(device)
         # self.final_point = self.final_point.to(device)
 
+    def initialize_positions(self):
+        """
+        Initialize positions within the regions defined by the Gaussian functions.
+
+        Returns:
+            positions (np.ndarray): Initialized positions.
+        """
+        index = np.random.randint(0, len(self.a))
+        x = self.a[index].item() + torch.FloatTensor(1).uniform_(-2, 2)
+        y = self.b[index].item() + torch.FloatTensor(1).uniform_(-2, 2)
+
+        if self.n_in == 2:
+            positions = torch.tensor([x, y], device=self.device)
+        elif self.n_in == 5:
+            positions = torch.tensor([x, y, 0.0, 0.0, 0.0], device=self.device)
+
+        positions = torch.concatenate([positions, torch.zeros((1,))]).unsqueeze(0)
+
+        return positions
+
     def U_split(self, x, y):
         """Simple potential that represents a transition avoiding a barrier for the 2D case.
 

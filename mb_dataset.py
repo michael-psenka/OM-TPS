@@ -20,11 +20,11 @@ class MBDataset(Dataset):
     """
     Muller Brown dataset for transition path optimization.
     seed: random seed
-    temperature: temperature of the system
+    temperature: temperature of the system (Kelvin)
     n_sims: number of simulations to run
     n_steps: number of steps to take in each simulation
-    timestep: timestep of the Langevin integrator in fs
-    gamma: friction for langevin dynamics
+    timestep: timestep of the Langevin integrator (fs)
+    gamma: friction for langevin dynamics (fs^-1)
     save_every: save every nth step (so timestep of dataset is time_step * save_every)
     default_atom: atom type to use for the atoms
     device: device to run the simulations on
@@ -40,6 +40,7 @@ class MBDataset(Dataset):
         n_sims: int = 100,
         n_steps: int = 1000,
         timestep: float = 0.5,
+        mass: float = 1.0,
         gamma: float = 0.1,
         save_every: int = 1,
         default_atom: str = "N",
@@ -47,6 +48,7 @@ class MBDataset(Dataset):
         preload_sim_dir: Optional[str] = None,
         save_path: Optional[str] = None,
         use_langevin: bool = True,
+        transition_path_guess: np.array = None,
     ):
 
         np.random.seed(seed)
@@ -58,16 +60,20 @@ class MBDataset(Dataset):
         self.timestep = timestep
         self.save_every = save_every
         self.default_atom = default_atom
+        self.mass = mass
         self.gamma = gamma
         self.preload_sim_dir = preload_sim_dir
         self.save_path = save_path
         self.use_langevin = use_langevin
+        self.transition_path_guess = transition_path_guess
 
         self.calculator = MullerBrownPotential(device=device)
 
         self.data = {}
 
         if preload_sim_dir:
+            if isinstance(preload_sim_dir, str):
+                preload_sim_dir = Path(preload_sim_dir)
             print("Loading simulations from directory:", preload_sim_dir)
             self.load_simulations()
 
@@ -105,19 +111,30 @@ class MBDataset(Dataset):
 
         # set initial positions
         for i in tqdm(range(self.n_sims)):
-            if np.random.rand() < 0.5:
-                positions = self.calculator.initial_point
+            if self.transition_path_guess is not None:
+                # sample point from the transition path guess
+                idx = np.random.randint(0, len(self.transition_path_guess))
+                positions = self.transition_path_guess[idx].reshape(1, 2)
+                positions += np.random.normal(0, 3, positions.shape)
+                # add zero to third dim
+                positions = np.concatenate([positions, np.zeros((1, 1))], axis=1)
             else:
-                positions = self.calculator.final_point
-            positions = np.expand_dims(
-                np.concatenate([np.array(positions), np.zeros((1,))]), axis=0
-            )
+                # sample uniformly over domain
+                if np.random.rand() < 0.5:
+                    positions = self.calculator.initial_point
+                else:
+                    positions = self.calculator.final_point
 
-            positions += np.random.normal(0, 1, positions.shape)
+                x = np.random.uniform(self.calculator.Lx, self.calculator.Hx, (1,))
+                y = np.random.uniform(self.calculator.Ly, self.calculator.Hy, (1,))
+                positions = np.expand_dims(
+                    np.concatenate([x, y, np.zeros((1,))]), axis=0
+                )
 
             atoms = Atoms(
                 f"{self.default_atom}",
                 positions=positions,
+                masses=[self.mass],
             )
             MaxwellBoltzmannDistribution(atoms, temperature_K=self.temperature)
             atoms.set_calculator(self.calculator)
@@ -125,12 +142,12 @@ class MBDataset(Dataset):
             if self.use_langevin:
                 dyn = Langevin(
                     atoms,
-                    self.timestep * units.fs,
-                    self.temperature * units.kB,
-                    self.gamma,
+                    timestep=self.timestep * units.fs,
+                    temperature_K=self.temperature,
+                    friction=self.gamma / units.fs,
                 )
             else:
-                dyn = VelocityVerlet(atoms, self.timestep * units.fs)
+                dyn = VelocityVerlet(atoms, timestep=self.timestep * units.fs)
 
             # TODO: make sure temperature is maintained.
 
@@ -157,6 +174,8 @@ class MBDataset(Dataset):
         return {"pos": pos, "pe": pe, "force": force, "ke": ke}
 
     def load_simulations(self):
+        if isinstance(self.preload_sim_dir, str):
+            self.preload_sim_dir = Path(self.preload_sim_dir)
         traj_files = glob.glob(self.preload_sim_dir.as_posix() + "/*.traj")
         for i, traj_file in tqdm(enumerate(traj_files), total=len(traj_files)):
             self.data[i] = self.load_trajectory(traj_file)
