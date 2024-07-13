@@ -43,13 +43,13 @@ class MBDataset(Dataset):
         mass: float = 1.0,
         gamma: float = 0.1,
         save_every: int = 1,
+        load_every: int = 1,
         default_atom: str = "N",
         device: str = "cpu",
         preload_sim_dir: Optional[str] = None,
         save_path: Optional[str] = None,
         use_langevin: bool = True,
         transition_path_guess: np.array = None,
-        train: bool = True,
     ):
 
         np.random.seed(seed)
@@ -60,6 +60,7 @@ class MBDataset(Dataset):
         self.n_steps = n_steps
         self.timestep = timestep
         self.save_every = save_every
+        self.load_every = load_every
         self.default_atom = default_atom
         self.mass = mass
         self.gamma = gamma
@@ -67,7 +68,6 @@ class MBDataset(Dataset):
         self.save_path = save_path
         self.use_langevin = use_langevin
         self.transition_path_guess = transition_path_guess
-        self.train = train
 
         self.calculator = MullerBrownPotential(device=device)
 
@@ -97,13 +97,6 @@ class MBDataset(Dataset):
         # import pdb; pdb.set_trace()
         # mask = np.nonzero(self.all_pos[:, :, 0] > self.calculator.Hx )
 
-
-        # train val split
-        if self.train:
-            self.all_pos = self.all_pos[: int(0.8 * len(self.all_pos))]
-        else:
-            self.all_pos = self.all_pos[int(0.8 * len(self.all_pos)) :]
-
         self.mean = torch.tensor(np.mean(self.all_pos, axis=0)[:, :2])
         self.std = torch.tensor(np.std(self.all_pos, axis=0)[:, :2])
 
@@ -131,7 +124,7 @@ class MBDataset(Dataset):
                 # sample point from the transition path guess
                 idx = np.random.randint(0, len(self.transition_path_guess))
                 positions = self.transition_path_guess[idx].reshape(1, 2)
-                positions += np.random.normal(0, 3, positions.shape)
+                positions += np.random.normal(0, 0.0001, positions.shape)
                 # add zero to third dim
                 positions = np.concatenate([positions, np.zeros((1, 1))], axis=1)
             else:
@@ -183,11 +176,11 @@ class MBDataset(Dataset):
 
     def load_trajectory(self, traj_file):
         traj = Trajectory(traj_file)
-        pos = np.array([a.get_positions() for a in traj])
-        pe = np.array([a.get_potential_energy() for a in traj])
-        force = np.array([a.get_forces() for a in traj])
-        ke = np.array([a.get_kinetic_energy() for a in traj])
-        return {"pos": pos, "pe": pe, "force": force, "ke": ke}
+        pos = np.array([a.get_positions() for a in traj[::self.load_every]])
+        # pe = np.array([a.get_potential_energy() for a in traj])
+        # force = np.array([a.get_forces() for a in traj])
+        # ke = np.array([a.get_kinetic_energy() for a in traj])
+        return {"pos": pos} #, "pe": pe, "force": force, "ke": ke}
 
     def load_simulations(self):
         if isinstance(self.preload_sim_dir, str):
