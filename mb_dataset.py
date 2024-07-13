@@ -124,7 +124,7 @@ class MBDataset(Dataset):
                 # sample point from the transition path guess
                 idx = np.random.randint(0, len(self.transition_path_guess))
                 positions = self.transition_path_guess[idx].reshape(1, 2)
-                positions += np.random.normal(0, 0.0001, positions.shape)
+                # positions += np.random.normal(0, 0.0001, positions.shape)
                 # add zero to third dim
                 positions = np.concatenate([positions, np.zeros((1, 1))], axis=1)
             else:
