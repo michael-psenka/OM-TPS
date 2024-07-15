@@ -41,7 +41,7 @@ class SimpleAction(torch.nn.Module):
     Basically same as src.actions.SimpleAction but for 2D MB, not images.
     """
 
-    def __init__(self, force_func, dt, gamma, D=None):
+    def __init__(self, force_func, dt, gamma, laplace_func = None, D=None):
         """
         Args:
             force_func: Force function
