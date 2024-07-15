@@ -28,7 +28,7 @@ class S2Action(torch.nn.Module):
         second_term = torch.square(self.force_func(path[:-1])[1]) * (
             self.dt / 4 / self.gamma
         )
-        third_term = self.laplace(path[:-1]) * (
+        third_term = self.laplace_func(path[:-1]) * (
             self.dt * self.D / torch.tensor(2.0)
         )
         result = torch.sum(first_term + second_term + third_term)
