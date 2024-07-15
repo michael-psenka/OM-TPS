@@ -4,7 +4,7 @@ import torch
 class S2Action(torch.nn.Module):
     """Action with Hessian"""
 
-    def __init__(self, force_func, laplace_func, dt, gamma, D):
+    def __init__(self, potential_func, force_func, laplace_func, dt, gamma, D):
         """
         Args:
             force_func: Force function
@@ -14,6 +14,7 @@ class S2Action(torch.nn.Module):
             D: float, diffusion coefficient
         """
         super(S2Action, self).__init__()
+        self.potential_func = potential_func
         self.force_func = force_func
         self.laplace_func = laplace_func
         self.dt = dt
@@ -24,14 +25,15 @@ class S2Action(torch.nn.Module):
         """
         Args: path of shape [P, 2]
         """
-        first_term = torch.square((path[1:] - path[:-1])) * (self.gamma / 4 / self.dt)
+        first_term = torch.square((path[1:] - path[:-1])) * (self.gamma / self.dt)
         second_term = torch.square(self.force_func(path[:-1])[1]) * (
-            self.dt / 4 / self.gamma
+            self.dt/ self.gamma
         )
         third_term = self.laplace_func(path[:-1]) * (
-            self.dt * self.D / torch.tensor(2.0)
+            self.dt * self.D * torch.tensor(2.0) / self.gamma
         )
-        result = torch.sum(first_term + second_term + third_term)
+        result = torch.sum(first_term + second_term + third_term) / 2.0
+        result = result + (self.potential_func(path[-1]) + self.potential_func(path[0])) / self.gamma
         return result
 
 

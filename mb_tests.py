@@ -80,8 +80,8 @@ for action_f in [SimpleAction, S2Action]:
                     potential=potential, gamma=gamma, dt=dt, D=D
                 )(path)
 
-                line_x = torch.linspace(x0[1], xf[1], line_density)
-                line_y = torch.linspace(x0[0], xf[0], line_density)
+                line_x = torch.linspace(x0[0], xf[0], line_density)
+                line_y = torch.linspace(x0[1], xf[1], line_density)
                 line_points = torch.stack((line_x, line_y), axis=-1).to(args.device)
 
                 optimizer = torch.optim.Adam([line_points], lr=alpha)
@@ -95,7 +95,7 @@ for action_f in [SimpleAction, S2Action]:
                 x_values = torch.linspace(potential.Lx, potential.Hx, num_points)
                 y_values = torch.linspace(potential.Ly, potential.Hy, num_points)
 
-                x, y = torch.meshgrid(x_values, y_values)
+                x, y = torch.meshgrid(x_values, y_values, indexing = "xy")
                 z = potential.U_split(x.to(args.device), y.to(args.device)).cpu()
                 actions = []
                 for i in tqdm(range(iterations)):
