@@ -14,6 +14,8 @@ from tqdm import tqdm
 import imageio
 import wandb
 
+wandb.require("core")
+
 from mb_actions import SimpleAction, S2Action
 from src.utils import validate_git_status
 
@@ -22,23 +24,18 @@ wandb.login()
 
 os.makedirs("MB_tests", exist_ok=True)
 
+device = (
+    torch.device(torch.cuda.current_device()) if torch.cuda.is_available() else "cpu"
+)
 
-class Args:
-    pass
-
-
-args = Args()
-args.device = "cuda"
-
-
-potential = SimpleMB(args, n_in=2)
+potential = SimpleMB(device=device, n_in=2)
 
 x0, xf = potential.initial_point.detach(), potential.final_point.detach()
 
 
 # Action parameters
 
-line_density = 100  # number of points on the line
+line_density = 50  # number of points on the line
 iterations = 1000
 alpha = 2e-1
 write_every = 100
@@ -47,21 +44,22 @@ write_every = 100
 
 # Evaluate the action with the same hyperparams regardless of the optimization
 evaluation_action_cls = SimpleAction(
-    potential=potential,
-    gamma=torch.tensor(0.1).to(args.device),
+    force_func=potential.force_func,
+    laplace_func=potential.laplace,
+    gamma=torch.tensor(0.1).to(device),
     dt=0.1,
-    D=torch.tensor(10).to(args.device),
+    D=torch.tensor(10).to(device),
 )
 evaluation_action = lambda path: evaluation_action_cls(path)
 
 for action_f in [SimpleAction, S2Action]:
-    for gamma in torch.logspace(-2, 1, 5).to(args.device):
+    for gamma in torch.logspace(-2, 1, 5).to(device):
         for dt in torch.logspace(-2, 0, 5):
 
             if action_f == SimpleAction:
-                D_loop = [torch.tensor(0.0).to(args.device)]
+                D_loop = [torch.tensor(0.0).to(device)]
             else:
-                D_loop = torch.logspace(-1, 2, 5).to(args.device)
+                D_loop = torch.logspace(-1, 2, 5).to(device)
 
             for D in D_loop:
                 config = {
@@ -70,19 +68,25 @@ for action_f in [SimpleAction, S2Action]:
                     "D": D.item(),
                     "action": action_f.__name__,
                 }
-                wandb.init(project="mb-tests-100points", config=config, name="MB_test")
+                wandb.init(
+                    project="mb-tests-100points-fixedopt", config=config, name="MB_test"
+                )
 
                 action_str = "simple" if action_f == SimpleAction else "S2"
                 print(
                     f"MB_{action_str}_gamma={round(gamma.item(), 1)}_dt={dt}_D={D.item()}"
                 )
                 action_func = lambda path: action_f(
-                    potential=potential, gamma=gamma, dt=dt, D=D
+                    force_func=potential.force_func,
+                    laplace_func=potential.laplace,
+                    gamma=gamma,
+                    dt=dt,
+                    D=D,
                 )(path)
 
                 line_x = torch.linspace(x0[0], xf[0], line_density)
                 line_y = torch.linspace(x0[1], xf[1], line_density)
-                line_points = torch.stack((line_x, line_y), axis=-1).to(args.device)
+                line_points = torch.stack((line_x, line_y), axis=-1).to(device)
 
                 optimizer = torch.optim.Adam([line_points], lr=alpha)
 
@@ -95,8 +99,8 @@ for action_f in [SimpleAction, S2Action]:
                 x_values = torch.linspace(potential.Lx, potential.Hx, num_points)
                 y_values = torch.linspace(potential.Ly, potential.Hy, num_points)
 
-                x, y = torch.meshgrid(x_values, y_values, indexing = "xy")
-                z = potential.U_split(x.to(args.device), y.to(args.device)).cpu()
+                x, y = torch.meshgrid(x_values, y_values, indexing="xy")
+                z = potential.U_split(x.to(device), y.to(device)).cpu()
                 actions = []
                 for i in tqdm(range(iterations)):
                     line_points.requires_grad = True

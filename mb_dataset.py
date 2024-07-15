@@ -176,11 +176,11 @@ class MBDataset(Dataset):
 
     def load_trajectory(self, traj_file):
         traj = Trajectory(traj_file)
-        pos = np.array([a.get_positions() for a in traj[::self.load_every]])
+        pos = np.array([a.get_positions() for a in traj[:: self.load_every]])
         # pe = np.array([a.get_potential_energy() for a in traj])
         # force = np.array([a.get_forces() for a in traj])
         # ke = np.array([a.get_kinetic_energy() for a in traj])
-        return {"pos": pos} #, "pe": pe, "force": force, "ke": ke}
+        return {"pos": pos}  # , "pe": pe, "force": force, "ke": ke}
 
     def load_simulations(self):
         if isinstance(self.preload_sim_dir, str):
