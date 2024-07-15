@@ -51,10 +51,10 @@ class SimpleMB:
 
         self.U_min, self.U_max = -2 * barrier, 1 * barrier
 
-        self.total_potential = lambda X: torch.sum(self.U(X.to(self.device)))
+        total_potential = lambda X: torch.sum(self.U(X.to(self.device)))
         self.force_func = lambda X: (
             torch.tensor(0).to(self.device),
-            -grad(self.total_potential)(X.to(self.device)),
+            -grad(total_potential)(X.to(self.device)),
         )
 
         self.A = self.A.to(self.device)
