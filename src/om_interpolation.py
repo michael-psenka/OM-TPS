@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
     if poor_mans_gpu:
         print("Lowering batch size")
-        args.batch_size = 8
+        args.batch_size = 2
         #args.max_pairs = 3
 
     if not args.disable_logging:
@@ -337,8 +337,9 @@ if __name__ == "__main__":
 
                 if i % save_every == 0:
                     # save interpolation path
-                    save = model.sample_from_t(t, interpolated_images[batch_idx])
-                    save = torch.clamp(save, -1.0, 1.0)
+                    #save = model.sample_from_t(t, interpolated_images[batch_idx])
+                    save = interpolated_images[batch_idx].detach().clone()
+                    save = inv_normalizer(torch.clamp(save, -1.0, 1.0))
                     final_draw.append(save.cpu())
 
         with torch.no_grad():
