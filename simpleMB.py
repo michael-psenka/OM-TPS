@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from functorch import grad
+from functorch import grad, grad_and_value, vmap
 
 
 class SimpleMB:
@@ -51,11 +51,16 @@ class SimpleMB:
 
         self.U_min, self.U_max = -2 * barrier, 1 * barrier
 
-        total_potential = lambda X: torch.sum(self.U(X.to(self.device)))
-        self.force_func = lambda X: (
-            torch.tensor(0).to(self.device),
-            -grad(total_potential)(X.to(self.device)),
-        )
+        self.total_potential = lambda X: torch.sum(self.U(X))
+
+        self.force_func = vmap(lambda X: grad_and_value(self.total_potential)(X))
+        
+
+        self.old_force_func = lambda X: (torch.tensor(0), -grad(self.total_potential)(X))
+
+        self.to_(args.device)
+
+    def to_(self, device):
 
         self.A = self.A.to(self.device)
         self.alpha = self.alpha.to(self.device)
