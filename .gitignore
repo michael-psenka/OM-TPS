@@ -8,3 +8,4 @@ mnist_data/
 *ipynb_checkpoints/
 wandb/
 guided_diffusion/
+mnist/
