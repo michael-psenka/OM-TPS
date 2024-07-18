@@ -92,6 +92,9 @@ class MBDataset(Dataset):
         self.all_pos = np.concatenate(
             [self.data[i]["pos"] for i in range(len(self.data))], axis=0
         )
+        self.all_force = np.concatenate(
+            [self.data[i]["force"] for i in range(len(self.data))], axis=0
+        )
 
         # TODO: filter out points with values greater than bounds of the calculator
         # import pdb; pdb.set_trace()
@@ -178,9 +181,9 @@ class MBDataset(Dataset):
         traj = Trajectory(traj_file)
         pos = np.array([a.get_positions() for a in traj[:: self.load_every]])
         # pe = np.array([a.get_potential_energy() for a in traj])
-        # force = np.array([a.get_forces() for a in traj])
+        force = np.array([a.get_forces() for a in traj])
         # ke = np.array([a.get_kinetic_energy() for a in traj])
-        return {"pos": pos}  # , "pe": pe, "force": force, "ke": ke}
+        return {"pos": pos, "force": force}  # , "pe": pe, "force": force, "ke": ke}
 
     def load_simulations(self):
         if isinstance(self.preload_sim_dir, str):
@@ -193,5 +196,6 @@ class MBDataset(Dataset):
         return len(self.all_pos)
 
     def __getitem__(self, idx):
-
-        return torch.Tensor(self.all_pos[idx][:, :2]).squeeze()
+        pos = torch.Tensor(self.all_pos[idx][:, :2]).squeeze()
+        force = torch.Tensor(self.all_force[idx][:, :2]).squeeze()
+        return pos, force
