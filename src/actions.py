@@ -104,7 +104,7 @@ class HessianAction(torch.nn.Module):
         third_term = (
             -2 * self.D / self.xi * force_grads[:-1]
         )  # TODO: is there a minus sign in front of this term? (See Eqn 10 from https://pubs.aip.org/aip/jcp/article/132/13/134101/902772/Onsager-Machlup-action-based-path-sampling-and-its)
-           # TODO Yes correct.
+        # TODO Yes correct.
         result = torch.sum(first_term + second_term - third_term)
 
         return result * self.dt / 2
@@ -131,13 +131,11 @@ class TruncatedAction(torch.nn.Module):
         super(TruncatedAction, self).__init__()
         self.dt = dt
         self.xi = xi
-        
+
         # When ignoring Hessian, OM action is temperatureles
         # self.D = D
 
-    def forward(
-        self, path: torch.Tensor, forces: torch.Tensor
-    ):
+    def forward(self, path: torch.Tensor, forces: torch.Tensor):
         """
         Args:
             path: torch.Tensor of images of shape [P, C, H, W], where P is the number of images on the path.
@@ -159,10 +157,11 @@ class TruncatedAction(torch.nn.Module):
         second_term = torch.square(forces[:-1] / self.xi)
 
         # Third term just ignored.
-        
+
         result = torch.sum(first_term + second_term)
 
         return result * self.dt / 2.0
+
 
 """
 Slightly different action, TODO: understand the difference

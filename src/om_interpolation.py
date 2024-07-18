@@ -16,6 +16,8 @@ import argparse
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import wandb
+
+wandb.require("core")
 import torch
 from torchvision.utils import save_image, make_grid
 from torchvision import transforms
@@ -50,9 +52,9 @@ if __name__ == "__main__":
         help="number of timesteps for forward/reverse diffusion (i.e at what point in \
         the diffusion process to do interpolation). Must be <= 1000. 0 corresponds to \
         interpolation in image space, and 1000 corresponds to interpolation in pure Gaussian noise space.",
-        #default=300,
-        #latent time 0 is good for the start. Lets see if it helps to use something more. 
-        default=0
+        # default=300,
+        # latent time 0 is good for the start. Lets see if it helps to use something more.
+        default=0,
     )
 
     parser.add_argument(
@@ -93,17 +95,18 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--action", type=str, help="Which action to use. Options: hessian, truncated, simple", default="truncated"
+        "--action",
+        type=str,
+        help="Which action to use. Options: hessian, truncated, simple",
+        default="truncated",
     )
 
     parser.add_argument(
         "--batch_size",
         type=int,
         help="batch_size for doing the optimization",
-        default=192,  # this saturates GPU memory on Sanjeev's Germain server
+        default=96,  # this saturates GPU memory on Sanjeev's Germain server for path length of 16
     )
-
-
 
     args = parser.parse_args()
 
@@ -119,7 +122,7 @@ if __name__ == "__main__":
     if poor_mans_gpu:
         print("Lowering batch size")
         args.batch_size = 2
-        #args.max_pairs = 3
+        # args.max_pairs = 3
 
     if not args.disable_logging:
         validate_git_status()
@@ -164,17 +167,24 @@ if __name__ == "__main__":
     inv_normalizer = transforms.Normalize([-1.0], [2.0])
 
     if poor_mans_gpu:
-        in_channels=1
-        time_embedding_dim=256
-        timesteps=1000
-        base_dim=64
-        dim_mults= [2,4]
+        in_channels = 1
+        time_embedding_dim = 256
+        timesteps = 1000
+        base_dim = 64
+        dim_mults = [2, 4]
 
-        model=MNISTDiffusion(28, in_channels, timesteps=timesteps,time_embedding_dim=time_embedding_dim, base_dim=base_dim,dim_mults=dim_mults)
+        model = MNISTDiffusion(
+            28,
+            in_channels,
+            timesteps=timesteps,
+            time_embedding_dim=time_embedding_dim,
+            base_dim=base_dim,
+            dim_mults=dim_mults,
+        )
 
         ckpt = torch.load("data/models/best_model.pt")
         model.load_state_dict(ckpt["model"])
-    
+
     else:
 
         # Instantiate model
@@ -269,7 +279,6 @@ if __name__ == "__main__":
 
         for i in pbar:
 
-
             # It helps to anneal diffusion time
             diff_time = torch.tensor(999 - i).to(device)
 
@@ -288,10 +297,10 @@ if __name__ == "__main__":
             #    -1, t.repeat(batch_size * path_length)
             # ).reshape(batch_size * path_length, 1, 1, 1)
 
-            # TODO The prefactor does not seem to be necessary. The minus sign is inimportant for the hessian action as forces are 
-            # TODO squared. We will investigate further. Commenting out for now. 
+            # TODO The prefactor does not seem to be necessary. The minus sign is inimportant for the hessian action as forces are
+            # TODO squared. We will investigate further. Commenting out for now.
             # forces = -noise_pred / sqrt_one_minus_alpha_cumprod_t
-            
+
             forces = noise_pred
             forces = forces.reshape(batch_size, path_length, C, H, W)
 
@@ -337,7 +346,7 @@ if __name__ == "__main__":
 
                 if i % save_every == 0:
                     # save interpolation path
-                    #save = model.sample_from_t(t, interpolated_images[batch_idx])
+                    # save = model.sample_from_t(t, interpolated_images[batch_idx])
                     save = interpolated_images[batch_idx].detach().clone()
                     save = inv_normalizer(torch.clamp(save, -1.0, 1.0))
                     final_draw.append(save.cpu())
