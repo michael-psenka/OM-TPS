@@ -353,8 +353,11 @@ if __name__ == "__main__":
 
         with torch.no_grad():
             # run reverse diffusion on the final, optimized path
+            # interpolated_images = model.sample_from_t(
+            #     t, interpolated_images.reshape(-1, C, H, W)
+            # )
             interpolated_images = model.sample_from_t(
-                t, interpolated_images.reshape(-1, C, H, W)
+                t + 999, interpolated_images.reshape(-1, C, H, W)
             )
             interpolated_images = interpolated_images.reshape(
                 batch_size, path_length, C, H, W
