@@ -16,6 +16,8 @@ import argparse
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import wandb
+
+wandb.require("core")
 import torch
 from torchvision.utils import save_image, make_grid
 from torchvision import transforms
@@ -23,7 +25,7 @@ from torchvision import transforms
 from train_mnist import create_mnist_dataloaders
 
 from model import MNISTDiffusion
-from actions import SimpleAction
+from actions import SimpleAction, TruncatedAction, HessianAction
 from utils import get_initial_guess_fn, validate_git_status
 
 from torcheval.metrics import FrechetInceptionDistance
@@ -50,7 +52,9 @@ if __name__ == "__main__":
         help="number of timesteps for forward/reverse diffusion (i.e at what point in \
         the diffusion process to do interpolation). Must be <= 1000. 0 corresponds to \
         interpolation in image space, and 1000 corresponds to interpolation in pure Gaussian noise space.",
-        default=300,
+        # default=300,
+        # latent time 0 is good for the start. Lets see if it helps to use something more.
+        default=0,
     )
 
     parser.add_argument(
@@ -61,23 +65,23 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--path_length", type=int, help="length of interpolation path", default=8
+        "--path_length", type=int, help="length of interpolation path", default=16
     )
     parser.add_argument(
-        "--steps", type=int, help="number of OM optimization steps", default=500
+        "--steps", type=int, help="number of OM optimization steps", default=1000
     )
     parser.add_argument(
         "--const_time", type=float, help="timestep for OM action", default=4.0
     )
     parser.add_argument(
-        "--gamma", type=float, help="friction coefficient for OM action", default=8.0
+        "--gamma", type=float, help="friction coefficient for OM action", default=16.0
     )
 
     parser.add_argument(
         "--noise_perturb_scale",
         type=float,
         help="scale of noise perturbing OM path after every optimization step",
-        default=0.06,
+        default=0.00,
     )
 
     parser.add_argument(
@@ -94,10 +98,17 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--action",
+        type=str,
+        help="Which action to use. Options: hessian, truncated, simple",
+        default="truncated",
+    )
+
+    parser.add_argument(
         "--batch_size",
         type=int,
         help="batch_size for doing the optimization",
-        default=192,  # this saturates GPU memory on Sanjeev's Germain server
+        default=96,  # this saturates GPU memory on Sanjeev's Germain server for path length of 16
     )
 
     args = parser.parse_args()
@@ -106,6 +117,15 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
 
     device = "cpu" if args.cpu else "cuda"
+
+    # If using Martins poor man's GPU we need to lower the batch size.
+
+    poor_mans_gpu = torch.cuda.get_device_name(0) == "NVIDIA GeForce GTX 1660 Ti"
+
+    if poor_mans_gpu:
+        print("Lowering batch size")
+        args.batch_size = 2
+        # args.max_pairs = 3
 
     if not args.disable_logging:
         validate_git_status()
@@ -150,30 +170,58 @@ if __name__ == "__main__":
     # Un-normalize images from [-1, 1]  to [0, 1]
     inv_normalizer = transforms.Normalize([-1.0], [2.0])
 
-    # Instantiate model
-    in_channels = 1
-    time_embedding_dim = 256
-    timesteps = 1000
-    base_dim = 64
-    dim_mults = [2, 4]
+    if poor_mans_gpu:
+        in_channels = 1
+        time_embedding_dim = 256
+        timesteps = 1000
+        base_dim = 64
+        dim_mults = [2, 4]
 
-    model = MNISTDiffusion(
-        28,
-        in_channels,
-        timesteps=timesteps,
-        time_embedding_dim=time_embedding_dim,
-        base_dim=base_dim,
-        dim_mults=dim_mults,
-    )
+        model = MNISTDiffusion(
+            28,
+            in_channels,
+            timesteps=timesteps,
+            time_embedding_dim=time_embedding_dim,
+            base_dim=base_dim,
+            dim_mults=dim_mults,
+        )
 
-    ckpt = torch.load(ckpt_path, map_location=device)
-    model.load_state_dict(ckpt["model"])
+        ckpt = torch.load("data/models/best_model.pt")
+        model.load_state_dict(ckpt["model"])
+
+    else:
+
+        # Instantiate model
+        in_channels = 1
+        time_embedding_dim = 256
+        timesteps = 1000
+        base_dim = 64
+        dim_mults = [2, 4]
+
+        model = MNISTDiffusion(
+            28,
+            in_channels,
+            timesteps=timesteps,
+            time_embedding_dim=time_embedding_dim,
+            base_dim=base_dim,
+            dim_mults=dim_mults,
+        )
+
+        ckpt = torch.load(ckpt_path, map_location=device)
+        model.load_state_dict(ckpt["model"])
 
     model = model.to(device)
     model.eval()
 
     # Define OM Action
-    simple_action = SimpleAction(dt=const_time, gamma=gamma)
+    if args.action == "hessian":
+        action_func = HessianAction(dt=const_time, xi=path_length)
+    elif args.action == "truncated":
+        action_func = TruncatedAction(dt=const_time, xi=path_length)
+    elif args.action == "simple":
+        action_func = SimpleAction(dt=const_time, gamma=path_length)
+    else:
+        raise NotImplementedError("Action {args.action} is not implemented")
 
     # Initialize metrics
     lpips_loss_fn = LPIPS(net="alex").to(device)
@@ -235,10 +283,13 @@ if __name__ == "__main__":
 
         for i in pbar:
 
+            # It helps to anneal diffusion time
+            diff_time = torch.tensor(999 - i).to(device)
+
             # compute diffusion model score estimates
             noise_pred = model.model(
                 interpolated_images.reshape(-1, C, H, W),
-                t.repeat(batch_size * path_length),
+                diff_time.repeat(batch_size * path_length),
             )
 
             # scaling factor between predicted noise and force
@@ -246,15 +297,19 @@ if __name__ == "__main__":
             # TODO: don't think this is quite right: the energy based model of our data also should have a temperature dependence,
             # so the scaling factor should be more complicated (maybe an alpha term in the numerator or something)
             # Including the scaling factor makes the actions much higher (2-3k) to start out
-            sqrt_one_minus_alpha_cumprod_t = model.sqrt_one_minus_alphas_cumprod.gather(
-                -1, t.repeat(batch_size * path_length)
-            ).reshape(batch_size * path_length, 1, 1, 1)
+            # sqrt_one_minus_alpha_cumprod_t = model.sqrt_one_minus_alphas_cumprod.gather(
+            #    -1, t.repeat(batch_size * path_length)
+            # ).reshape(batch_size * path_length, 1, 1, 1)
 
-            forces = -noise_pred / sqrt_one_minus_alpha_cumprod_t
+            # TODO The prefactor does not seem to be necessary. The minus sign is inimportant for the hessian action as forces are
+            # TODO squared. We will investigate further. Commenting out for now.
+            # forces = -noise_pred / sqrt_one_minus_alpha_cumprod_t
+
+            forces = noise_pred
             forces = forces.reshape(batch_size, path_length, C, H, W)
 
             # compute the OM action from these forces (vmaped over the batch dimension)
-            total_action = torch.vmap(simple_action)(interpolated_images, forces).mean()
+            total_action = torch.vmap(action_func)(interpolated_images, forces).sum()
             test_model_grads = torch.autograd.grad(
                 total_action,
                 model.model.parameters(),
@@ -295,8 +350,9 @@ if __name__ == "__main__":
 
                 if i % save_every == 0:
                     # save interpolation path
-                    save = model.sample_from_t(t, interpolated_images[batch_idx])
-                    save = torch.clamp(save, -1.0, 1.0)
+                    # save = model.sample_from_t(t, interpolated_images[batch_idx])
+                    save = interpolated_images[batch_idx].detach().clone()
+                    save = inv_normalizer(torch.clamp(save, -1.0, 1.0))
                     final_draw.append(save.cpu())
 
         with torch.no_grad():
@@ -304,6 +360,7 @@ if __name__ == "__main__":
             interpolated_images = model.sample_from_t(
                 t, interpolated_images.reshape(-1, C, H, W)
             )
+
             interpolated_images = interpolated_images.reshape(
                 batch_size, path_length, C, H, W
             )
