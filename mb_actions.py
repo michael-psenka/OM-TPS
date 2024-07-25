@@ -33,12 +33,12 @@ class S2Action(torch.nn.Module):
         )
         result = torch.sum(first_term + second_term + third_term)
         return result
-    
+
 
 class TruncatedAction(torch.nn.Module):
     """S2Action with Hessian term ignored."""
 
-    def __init__(self, force_func, dt, gamma, laplace_func = None, D = None):
+    def __init__(self, force_func, dt, gamma, laplace_func=None, D=None):
         """
         Args:
             force_func: Force function
@@ -61,6 +61,7 @@ class TruncatedAction(torch.nn.Module):
         )
         result = torch.sum(first_term + second_term)
         return result
+
 
 class SimpleAction(torch.nn.Module):
     """
@@ -91,5 +92,3 @@ class SimpleAction(torch.nn.Module):
         third_term = (path[1:] - path[:-1]) * (f_np - f_n)
         result = torch.sum(first_term + second_term + third_term)
         return result / torch.tensor(4.0)
-    
-
