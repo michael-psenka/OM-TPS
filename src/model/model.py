@@ -32,9 +32,6 @@ class MNISTDiffusion(nn.Module):
         self.register_buffer(
             "sqrt_one_minus_alphas_cumprod", torch.sqrt(1.0 - alphas_cumprod)
         )
-        import pdb
-
-        pdb.set_trace()
 
         self.model = Unet(
             timesteps, time_embedding_dim, in_channels, in_channels, base_dim, dim_mults
