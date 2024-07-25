@@ -1,3 +1,7 @@
+*.npy
+dataset/
+checkpoints/
+output/
 *.gif
 *.traj
 log
