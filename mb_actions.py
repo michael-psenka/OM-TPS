@@ -25,7 +25,7 @@ class S2Action(torch.nn.Module):
         Args: path of shape [P, 2]
         """
         first_term = torch.square((path[1:] - path[:-1])) * (self.gamma / 4 / self.dt)
-        second_term = torch.square(self.force_func(path[:-1])[1]) * (
+        second_term = torch.square(self.force_func(path[:-1])) * (
             self.dt / 4 / self.gamma
         )
         third_term = self.laplace_func(path[:-1]) * (
@@ -56,7 +56,7 @@ class TruncatedAction(torch.nn.Module):
         Args: path of shape [P, 2]
         """
         first_term = torch.square((path[1:] - path[:-1])) * (self.gamma / 4 / self.dt)
-        second_term = torch.square(self.force_func(path[:-1])[1]) * (
+        second_term = torch.square(self.force_func(path[:-1])) * (
             self.dt / 4 / self.gamma
         )
         result = torch.sum(first_term + second_term)
@@ -83,8 +83,8 @@ class SimpleAction(torch.nn.Module):
     def forward(self, path: torch.Tensor):
         # Args: path of shape [P, 2]
         first_term = torch.square((path[1:] - path[:-1])) * (self.gamma / self.dt)
-        f_n = self.force_func(path[:-1])[1].to(path.device)
-        f_np = self.force_func(path[1:])[1].to(path.device)
+        f_n = self.force_func(path[:-1]).to(path.device)
+        f_np = self.force_func(path[1:]).to(path.device)
         second_term = (torch.square(f_n) + torch.square(f_np)) * (
             self.dt / self.gamma / 2.0
         )
