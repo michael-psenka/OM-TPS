@@ -3,6 +3,7 @@
 log
 *.pt
 mnist_data/
+data
 *.png
 *.pyc
 *ipynb_checkpoints/

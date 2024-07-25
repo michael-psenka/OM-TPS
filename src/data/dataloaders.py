@@ -14,10 +14,10 @@ def create_mnist_dataloaders(batch_size, image_size=28, num_workers=4):
     )  # [0,1] to [-1,1]
 
     train_dataset = MNIST(
-        root="/data/sanjeevr/mnist", train=True, download=True, transform=preprocess
+        root="data/mnist", train=True, download=True, transform=preprocess
     )
     test_dataset = MNIST(
-        root="/data/sanjeevr/mnist", train=False, download=True, transform=preprocess
+        root="data/mnist", train=False, download=True, transform=preprocess
     )
 
     return DataLoader(
@@ -38,10 +38,10 @@ def create_imagenet_dataloaders(batch_size, image_size=256, num_workers=4):
     )  # [0,1] to [-1,1]
 
     train_dataset = ImageNet(
-        root="/data/sanjeevr/imagenet", split="train", transform=preprocess
+        root="data/sanjeevr/imagenet", split="train", transform=preprocess
     )
     test_dataset = ImageNet(
-        root="/data/sanjeevr/imagenet", split="val", transform=preprocess
+        root="data/sanjeevr/imagenet", split="val", transform=preprocess
     )
 
     return DataLoader(
