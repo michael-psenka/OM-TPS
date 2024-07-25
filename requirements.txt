@@ -17,3 +17,4 @@ torcheval
 wandb
 jupyter
 lpips
+ase

@@ -73,9 +73,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--const_time", type=float, help="timestep for OM action", default=4.0
     )
-    parser.add_argument(
-        "--gamma", type=float, help="friction coefficient for OM action", default=16.0
-    )
 
     parser.add_argument(
         "--noise_perturb_scale",
@@ -148,7 +145,6 @@ if __name__ == "__main__":
     max_pairs = args.max_pairs
     save_every = args.save_every
     const_time = args.const_time
-    gamma = args.gamma
     noise_perturb_scale = args.noise_perturb_scale
     lr = args.lr
     batch_size = args.batch_size
@@ -213,7 +209,7 @@ if __name__ == "__main__":
     model = model.to(device)
     model.eval()
 
-    # Define OM Action
+ 
     if args.action == "hessian":
         action_func = HessianAction(dt=const_time, xi=path_length)
     elif args.action == "truncated":

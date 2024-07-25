@@ -8,14 +8,14 @@ class SimpleMB:
     Simple Muller-Brown Potential to test transition path optimization.
     """
 
-    def __init__(self, args, n_in=2, barrier=1.0):
+    def __init__(self, device, n_in=2, barrier=1.0):
         """
         Args:
             args: Arguments object
             n_in (int): Number of input dimensions
             barrier (float): Barrier height
         """
-        self.device = args.device
+        self.device = device
         self.n_in = n_in
 
         self.barrier = barrier
