@@ -165,6 +165,7 @@ if __name__ == "__main__":
         base_dim=base_dim,
         dim_mults=dim_mults,
     )
+    import pdb; pdb.set_trace()
 
     ckpt = torch.load(ckpt_path, map_location=device)
     model.load_state_dict(ckpt["model"])
