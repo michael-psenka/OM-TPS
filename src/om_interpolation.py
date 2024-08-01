@@ -282,7 +282,7 @@ if __name__ == "__main__":
             # It helps to anneal diffusion time
 
             scale_factor = 1.0 - i / steps
-            diff_time = torch.tensor(999*scale_factor).to(device)
+            diff_time = torch.tensor((int)(999*scale_factor)).to(device)
 
             # compute diffusion model score estimates
             noise_pred = model.model(
