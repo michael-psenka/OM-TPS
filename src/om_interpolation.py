@@ -280,7 +280,7 @@ if __name__ == "__main__":
         for i in pbar:
 
             # It helps to anneal diffusion time
-            diff_time = torch.tensor(999 - i).to(device)
+            diff_time = torch.tensor((steps - 1) - i).to(device)
 
             # compute diffusion model score estimates
             noise_pred = model.model(
