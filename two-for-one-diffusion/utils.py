@@ -3,6 +3,7 @@ import torch
 from inspect import isfunction
 import numpy as np
 import mdtraj as md
+from actions import SimpleAction
 
 
 def exists(x):
@@ -243,12 +244,76 @@ class InterpolatorWrapper(torch.nn.Module):
     The network becomes an interpolator, such that we can sample in parallel GPUs by passing SamplerModule into a
     """
 
-    def __init__(self, model):
+    def __init__(
+        self, model, x1, x2, path_length, latent_time, interpolation_fn, temperature
+    ):
         super(InterpolatorWrapper, self).__init__()
         self.model = model
+        self.x1 = x1
+        self.x2 = x2
+        self.path_length = path_length
+        self.latent_time = latent_time
+        self.interpolation_fn = interpolation_fn
+        self.temperature = temperature
 
-    def forward(self, **kwargs):
-        return self.model.interpolate(**kwargs)
+    def forward(self, num_paths):
+        return self.model.interpolate(
+            x1=self.x1,
+            x2=self.x2,
+            path_length=self.path_length,
+            latent_time=self.latent_time,
+            temperature=self.temperature,
+            num_paths=num_paths,
+            interpolation_fn=self.interpolation_fn,
+        )
+
+
+class OMInterpolatorWrapper(torch.nn.Module):
+    """
+    The network becomes an OM interpolator, such that we can sample in parallel GPUs by passing SamplerModule into a
+    """
+
+    def __init__(
+        self,
+        model,
+        x1,
+        x2,
+        path_length,
+        latent_time,
+        action_cls=SimpleAction,
+        initial_guess_fn=torch.lerp,
+        om_steps=100,
+        lr=2e-1,
+        anneal=False,
+        temperature=1.0,
+    ):
+        super(OMInterpolatorWrapper, self).__init__()
+        self.model = model
+        self.x1 = x1
+        self.x2 = x2
+        self.path_length = path_length
+        self.latent_time = latent_time
+        self.action_cls = action_cls
+        self.initial_guess_fn = initial_guess_fn
+        self.om_steps = om_steps
+        self.lr = lr
+        self.anneal = anneal
+        self.temperature = temperature
+
+    def forward(self, num_paths):
+        return self.model.om_interpolate(
+            x1=self.x1,
+            x2=self.x2,
+            path_length=self.path_length,
+            latent_time=self.latent_time,
+            num_paths=num_paths,
+            action_cls=self.action_cls,
+            initial_guess_fn=self.initial_guess_fn,
+            om_steps=self.om_steps,
+            lr=self.lr,
+            anneal=self.anneal,
+            temperature=self.temperature,
+        )
 
 
 def save_samples(sampled_mol, eval_folder, topology, milestone):

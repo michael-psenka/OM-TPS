@@ -148,13 +148,19 @@ class GaussianDiffusion(nn.Module):
         """
         Force function.
         """
+
+        if not isinstance(t, torch.Tensor):
+            t = torch.tensor([t]).repeat(x.shape[0]).to(self.device)
+
         noise_pred = self.model(
             x,
             self.h,
             1.0 * t / self.num_timesteps,
             alphas=self.sqrt_alphas_cumprod[t].pow(2),
         )
-        force = self.scaling_factor(t) * center_zero(noise_pred)
+        force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * center_zero(
+            noise_pred
+        )
         return force
 
     def laplacian_func(self, x, t):
@@ -251,6 +257,8 @@ class GaussianDiffusion(nn.Module):
         """
         Single sample from model given (noisy) molecule x and timestep t.
         """
+        if not isinstance(t, torch.Tensor):
+            t = torch.tensor([t]).repeat(x.shape[0]).to(self.device)
         b = x.shape[0]
         model_mean, _, model_log_variance = self.p_mean_variance(x=x, t=t)
         noise = torch.randn_like(x)
@@ -302,6 +310,10 @@ class GaussianDiffusion(nn.Module):
         Sample noisy molecule from forward process.
         This is the forward diffusion function.
         """
+
+        if not isinstance(t, torch.Tensor):
+            t = torch.tensor([t]).repeat(x_start.shape[0]).to(self.device)
+
         noise = default(noise, lambda: torch.randn_like(x_start))
         noise = center_zero(noise)
         return (
@@ -336,7 +348,6 @@ class GaussianDiffusion(nn.Module):
         x1 = x1.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
         x2 = x2.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
 
-        latent_time = torch.tensor([latent_time]).repeat(num_paths).to(self.device)
         original_x1 = x1.clone()
         original_x2 = x2.clone()
 
@@ -359,7 +370,7 @@ class GaussianDiffusion(nn.Module):
         )  # make batch dimension come first [B, path_length, n_atoms, 3]
 
         # decode
-        xs = self.p_sample_loop(noised_xs.reshape(-1, n_atoms, 3), latent_time[0])
+        xs = self.p_sample_loop(noised_xs.reshape(-1, n_atoms, 3), latent_time)
 
         xs = xs.reshape(num_paths, path_length, n_atoms, 3)
         xs = xs.clone().detach()
@@ -387,41 +398,35 @@ class GaussianDiffusion(nn.Module):
         Encode the two points into latent space, linearly or spherically interpolate, optimize OM action, and decode.
         """
 
-        if isinstance(latent_time, torch.Tensor):
-            latent_time = latent_time.item()
-        if round(latent_time) != latent_time:
-            latent_time = round(latent_time)
-
-        if anneal:
-            om_steps = self.num_steps  # to make sure we anneal from T to 0
-
-        x1 = x1.repeat(num_paths, 1)
-        x2 = x2.repeat(num_paths, 1)
+        n_atoms = x1.shape[0]
+        x1 = x1.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
+        x2 = x2.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
 
         original_x1 = x1.clone()
         original_x2 = x2.clone()
+
         with torch.no_grad():
-            noise_1 = torch.randn_like(x1).to(self.device)
-            noise_2 = torch.randn_like(x2).to(self.device)
-            noised_x1 = self.forward_diffusion(x1, latent_time, noise_1)
-            noised_x2 = self.forward_diffusion(x2, latent_time, noise_2)
+
+            noised_x1 = self.q_sample(x1, latent_time)
+            noised_x2 = self.q_sample(x2, latent_time)
 
         # linear interpolation of noised_x1 and noised_x2
+
         noised_xs = torch.stack(
             [
                 initial_guess_fn(noised_x1.cpu(), noised_x2.cpu(), alpha)
                 for alpha in torch.linspace(0, 1, path_length)
             ]
         )
-        noised_xs = noised_xs.permute((1, 0, 2)).to(
+
+        noised_xs = noised_xs.permute((1, 0, 2, 3)).to(
             self.device
-        )  # shape of [num_paths x path_length x 2]
+        )  # make batch dimension come first [B, path_length, n_atoms, 3]
+
         optimizer = torch.optim.Adam([noised_xs], lr=lr)
 
         pbar = tqdm(range(om_steps))
-        paths = []
         actions = []
-        grad_ratios = []
         with torch.enable_grad():
             noised_xs.requires_grad = True
             # Optimization of path using OM action
@@ -431,18 +436,8 @@ class GaussianDiffusion(nn.Module):
                 else:
                     diff_time = latent_time
 
-                def temp_force_func(x):
-                    # test function to use true force magnitude and predicted force direction
-                    force = self.force_func((x - mean) / std, diff_time)
-                    force = force / torch.norm(force, dim=-1).unsqueeze(-1)
-                    force *= torch.norm(potential.force_func(x)[1], dim=-1).unsqueeze(
-                        -1
-                    )
-                    return force
-
-                # force_func = temp_force_func
                 force_func = lambda x: self.force_func(x, diff_time)
-                # force_func = lambda x: potential.force_func(x)[1]
+
                 laplace = lambda x: self.laplacian_func(x, diff_time)
                 action_func = action_cls(
                     force_func=force_func,
@@ -451,53 +446,30 @@ class GaussianDiffusion(nn.Module):
                     gamma=0.01,
                     D=0.1,
                 )  # TODO: figure out dt, gamma, D
-
-                action = torch.vmap(action_func)(noised_xs).mean()
+                action = torch.cat(
+                    [action_func(x).unsqueeze(0) for x in noised_xs]
+                ).mean()  # TODO: vmap over batch dimension
                 actions.append(action.item())
-
-                pred_force = force_func(noised_xs.reshape(-1, 2))
-                true_force = potential.force_func(noised_xs.reshape(-1, 2))[1]
-                # if diff_time == 0:
-                #     print("Cosine similarity", F.cosine_similarity(pred_force, true_force).mean().item())
 
                 optimizer.zero_grad()
                 (grads,) = torch.autograd.grad(action, noised_xs)
 
                 with torch.no_grad():
-                    grads[:, 0], grads[:, -1] = torch.zeros(2).to(
-                        self.device
-                    ), torch.zeros(2).to(self.device)
+                    grads[:, 0], grads[:, -1] = 0, 0
                     noised_xs.grad = grads
                     optimizer.step()
-                    # scheduler.step()
-                    # scheduler.step(action)
 
                 pbar.set_description(f"OM Action: {action.item()}")
-                # compute ratio of grads to noised_xs:
-                grad_ratio = (
-                    lr * torch.norm(grads, dim=-1) / torch.norm(noised_xs, dim=-1)
-                )
-                grad_ratios.append(grad_ratio.mean().item())
-                # pbar.set_description(f"Grad Update Ratio: {grad_ratio.mean().item() * lr}")
-                # pbar.set_description(f"Force Norm: {force_func(noised_xs.reshape(-1, 2)).norm(dim = -1).mean().item()}")
-                if i % int(om_steps / 10) == 0:
-                    with torch.no_grad():
-                        decoded_path = self.sample_from_t(
-                            noised_xs.reshape(-1, 2), latent_time, temperature
-                        )
-                        decoded_path = decoded_path.reshape(num_paths, path_length, 2)
-                        paths.append(decoded_path.detach())
 
-        # decode along optimized path
-        with torch.no_grad():
-            xs = self.sample_from_t(noised_xs.reshape(-1, 2), latent_time, temperature)
-            xs = xs.reshape(num_paths, path_length, 2)
-            xs = xs.clone().detach()
+        xs = self.p_sample_loop(noised_xs.reshape(-1, n_atoms, 3), latent_time)
 
-            # reset the endpoints
-            xs[:, 0], xs[:, -1] = original_x1, original_x2
+        xs = xs.reshape(num_paths, path_length, n_atoms, 3)
+        xs = xs.clone().detach()
 
-            return xs, paths, actions, grad_ratios
+        # reset the endpoints
+        xs[:, 0], xs[:, -1] = original_x1, original_x2
+
+        return xs.reshape(-1, n_atoms, 3)
 
     @property
     def loss_fn(self):

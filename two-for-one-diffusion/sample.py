@@ -7,9 +7,13 @@ from models import get_model
 from models.ddpm import GaussianDiffusion
 from ema_pytorch import EMA
 from datasets.dataset_utils_empty import get_dataset
-from evaluate.evaluators import sample_from_model, sample_interpolations_from_model
+from evaluate.evaluators import (
+    sample_from_model,
+    sample_interpolations_from_model,
+    # sample_om_interpolations_from_model,
+)
 from dynamics.langevin import LangevinDiffusion
-from utils import SamplerWrapper, InterpolatorWrapper
+from utils import SamplerWrapper, InterpolatorWrapper, OMInterpolatorWrapper
 from dynamics.langevin import temp_dict
 import mdtraj as md
 from torch.utils.tensorboard import SummaryWriter
@@ -190,7 +194,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
         )
 
     # Generate interpolated samples
-    elif samp_args.gen_mode == "interpolate":
+    elif "interpolate" in samp_args.gen_mode:
         # first produce two i.i.d samples to interpolate between (TODO in the future, add option to specify the two samples)
         sampler = SamplerWrapper(model.ema_model).to(device).eval()
         if torch.cuda.device_count() > 1 and device == "cuda":
@@ -205,7 +209,32 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
             verbose=True,
         )
 
-        interpolator = InterpolatorWrapper(model.ema_model).to(device).eval()
+        if "om" in samp_args.gen_mode:
+            interpolator = (
+                OMInterpolatorWrapper(
+                    model.ema_model,
+                    x1=endpoints[0],
+                    x2=endpoints[1],
+                    path_length=50,
+                    latent_time=100,
+                )
+                .to(device)
+                .eval()
+            )
+        else:
+            interpolator = (
+                InterpolatorWrapper(
+                    model.ema_model,
+                    x1=endpoints[0],
+                    x2=endpoints[1],
+                    path_length=50,
+                    latent_time=100,
+                    interpolation_fn=torch.lerp,
+                    temperature=1.0,
+                )
+                .to(device)
+                .eval()
+            )
         if torch.cuda.device_count() > 1 and device == "cuda":
             interpolator = torch.nn.DataParallel(interpolator).to(device)
             parallel_batches = torch.cuda.device_count()
@@ -214,8 +243,6 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
 
         sampled_mol = sample_interpolations_from_model(
             interpolator,
-            x1=endpoints[0],
-            x2=endpoints[1],
             num_paths=samp_args.num_samples_eval // parallel_batches,
             batch_size=samp_args.batch_size_gen // parallel_batches,
             verbose=True,

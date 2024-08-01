@@ -889,7 +889,7 @@ def sample_from_model(sampler, num_saved_samples, batch_size, verbose=False):
 
 
 def sample_interpolations_from_model(
-    interpolator, x1, x2, num_paths, batch_size, verbose=False
+    interpolator, num_paths, batch_size, verbose=False
 ):
     """
     Sample interpolations from the model.
@@ -903,10 +903,6 @@ def sample_interpolations_from_model(
     for i, batch_size in enumerate(batches):
         all_path_list.append(
             interpolator(
-                x1=x1,
-                x2=x2,
-                path_length=path_length,
-                latent_time=100,
                 num_paths=batch_size,
             )
         )

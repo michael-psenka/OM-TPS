@@ -101,6 +101,7 @@ class GraphTransformer(nn.Module):
                 nodes = torch.cat((h, x, t), dim=2)
             else:
                 nodes = torch.cat((h, t), dim=2)
+
             nodes = self.node_embedding(nodes)
             mask = torch.ones(x.size(0), x.size(1)).bool().to(x.device)
             nodes, _ = self.graphtransformer(nodes, edge_attr, mask=mask)
