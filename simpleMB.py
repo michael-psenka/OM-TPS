@@ -60,7 +60,7 @@ class SimpleMB:
             -grad(self.total_potential)(X),
         )
 
-        self.to_(args.device)
+        self.to_(device)
 
     def to_(self, device):
 
