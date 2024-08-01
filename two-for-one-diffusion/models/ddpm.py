@@ -5,9 +5,10 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from einops import reduce
+from ase import units
 import warnings
 from tqdm import tqdm
-
+from actions import S2Action, TruncatedAction, SimpleAction
 from utils import (
     default,
     extract,
@@ -15,6 +16,7 @@ from utils import (
     cosine_beta_schedule,
     center_zero,
     assert_center_zero,
+    slerp,
 )
 
 
@@ -137,6 +139,31 @@ class GaussianDiffusion(nn.Module):
             )
         else:
             raise Exception(f"Wrong loss_weights: {loss_weights}")
+
+    def scaling_factor(self, t):
+        scaling_factor = -units.kB * 700 / self.sqrt_one_minus_alphas_cumprod[t]
+        return scaling_factor
+
+    def force_func(self, x, t):
+        """
+        Force function.
+        """
+        noise_pred = self.model(
+            x,
+            self.h,
+            1.0 * t / self.num_timesteps,
+            alphas=self.sqrt_alphas_cumprod[t].pow(2),
+        )
+        force = self.scaling_factor(t) * center_zero(noise_pred)
+        return force
+
+    def laplacian_func(self, x, t):
+        raise NotImplementedError("Laplacian function not implemented yet.")
+        hessian_fn = torch.func.jacrev(self.force_func, argnums=0)
+        hessian = hessian_fn(x, t)  # shape of [P x 2 x P x 2]
+        indices = torch.arange(x.shape[0])
+        laplace = torch.vmap(torch.diag)(hessian[indices, :, indices, :])
+        return laplace
 
     def predict_start_from_noise(self, x_t, t, noise):
         """
@@ -293,7 +320,47 @@ class GaussianDiffusion(nn.Module):
         interpolation_fn=torch.lerp,
         temperature=1.0,
     ):
-        raise NotImplementedError("Interpolation not implemented for DDPM")
+        """ "
+        Encode the two points into latent space, linearly or spherically interpolate, and decode.
+        """
+
+        if isinstance(latent_time, torch.Tensor):
+            latent_time = latent_time.item()
+
+        if round(latent_time) != latent_time:
+            latent_time = round(latent_time)
+
+        x1 = x1.repeat(num_paths, 1)
+        x2 = x2.repeat(num_paths, 1)
+        original_x1 = x1.clone()
+        original_x2 = x2.clone()
+
+        with torch.no_grad():
+            noise_1 = torch.randn_like(x1).to(self.device)
+            noise_2 = torch.randn_like(x2).to(self.device)
+            noised_x1 = self.forward_diffusion(x1, latent_time, noise_1)
+            noised_x2 = self.forward_diffusion(x2, latent_time, noise_2)
+
+        # linear interpolation of noised_x1 and noised_x2
+
+        noised_xs = torch.stack(
+            [
+                interpolation_fn(noised_x1.cpu(), noised_x2.cpu(), alpha)
+                for alpha in torch.linspace(0, 1, path_length)
+            ]
+        )
+        noised_xs = noised_xs.permute((1, 0, 2)).to(self.device)
+
+        # decode
+        xs = self.sample_from_t(noised_xs.reshape(-1, 2), latent_time, temperature)
+
+        xs = xs.reshape(num_paths, path_length, 2)
+        xs = xs.clone().detach()
+
+        # reset the endpoints
+        xs[:, 0], xs[:, -1] = original_x1, original_x2
+
+        return xs
 
     def om_interpolate(
         self,
@@ -302,14 +369,128 @@ class GaussianDiffusion(nn.Module):
         path_length,
         latent_time,
         num_paths=10,
-        action_cls=None,
+        action_cls=SimpleAction,
         initial_guess_fn=torch.lerp,
         om_steps=100,
         lr=2e-1,
         anneal=False,
         temperature=1.0,
     ):
-        raise NotImplementedError("OM Interpolation not implemented for DDPM")
+        """ "
+        Encode the two points into latent space, linearly or spherically interpolate, optimize OM action, and decode.
+        """
+
+        if isinstance(latent_time, torch.Tensor):
+            latent_time = latent_time.item()
+        if round(latent_time) != latent_time:
+            latent_time = round(latent_time)
+
+        if anneal:
+            om_steps = self.num_steps  # to make sure we anneal from T to 0
+
+        x1 = x1.repeat(num_paths, 1)
+        x2 = x2.repeat(num_paths, 1)
+
+        original_x1 = x1.clone()
+        original_x2 = x2.clone()
+        with torch.no_grad():
+            noise_1 = torch.randn_like(x1).to(self.device)
+            noise_2 = torch.randn_like(x2).to(self.device)
+            noised_x1 = self.forward_diffusion(x1, latent_time, noise_1)
+            noised_x2 = self.forward_diffusion(x2, latent_time, noise_2)
+
+        # linear interpolation of noised_x1 and noised_x2
+        noised_xs = torch.stack(
+            [
+                initial_guess_fn(noised_x1.cpu(), noised_x2.cpu(), alpha)
+                for alpha in torch.linspace(0, 1, path_length)
+            ]
+        )
+        noised_xs = noised_xs.permute((1, 0, 2)).to(
+            self.device
+        )  # shape of [num_paths x path_length x 2]
+        optimizer = torch.optim.Adam([noised_xs], lr=lr)
+
+        pbar = tqdm(range(om_steps))
+        paths = []
+        actions = []
+        grad_ratios = []
+        with torch.enable_grad():
+            noised_xs.requires_grad = True
+            # Optimization of path using OM action
+            for i in pbar:
+                if anneal:
+                    diff_time = self.num_steps - i - 1  # anneal the time from T to 0
+                else:
+                    diff_time = latent_time
+
+                def temp_force_func(x):
+                    # test function to use true force magnitude and predicted force direction
+                    force = self.force_func((x - mean) / std, diff_time)
+                    force = force / torch.norm(force, dim=-1).unsqueeze(-1)
+                    force *= torch.norm(potential.force_func(x)[1], dim=-1).unsqueeze(
+                        -1
+                    )
+                    return force
+
+                # force_func = temp_force_func
+                force_func = lambda x: self.force_func(x, diff_time)
+                # force_func = lambda x: potential.force_func(x)[1]
+                laplace = lambda x: self.laplacian_func(x, diff_time)
+                action_func = action_cls(
+                    force_func=force_func,
+                    laplace_func=laplace,
+                    dt=0.01,
+                    gamma=0.01,
+                    D=0.1,
+                )  # TODO: figure out dt, gamma, D
+
+                action = torch.vmap(action_func)(noised_xs).mean()
+                actions.append(action.item())
+
+                pred_force = force_func(noised_xs.reshape(-1, 2))
+                true_force = potential.force_func(noised_xs.reshape(-1, 2))[1]
+                # if diff_time == 0:
+                #     print("Cosine similarity", F.cosine_similarity(pred_force, true_force).mean().item())
+
+                optimizer.zero_grad()
+                (grads,) = torch.autograd.grad(action, noised_xs)
+
+                with torch.no_grad():
+                    grads[:, 0], grads[:, -1] = torch.zeros(2).to(
+                        self.device
+                    ), torch.zeros(2).to(self.device)
+                    noised_xs.grad = grads
+                    optimizer.step()
+                    # scheduler.step()
+                    # scheduler.step(action)
+
+                pbar.set_description(f"OM Action: {action.item()}")
+                # compute ratio of grads to noised_xs:
+                grad_ratio = (
+                    lr * torch.norm(grads, dim=-1) / torch.norm(noised_xs, dim=-1)
+                )
+                grad_ratios.append(grad_ratio.mean().item())
+                # pbar.set_description(f"Grad Update Ratio: {grad_ratio.mean().item() * lr}")
+                # pbar.set_description(f"Force Norm: {force_func(noised_xs.reshape(-1, 2)).norm(dim = -1).mean().item()}")
+                if i % int(om_steps / 10) == 0:
+                    with torch.no_grad():
+                        decoded_path = self.sample_from_t(
+                            noised_xs.reshape(-1, 2), latent_time, temperature
+                        )
+                        decoded_path = decoded_path.reshape(num_paths, path_length, 2)
+                        paths.append(decoded_path.detach())
+
+        # decode along optimized path
+        with torch.no_grad():
+            xs = self.sample_from_t(noised_xs.reshape(-1, 2), latent_time, temperature)
+            xs = xs.reshape(num_paths, path_length, 2)
+            xs = xs.clone().detach()
+
+            # reset the endpoints
+            xs[:, 0], xs[:, -1] = original_x1, original_x2
+
+            return xs, paths, actions, grad_ratios
 
     @property
     def loss_fn(self):
