@@ -209,7 +209,6 @@ if __name__ == "__main__":
     model = model.to(device)
     model.eval()
 
- 
     if args.action == "hessian":
         action_func = HessianAction(dt=const_time, xi=path_length)
     elif args.action == "truncated":
