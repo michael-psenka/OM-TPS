@@ -6,6 +6,7 @@ from torch import nn
 import torch.nn.functional as F
 from einops import reduce
 import warnings
+from tqdm import tqdm
 
 from utils import (
     default,
@@ -232,16 +233,17 @@ class GaussianDiffusion(nn.Module):
         return model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise
 
     @torch.no_grad()
-    def p_sample_loop(self, shape):
+    def p_sample_loop(self, mol_t, t):
         """
-        Loop over diffusion timesteps to go from noise to molecule.
+        Loop over diffusion timesteps to go from noise to molecule starting at t=t.
         """
         device = self.betas.device
 
-        b = shape[0]
-        mol = center_zero(torch.randn(shape, device=device))
+        b = mol_t.shape[0]
+        mol = center_zero(mol_t)
+        assert_center_zero(mol)
 
-        for j, i in enumerate(reversed(range(0, self.num_timesteps))):
+        for j, i in tqdm(enumerate(reversed(range(0, t)))):
             mol = self.p_sample(
                 mol, torch.full((b,), i, device=device, dtype=torch.long)
             )
@@ -256,15 +258,22 @@ class GaussianDiffusion(nn.Module):
     @torch.no_grad()
     def sample(self, batch_size):
         """
-        Sample from model.
+        Sample from model starting from t = T.
         """
         num_atoms = self.num_atoms
         dims = self.dims
-        return self.p_sample_loop((batch_size, num_atoms, dims)) * self.norm_factor
+        starting_mol = center_zero(
+            torch.randn((batch_size, num_atoms, dims), device=self.betas.device)
+        )
+        return (
+            self.p_sample_loop(mol_t=starting_mol, t=self.num_timesteps)
+            * self.norm_factor
+        )
 
     def q_sample(self, x_start, t, noise=None):
         """
         Sample noisy molecule from forward process.
+        This is the forward diffusion function.
         """
         noise = default(noise, lambda: torch.randn_like(x_start))
         noise = center_zero(noise)
@@ -272,6 +281,35 @@ class GaussianDiffusion(nn.Module):
             extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
             + extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
         )
+
+    @torch.no_grad()
+    def interpolate(
+        self,
+        x1,
+        x2,
+        path_length,
+        latent_time,
+        num_paths=10,
+        interpolation_fn=torch.lerp,
+        temperature=1.0,
+    ):
+        raise NotImplementedError("Interpolation not implemented for DDPM")
+
+    def om_interpolate(
+        self,
+        x1,
+        x2,
+        path_length,
+        latent_time,
+        num_paths=10,
+        action_cls=None,
+        initial_guess_fn=torch.lerp,
+        om_steps=100,
+        lr=2e-1,
+        anneal=False,
+        temperature=1.0,
+    ):
+        raise NotImplementedError("OM Interpolation not implemented for DDPM")
 
     @property
     def loss_fn(self):
