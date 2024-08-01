@@ -322,24 +322,28 @@ class GaussianDiffusion(nn.Module):
     ):
         """ "
         Encode the two points into latent space, linearly or spherically interpolate, and decode.
+        Args:
+            x1: torch.Tensor, shape of [num_atoms x 3]
+            x2: torch.Tensor, shape of [num_atoms x 3]
+            path_length: int, length of the path to interpolate
+            latent_time: float, time at which to interpolate
+            num_paths: int, number of paths to interpolate
+            interpolation_fn: function, interpolation function
+            temperature: float, temperature for sampling
         """
 
-        if isinstance(latent_time, torch.Tensor):
-            latent_time = latent_time.item()
+        n_atoms = x1.shape[0]
+        x1 = x1.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
+        x2 = x2.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
 
-        if round(latent_time) != latent_time:
-            latent_time = round(latent_time)
-
-        x1 = x1.repeat(num_paths, 1)
-        x2 = x2.repeat(num_paths, 1)
+        latent_time = torch.tensor([latent_time]).repeat(num_paths).to(self.device)
         original_x1 = x1.clone()
         original_x2 = x2.clone()
 
         with torch.no_grad():
-            noise_1 = torch.randn_like(x1).to(self.device)
-            noise_2 = torch.randn_like(x2).to(self.device)
-            noised_x1 = self.forward_diffusion(x1, latent_time, noise_1)
-            noised_x2 = self.forward_diffusion(x2, latent_time, noise_2)
+
+            noised_x1 = self.q_sample(x1, latent_time)
+            noised_x2 = self.q_sample(x2, latent_time)
 
         # linear interpolation of noised_x1 and noised_x2
 
@@ -349,18 +353,21 @@ class GaussianDiffusion(nn.Module):
                 for alpha in torch.linspace(0, 1, path_length)
             ]
         )
-        noised_xs = noised_xs.permute((1, 0, 2)).to(self.device)
+
+        noised_xs = noised_xs.permute((1, 0, 2, 3)).to(
+            self.device
+        )  # make batch dimension come first [B, path_length, n_atoms, 3]
 
         # decode
-        xs = self.sample_from_t(noised_xs.reshape(-1, 2), latent_time, temperature)
+        xs = self.p_sample_loop(noised_xs.reshape(-1, n_atoms, 3), latent_time[0])
 
-        xs = xs.reshape(num_paths, path_length, 2)
+        xs = xs.reshape(num_paths, path_length, n_atoms, 3)
         xs = xs.clone().detach()
 
         # reset the endpoints
         xs[:, 0], xs[:, -1] = original_x1, original_x2
 
-        return xs
+        return xs.reshape(-1, n_atoms, 3)
 
     def om_interpolate(
         self,

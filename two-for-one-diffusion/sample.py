@@ -7,9 +7,9 @@ from models import get_model
 from models.ddpm import GaussianDiffusion
 from ema_pytorch import EMA
 from datasets.dataset_utils_empty import get_dataset
-from evaluate.evaluators import sample_from_model
+from evaluate.evaluators import sample_from_model, sample_interpolations_from_model
 from dynamics.langevin import LangevinDiffusion
-from utils import SamplerWrapper
+from utils import SamplerWrapper, InterpolatorWrapper
 from dynamics.langevin import temp_dict
 import mdtraj as md
 from torch.utils.tensorboard import SummaryWriter
@@ -29,7 +29,7 @@ parser.add_argument(
     "--gen_mode",
     type=str,
     default="iid",
-    help="generative mode, either iid or langevin",
+    help="generative mode, either iid, interpolate, or langevin",
 )
 parser.add_argument(
     "--append_exp_name",
@@ -188,6 +188,39 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
             samp_args.batch_size_gen // parallel_batches,
             verbose=True,
         )
+
+    # Generate interpolated samples
+    elif samp_args.gen_mode == "interpolate":
+        # first produce two i.i.d samples to interpolate between (TODO in the future, add option to specify the two samples)
+        sampler = SamplerWrapper(model.ema_model).to(device).eval()
+        if torch.cuda.device_count() > 1 and device == "cuda":
+            sampler = torch.nn.DataParallel(sampler).to(device)
+            parallel_batches = torch.cuda.device_count()
+        else:
+            parallel_batches = 1
+        endpoints = sample_from_model(
+            sampler,
+            num_saved_samples=2,
+            batch_size=2,
+            verbose=True,
+        )
+
+        interpolator = InterpolatorWrapper(model.ema_model).to(device).eval()
+        if torch.cuda.device_count() > 1 and device == "cuda":
+            interpolator = torch.nn.DataParallel(interpolator).to(device)
+            parallel_batches = torch.cuda.device_count()
+        else:
+            parallel_batches = 1
+
+        sampled_mol = sample_interpolations_from_model(
+            interpolator,
+            x1=endpoints[0],
+            x2=endpoints[1],
+            num_paths=samp_args.num_samples_eval // parallel_batches,
+            batch_size=samp_args.batch_size_gen // parallel_batches,
+            verbose=True,
+        )
+
     # Generate Langevin samples from simulation
     elif samp_args.gen_mode == "langevin":
         print(

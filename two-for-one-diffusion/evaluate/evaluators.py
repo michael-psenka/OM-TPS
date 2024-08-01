@@ -888,6 +888,36 @@ def sample_from_model(sampler, num_saved_samples, batch_size, verbose=False):
     return all_mol
 
 
+def sample_interpolations_from_model(
+    interpolator, x1, x2, num_paths, batch_size, verbose=False
+):
+    """
+    Sample interpolations from the model.
+    """
+    print(
+        f"Generating {num_paths} interpolation paths per GPU. This may take some time."
+    )
+    batches = num_to_groups(num_paths, batch_size)
+    all_path_list = []
+    path_length = 50
+    for i, batch_size in enumerate(batches):
+        all_path_list.append(
+            interpolator(
+                x1=x1,
+                x2=x2,
+                path_length=path_length,
+                latent_time=100,
+                num_paths=batch_size,
+            )
+        )
+        if verbose:
+            print(f"Batch {i+1} from {len(batches)} generated")
+    # all_mol_list = list(map(lambda n: model.sample(batch_size=n), batches))
+    all_path = torch.cat(all_path_list, dim=0).cpu()
+    print(f"{int(len(all_path) / path_length)} paths generated")
+    return all_path
+
+
 def num_to_groups(num, divisor):
     """
     Converts a number into an array with num // divisor elements of

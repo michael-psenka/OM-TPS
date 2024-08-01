@@ -248,7 +248,6 @@ class InterpolatorWrapper(torch.nn.Module):
         self.model = model
 
     def forward(self, **kwargs):
-        "The only kwarg should be 'batch_size'"
         return self.model.interpolate(**kwargs)
 
 
