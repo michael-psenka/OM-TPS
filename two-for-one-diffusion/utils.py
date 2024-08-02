@@ -3,7 +3,9 @@ import torch
 from inspect import isfunction
 import numpy as np
 import mdtraj as md
+import random
 from actions import SimpleAction
+from rmsd import kabsch_rmsd
 
 
 def exists(x):
@@ -223,6 +225,35 @@ def slerp(v0, v1, t, DOT_THRESHOLD=0.9995):
         s1 = sin_theta_t / sin_theta_0
         v2 = s0 * v0 + s1 * v1
     return v2
+
+
+def filter_by_rmsd(coords: torch.Tensor, n: int = 2) -> torch.Tensor:
+    """
+    From a set of coordinates, determine the n most diverse coordinates, where "most diverse" means "most different, in terms of minimum RMSD.
+    Note: The Max-Min Diversity Problem (MMDP) is in general NP-hard. This algorithm generates a candidate solution to MMDP for these coords
+    by assuming that the random seed point is actually in the MMDP set (which there's no reason a priori to assume). As a result, if we ran
+    this function multiple times, we would get different results.
+
+    Args:
+        shell: List of Schrodinger structure objects containing solvation shells
+        n: number of most diverse shells to return
+    Returns:
+        List of n Schrodinger structures that are the most diverse in terms of minimum RMSD
+    """
+    assert_center_zero(coords)
+    coords = coords.cpu().numpy()
+    seed_point = random.randint(0, coords.shape[0] - 1)
+    final_idxs = [seed_point]
+    min_rmsds = np.array([kabsch_rmsd(coords[seed_point], coord) for coord in coords])
+    for _ in range(n - 1):
+
+        best = np.argmax(min_rmsds)
+        min_rmsds = np.minimum(
+            min_rmsds,
+            np.array([kabsch_rmsd(coords[best], coord) for coord in coords]),
+        )
+        final_idxs.append(best)
+    return torch.tensor(coords[final_idxs])
 
 
 class SamplerWrapper(torch.nn.Module):

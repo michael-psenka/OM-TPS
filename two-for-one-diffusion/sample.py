@@ -12,7 +12,12 @@ from evaluate.evaluators import (
     sample_interpolations_from_model,
 )
 from dynamics.langevin import LangevinDiffusion
-from utils import SamplerWrapper, InterpolatorWrapper, OMInterpolatorWrapper
+from utils import (
+    SamplerWrapper,
+    InterpolatorWrapper,
+    OMInterpolatorWrapper,
+    filter_by_rmsd,
+)
 from dynamics.langevin import temp_dict
 import mdtraj as md
 from torch.utils.tensorboard import SummaryWriter
@@ -202,12 +207,16 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
             parallel_batches = torch.cuda.device_count()
         else:
             parallel_batches = 1
-        endpoints = sample_from_model(
+
+        # sample endpoint candidates and filter by RMSD diversity
+        endpoint_candidates = sample_from_model(
             sampler,
-            num_saved_samples=2,
-            batch_size=2,
+            num_saved_samples=1000,
+            batch_size=1000,
             verbose=True,
         )
+
+        endpoints = filter_by_rmsd(endpoint_candidates, n=2)
 
         if "om" in samp_args.gen_mode:
             interpolator = (
