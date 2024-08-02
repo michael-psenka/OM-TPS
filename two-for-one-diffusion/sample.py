@@ -1,3 +1,4 @@
+import os
 import argparse
 import pickle
 from os.path import join
@@ -208,13 +209,22 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
         else:
             parallel_batches = 1
 
-        # sample endpoint candidates and filter by RMSD diversity
-        endpoint_candidates = sample_from_model(
-            sampler,
-            num_saved_samples=1000,
-            batch_size=1000,
-            verbose=True,
+        # check if there are samples already
+        iid_sample_path = Path(
+            os.path.join(os.path.dirname(eval_folder), "main_eval_output_iid")
         )
+        if iid_sample_path.exists():
+            endpoint_candidates = torch.load(Path(iid_sample_path, f"sample-iid.pt"))[
+                :1000
+            ]
+        else:
+            # sample endpoint candidates and filter by RMSD diversity
+            endpoint_candidates = sample_from_model(
+                sampler,
+                num_saved_samples=1000,
+                batch_size=1000,
+                verbose=True,
+            )
 
         endpoints = filter_by_rmsd(endpoint_candidates, n=2)
 
