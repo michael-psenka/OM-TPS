@@ -357,7 +357,6 @@ class TicEvaluator:
         eval_folder,
         data_folder,
         folded_pdb_folder="./datasets/folded_pdbs",
-        endpoints_pdb_folder="./saved_models/{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}"",
         bins=101,
         saved_ref="none",
         evalset="testset",
@@ -505,6 +504,7 @@ class TicEvaluator:
         probs,
         title,
         file_name,
+        endpoints=None,
         path=None,
         cmap="OrRd",
         gradient=True,
@@ -545,6 +545,7 @@ class TicEvaluator:
             ploty = (path[:, 1] - edges_y[0]) * yfactor
 
             ax1.plot(plotx, ploty, color="orange", linewidth=linewidth, zorder=2)
+
             if gradient:
 
                 class GC(GraphicsContextBase):
@@ -569,15 +570,37 @@ class TicEvaluator:
                 ax1.get_lines()[0].remove()
                 ax1.add_collection(lc)
 
-        ax1.scatter(
-            self.bin_x_folded,
-            self.bin_y_folded,
-            marker="X",
-            c="firebrick",
-            s=200,
-            linewidth=0,
-            zorder=3,
-        )
+        # plot folded structure
+        # ax1.scatter(
+        #     self.bin_x_folded,
+        #     self.bin_y_folded,
+        #     marker="X",
+        #     c="firebrick",
+        #     s=200,
+        #     linewidth=0,
+        #     zorder=3,
+        # )
+
+        # plot path endpoints used in interpolation
+        if endpoints is not None:
+            for point in endpoints:
+                endpoint_transform = self.tica.transform(
+                    self.get_tic_features(
+                        torch.from_numpy(point[None, :, :]), self.folded
+                    )
+                )[0]
+
+                bin_x_endpoint = np.argmin(abs(self.bin_mids_x - endpoint_transform[0]))
+                bin_y_endpoint = np.argmin(abs(self.bin_mids_y - endpoint_transform[1]))
+                ax1.scatter(
+                    bin_x_endpoint,
+                    bin_y_endpoint,
+                    marker="X",
+                    c="blue",
+                    s=50,
+                    linewidth=0,
+                    zorder=3,
+                )
 
         ax1.set_xlabel("TIC 0", labelpad=10, size=12)
         ax1.set_ylabel("TIC 1", labelpad=10, size=12)
