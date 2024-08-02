@@ -10,7 +10,6 @@ from datasets.dataset_utils_empty import get_dataset
 from evaluate.evaluators import (
     sample_from_model,
     sample_interpolations_from_model,
-    # sample_om_interpolations_from_model,
 )
 from dynamics.langevin import LangevinDiffusion
 from utils import SamplerWrapper, InterpolatorWrapper, OMInterpolatorWrapper
@@ -18,6 +17,7 @@ from dynamics.langevin import temp_dict
 import mdtraj as md
 from torch.utils.tensorboard import SummaryWriter
 import time
+
 
 parser = argparse.ArgumentParser(description="coarse-graining-evaluator")
 parser.add_argument(

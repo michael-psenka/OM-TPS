@@ -357,6 +357,7 @@ class TicEvaluator:
         eval_folder,
         data_folder,
         folded_pdb_folder="./datasets/folded_pdbs",
+        endpoints_pdb_folder="./saved_models/{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}"",
         bins=101,
         saved_ref="none",
         evalset="testset",

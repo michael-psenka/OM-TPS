@@ -332,7 +332,7 @@ class GaussianDiffusion(nn.Module):
         interpolation_fn=torch.lerp,
         temperature=1.0,
     ):
-        """ "
+        """
         Encode the two points into latent space, linearly or spherically interpolate, and decode.
         Args:
             x1: torch.Tensor, shape of [num_atoms x 3]
@@ -394,7 +394,7 @@ class GaussianDiffusion(nn.Module):
         anneal=False,
         temperature=1.0,
     ):
-        """ "
+        """
         Encode the two points into latent space, linearly or spherically interpolate, optimize OM action, and decode.
         """
 
