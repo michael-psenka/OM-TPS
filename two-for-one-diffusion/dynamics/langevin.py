@@ -88,7 +88,7 @@ class ForcesWrapper(nn.Module):
 
         if self.norm is None:
             self.norm = torch.mean(torch.norm(forces.cpu(), dim=2))
-            print(f"Forces (norm) {self.norm}")
+            # print(f"Forces (norm) {self.norm}")
         return torch.zeros(x_old.shape[0]), forces
 
 
