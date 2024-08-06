@@ -75,20 +75,22 @@ class ForcesWrapper(nn.Module):
     def forward(self, x_old, embeddings=None):
         t_norm = self.t_norm.reshape(-1, 1, 1).repeat(x_old.shape[0], 1, 1)
         self.t_tensor = self.t.repeat(x_old.shape[0]).long()
-        forces = (
-            -self.model_gnn(
-                x_old,
-                self.one_hot,
-                t_norm,
-                alphas=self.sqrt_alphas_cumprod[self.t_tensor].pow(2),
-            )
-            / self.kbt_inv
-            / self.sqrt_one_minus_alphas_cumprod
+        forces = -self.model_gnn(
+            x_old,
+            self.one_hot,
+            t_norm,
+            alphas=self.sqrt_alphas_cumprod[self.t_tensor].pow(2),
         )
+
+        forces = forces / self.kbt_inv / self.sqrt_one_minus_alphas_cumprod
 
         if self.norm is None:
             self.norm = torch.mean(torch.norm(forces.cpu(), dim=2))
-            # print(f"Forces (norm) {self.norm}")
+        # TODO: force norms seem too high
+        # Force norms during MD simulation are around 400-700
+        # But during interpolation, they are around 30,000 for the endpoints
+        # print(f"Endpoint force norm: {torch.mean(torch.norm(forces[[0, -1]].cpu(), dim=2)).item()}")
+        # print(f"Force norm: {torch.mean(torch.norm(forces.cpu(), dim=2)).item()}")
         return torch.zeros(x_old.shape[0]), forces
 
 

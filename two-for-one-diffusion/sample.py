@@ -235,7 +235,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                     x1=endpoints[0],
                     x2=endpoints[1],
                     path_length=50,
-                    latent_time=100,
+                    latent_time=0,
                 )
                 .to(device)
                 .eval()
