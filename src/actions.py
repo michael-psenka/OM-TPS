@@ -59,7 +59,7 @@ class HessianAction(torch.nn.Module):
     because it is constant and does not affect the optimization.
     """
 
-    def __init__(self, dt, xi, D):
+    def __init__(self, dt, xi, D=1):
         """
         Args:
             dt: float, time step
