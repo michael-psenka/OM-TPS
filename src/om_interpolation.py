@@ -17,6 +17,8 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import wandb
 
+import matplotlib.pyplot as plt
+
 wandb.require("core")
 import torch
 from torchvision.utils import save_image, make_grid
@@ -108,6 +110,22 @@ if __name__ == "__main__":
         default=96,  # this saturates GPU memory on Sanjeev's Germain server for path length of 16
     )
 
+    parser.add_argument(
+        "--denoising_steps", type=int, help="number of denoising steps to reproject path", default=100
+    )
+
+    parser.add_argument(
+        "--denoising_freq", type=int, help="how many optimization steps between each reproject", default=0
+    )
+
+    parser.add_argument(
+        "--f_scale", type=float, help="how much to scale up force in phase 2", default=0.0
+    )
+    
+    parser.add_argument(
+        "--kernel_var", type=float, help="variance for gaussian kernel for path norm", default=0.0
+    )
+
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
@@ -149,6 +167,12 @@ if __name__ == "__main__":
     lr = args.lr
     batch_size = args.batch_size
     max_batches = math.ceil(max_pairs / batch_size)
+
+    denoising_steps = args.denoising_steps
+    denoising_freq = args.denoising_freq
+    f_scale = args.f_scale
+    g_sigma = args.kernel_var
+
 
     t = torch.tensor(latent_time).unsqueeze(-1).to(device)
 
@@ -211,7 +235,7 @@ if __name__ == "__main__":
 
  
     if args.action == "hessian":
-        action_func = HessianAction(dt=const_time, xi=path_length)
+        action_func = HessianAction(dt=const_time, xi=path_length, D=1)
     elif args.action == "truncated":
         action_func = TruncatedAction(dt=const_time, xi=path_length)
     elif args.action == "simple":
@@ -281,14 +305,25 @@ if __name__ == "__main__":
 
             # It helps to anneal diffusion time
 
-            scale_factor = 1.0 - i / steps
+            scale_factor = max(1 - i / 1000, 0.1)
             diff_time = torch.tensor((int)(999*scale_factor)).to(device)
+            # diff_time = torch.tensor(100).to(device)
 
             # compute diffusion model score estimates
-            noise_pred = model.model(
-                interpolated_images.reshape(-1, C, H, W),
-                diff_time.repeat(batch_size * path_length),
-            )
+            # noise_pred = model.model(
+            #     interpolated_images.reshape(-1, C, H, W),
+            #     diff_time.repeat(batch_size * path_length),
+            # )
+            
+            def multi_step_denoising_no_noise(model, x_t, t, num_steps=1, device="cuda"):
+                with torch.no_grad():
+                    x_next = x_t.clone()
+                    for step in range(num_steps):
+                        # current t is max(0, t - step)
+                        curr_t = torch.max(t - step, torch.tensor(0).to(device))
+                        x_next = x_next - (1/math.sqrt(num_steps))*model.model(x_next, curr_t.repeat(batch_size * path_length))
+
+                return x_next - x_t
 
             # scaling factor between predicted noise and force
             # See Slide 31 of https://docs.google.com/presentation/d/1hVOlNwF1ZEeOfgR7IpU7vETmQ9x7z_dLfWuIaLqqe-w/edit?usp=sharing
@@ -303,20 +338,32 @@ if __name__ == "__main__":
             # TODO squared. We will investigate further. Commenting out for now.
             # forces = -noise_pred / sqrt_one_minus_alpha_cumprod_t
 
-            forces = noise_pred
+
+            # forces = noise_pred
+            if i < 1000:
+                forces = f_scale*multi_step_denoising_no_noise(model, interpolated_images.reshape(-1,C,H,W), diff_time)
+            else:
+                forces = (((i - 1000)/1000)*f_scale + f_scale)*multi_step_denoising_no_noise(model, interpolated_images.reshape(-1,C,H,W), diff_time)
+    
+            # forces = diff_pred - interpolated_images.reshape(-1, C, H, W)
+
+            # compare norms of forces and forces_alt, with decorative text
             forces = forces.reshape(batch_size, path_length, C, H, W)
+            
+            # apply gaussian blur to use blurred norm for path length term 
+            interpolated_images_blur = transforms.functional.gaussian_blur(interpolated_images.reshape(-1,C,H,W), kernel_size=(9,9), sigma=(2.4,2.4)).reshape((batch_size, path_length, C, H, W))
 
             # compute the OM action from these forces (vmaped over the batch dimension)
-            total_action = torch.vmap(action_func)(interpolated_images, forces).sum()
-            test_model_grads = torch.autograd.grad(
-                total_action,
-                model.model.parameters(),
-                retain_graph=True,
-                allow_unused=True,
-            )[0]
-            assert all(
-                [grad is not None for grad in test_model_grads]
-            ), "Action gradient w.r.t model parameters is None. Gradients wont be tracked correctly through the diffusion model."
+            total_action = torch.vmap(action_func)(interpolated_images_blur, forces).sum()
+            # test_model_grads = torch.autograd.grad(
+            #     total_action,
+            #     model.model.parameters(),
+            #     retain_graph=True,
+            #     allow_unused=True,
+            # )[0]
+            # assert all(
+            #     [grad is not None for grad in test_model_grads]
+            # ), "Action gradient w.r.t model parameters is None. Gradients wont be tracked correctly through the diffusion model."
 
             actions.append(total_action.unsqueeze(0).cpu().detach())
             pbar.set_description(f"Optimizing OM action: {total_action.item()}")
@@ -340,11 +387,22 @@ if __name__ == "__main__":
 
                 # add noise to the non-endpoint images (to keep it in the distribution of the model)
                 # TODO: what is the exact reasoning behind this? And how is the noise scale determined? Is it just undoing the OM optimization?
-                noise = torch.randn_like(interpolated_images)
-                noise[:, 0], noise[:, -1] = torch.zeros_like(
-                    interpolated_images[:, 0]
-                ), torch.zeros_like(interpolated_images[:, -1])
-                interpolated_images += noise_perturb_scale * noise
+                # noise = torch.randn_like(interpolated_images)
+                # noise[:, 0], noise[:, -1] = torch.zeros_like(
+                #     interpolated_images[:, 0]
+                # ), torch.zeros_like(interpolated_images[:, -1])
+                # interpolated_images += noise_perturb_scale * noise
+
+                # reproject path back to the data manifold
+                if denoising_freq > 0 and i % denoising_freq == 0:
+                    # flatten batch and path dimensions
+                    interpolated_images = interpolated_images.reshape(-1, C, H, W)
+                    interpolated_images = model.sample_from_t(torch.tensor(denoising_steps).to(device), interpolated_images.reshape(-1, C, H, W))
+                    # reshape back to batch and path dimensions
+                    interpolated_images = interpolated_images.reshape(batch_size, path_length, C, H, W)
+                    interpolated_images.requires_grad = True
+
+                
 
                 if i % save_every == 0:
                     # save interpolation path
@@ -352,6 +410,11 @@ if __name__ == "__main__":
                     save = interpolated_images[batch_idx].detach().clone()
                     save = inv_normalizer(torch.clamp(save, -1.0, 1.0))
                     final_draw.append(save.cpu())
+
+        # free up gpu memory 
+        optimizer.zero_grad()
+        del total_action, grads, forces
+        torch.cuda.empty_cache()
 
         with torch.no_grad():
             # run reverse diffusion on the final, optimized path
@@ -398,7 +461,7 @@ if __name__ == "__main__":
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         save_image(
             torch.cat(final_draw),
-            f"../mnist_outputs/grid_{now}.png",
+            f"../mnist_outputs/f_scale_{f_scale}.png",
             nrow=final_draw[0].shape[0],
         )
         if not args.disable_logging:
