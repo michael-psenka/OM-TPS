@@ -341,9 +341,9 @@ if __name__ == "__main__":
 
             # forces = noise_pred
             if i < 1000:
-                forces = f_scale*multi_step_denoising_no_noise(model, interpolated_images.reshape(-1,C,H,W), diff_time)
+                forces = 0.4*multi_step_denoising_no_noise(model, interpolated_images.reshape(-1,C,H,W), diff_time)
             else:
-                forces = (((i - 1000)/1000)*f_scale + f_scale)*multi_step_denoising_no_noise(model, interpolated_images.reshape(-1,C,H,W), diff_time)
+                forces = (((i - 1000)/1000)*0.2 + 0.4)*multi_step_denoising_no_noise(model, interpolated_images.reshape(-1,C,H,W), diff_time)
     
             # forces = diff_pred - interpolated_images.reshape(-1, C, H, W)
 
@@ -351,7 +351,7 @@ if __name__ == "__main__":
             forces = forces.reshape(batch_size, path_length, C, H, W)
             
             # apply gaussian blur to use blurred norm for path length term 
-            interpolated_images_blur = transforms.functional.gaussian_blur(interpolated_images.reshape(-1,C,H,W), kernel_size=(9,9), sigma=(2.4,2.4)).reshape((batch_size, path_length, C, H, W))
+            interpolated_images_blur = transforms.functional.gaussian_blur(interpolated_images.reshape(-1,C,H,W), kernel_size=(9,9), sigma=(2.1,2.1)).reshape((batch_size, path_length, C, H, W))
 
             # compute the OM action from these forces (vmaped over the batch dimension)
             total_action = torch.vmap(action_func)(interpolated_images_blur, forces).sum()
@@ -461,7 +461,7 @@ if __name__ == "__main__":
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         save_image(
             torch.cat(final_draw),
-            f"../mnist_outputs/f_scale_{f_scale}.png",
+            f"../mnist_outputs/grid_{now}.png",
             nrow=final_draw[0].shape[0],
         )
         if not args.disable_logging:
