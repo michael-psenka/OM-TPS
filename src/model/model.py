@@ -62,9 +62,14 @@ class MNISTDiffusion(nn.Module):
 
     @torch.no_grad()
     def sample_from_t(
-        self, start_t, x_t, clipped_reverse_diffusion=True, device="cuda"
+        self, start_t, x_t, clipped_reverse_diffusion=True, device="cuda", display=False
     ):
-        for i in tqdm(range(start_t - 1, -1, -1)):
+        
+        if display:
+            ddpm_range = tqdm(range(start_t - 1, -1, -1))
+        else:
+            ddpm_range = range(start_t - 1, -1, -1)
+        for i in ddpm_range:
             noise = torch.randn_like(x_t).to(device)
             t = torch.tensor([i for _ in range(x_t.shape[0])]).to(device)
 
