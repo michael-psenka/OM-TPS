@@ -10,6 +10,3 @@ data
 wandb/
 guided_diffusion/
 mnist/
-
-# testing notebooks
-michael_testbed.ipynb
