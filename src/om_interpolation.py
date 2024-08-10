@@ -111,20 +111,29 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--denoising_steps", type=int, help="number of denoising steps to reproject path", default=100
-    )
-
-    parser.add_argument(
-        "--denoising_freq", type=int, help="how many optimization steps between each reproject", default=0
-    )
-
-    parser.add_argument(
-        "--f_scale", type=float, help="how much to scale up force in phase 2", default=0.0
+        "--v_scale", type=float, help="how much to scale vector field for action", default=1.0
     )
     
     parser.add_argument(
-        "--kernel_var", type=float, help="variance for gaussian kernel for path norm", default=0.0
+        "--kernel_var",
+        type=float,
+        help="variance for gaussian kernel for path norm. setting to 0 uses no gaussian kernel convolution", default=0.0
     )
+
+    parser.add_argument(
+        "--truncate_v_gradient",
+        action="store_true",
+        help="approx gradient that doesn't go through diffusion model. essentially integrates path along vector field from diffusion model"
+    )
+    
+    parser.add_argument(
+        "--steps_v",
+        type=int,
+        help="how many diffusion steps to compute vector field. NOTE: only enabled if truncate_v_gradient is enabled",
+        default=1,  # this saturates GPU memory on Sanjeev's Germain server for path length of 16
+    )
+    
+    
 
     args = parser.parse_args()
 
@@ -168,9 +177,8 @@ if __name__ == "__main__":
     batch_size = args.batch_size
     max_batches = math.ceil(max_pairs / batch_size)
 
-    denoising_steps = args.denoising_steps
-    denoising_freq = args.denoising_freq
-    f_scale = args.f_scale
+    v_scale = args.v_scale
+    v_steps = args.steps_v
     g_sigma = args.kernel_var
 
 
@@ -315,15 +323,29 @@ if __name__ == "__main__":
             #     diff_time.repeat(batch_size * path_length),
             # )
             
-            def multi_step_denoising_no_noise(model, x_t, t, num_steps=1, device="cuda"):
-                with torch.no_grad():
-                    x_next = x_t.clone()
-                    for step in range(num_steps):
-                        # current t is max(0, t - step)
-                        curr_t = torch.max(t - step, torch.tensor(0).to(device))
-                        x_next = x_next - (1/math.sqrt(num_steps))*model.model(x_next, curr_t.repeat(batch_size * path_length))
+            # approximate gradient for the vector field. Note that for stable vector fields, finding norm minimizers can also be
+            # found by simply integrating over the vector field. This is equivalent to instead taking the gradient of ||y - x||_2^2,
+            # where y = x + v(x) and is not differentiated with respect to x. In practice, optimized results look about the same,
+            # but there is a huge speedup because we don't need to backprop through the model here.
+            if args.truncate_v_gradient: 
+                def multi_step_denoising_no_noise(model, x_t, t, num_steps=1, device="cuda"):
+                    with torch.no_grad():
+                        x_next = x_t.clone()
+                        for step in range(num_steps):
+                            # current t is max(0, t - step)
+                            curr_t = torch.max(t - step, torch.tensor(0).to(device))
+                            x_next = x_next - (1/math.sqrt(num_steps))*model.model(x_next, curr_t.repeat(batch_size * path_length))
 
-                return x_next - x_t
+                    return x_next - x_t
+                
+            
+                forces = v_scale*multi_step_denoising_no_noise(model, interpolated_images.reshape(-1,C,H,W), diff_time, v_steps)
+
+            else:
+                forces = v_scale*model.model(
+                    interpolated_images.reshape(-1, C, H, W),
+                    diff_time.repeat(batch_size * path_length),
+                )
 
             # scaling factor between predicted noise and force
             # See Slide 31 of https://docs.google.com/presentation/d/1hVOlNwF1ZEeOfgR7IpU7vETmQ9x7z_dLfWuIaLqqe-w/edit?usp=sharing
@@ -338,23 +360,23 @@ if __name__ == "__main__":
             # TODO squared. We will investigate further. Commenting out for now.
             # forces = -noise_pred / sqrt_one_minus_alpha_cumprod_t
 
-
-            # forces = noise_pred
-            if i < 1000:
-                forces = 0.4*multi_step_denoising_no_noise(model, interpolated_images.reshape(-1,C,H,W), diff_time)
-            else:
-                forces = (((i - 1000)/1000)*0.2 + 0.4)*multi_step_denoising_no_noise(model, interpolated_images.reshape(-1,C,H,W), diff_time)
-    
             # forces = diff_pred - interpolated_images.reshape(-1, C, H, W)
 
             # compare norms of forces and forces_alt, with decorative text
             forces = forces.reshape(batch_size, path_length, C, H, W)
             
-            # apply gaussian blur to use blurred norm for path length term 
-            interpolated_images_blur = transforms.functional.gaussian_blur(interpolated_images.reshape(-1,C,H,W), kernel_size=(9,9), sigma=(2.1,2.1)).reshape((batch_size, path_length, C, H, W))
+            
+            # compute the path norm loss on gaussian blurred images, so that the image manifolds look smoother and the optimized paths can still promote domain transformations
+            # (note that even very small domain transformations can have high L2 norm, but after gaussian blur these transformations have smaller norm)
+            if g_sigma > 0:            
+                # apply gaussian blur to use blurred norm for path length term 
+                interpolated_images_blur = transforms.functional.gaussian_blur(interpolated_images.reshape(-1,C,H,W), kernel_size=(9,9), sigma=(g_sigma,g_sigma)).reshape((batch_size, path_length, C, H, W))
 
-            # compute the OM action from these forces (vmaped over the batch dimension)
-            total_action = torch.vmap(action_func)(interpolated_images_blur, forces).sum()
+                # compute the OM action from these forces (vmaped over the batch dimension)
+                total_action = torch.vmap(action_func)(interpolated_images_blur, forces).sum()
+            else:
+                total_action = torch.vmap(action_func)(interpolated_images, forces).sum()
+
             # test_model_grads = torch.autograd.grad(
             #     total_action,
             #     model.model.parameters(),
@@ -392,16 +414,6 @@ if __name__ == "__main__":
                 #     interpolated_images[:, 0]
                 # ), torch.zeros_like(interpolated_images[:, -1])
                 # interpolated_images += noise_perturb_scale * noise
-
-                # reproject path back to the data manifold
-                if denoising_freq > 0 and i % denoising_freq == 0:
-                    # flatten batch and path dimensions
-                    interpolated_images = interpolated_images.reshape(-1, C, H, W)
-                    interpolated_images = model.sample_from_t(torch.tensor(denoising_steps).to(device), interpolated_images.reshape(-1, C, H, W))
-                    # reshape back to batch and path dimensions
-                    interpolated_images = interpolated_images.reshape(batch_size, path_length, C, H, W)
-                    interpolated_images.requires_grad = True
-
                 
 
                 if i % save_every == 0:
@@ -448,14 +460,17 @@ if __name__ == "__main__":
             ppl += _ppl.mean()
             pdv += _pdv.mean()
 
-            # Update fid calculator (on [0, 1] images)
-            fid_calculator.update(torch.cat([init_im, final_im]), True)
-            fid_calculator.update(
-                unnormalized_images[:, 1:-1].reshape(
-                    -1, unnormalized_images.shape[-3], H, W
-                ),
-                False,
-            )
+            # batch the fid update for memory
+            def update_fid_in_batches(fid_calculator, images, batch_size, is_initial):
+                num_images = images.shape[0]
+                for i in range(0, num_images, batch_size):
+                    batch_images_fid = images[i:i+batch_size]
+                    fid_calculator.update(batch_images_fid, is_initial)
+
+            batch_size_fid = 64
+            update_fid_in_batches(fid_calculator, torch.cat([init_im, final_im]), batch_size_fid, True)
+            unnormalized_reshaped_images = unnormalized_images[:, 1:-1].reshape(-1, unnormalized_images.shape[-3], H, W)
+            update_fid_in_batches(fid_calculator, unnormalized_reshaped_images, batch_size_fid, False)
 
         # Plot and log actions and images
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
