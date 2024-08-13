@@ -181,3 +181,15 @@ class MNISTDiffusion(nn.Module):
             std = 0.0
 
         return mean + std * noise
+
+    # take multiple "gradient steps" with respect to the denoising mean model
+    def multi_step_denoising_no_noise(self, x_t, t, num_steps=1, device="cuda"):
+        with torch.no_grad():
+            x_next = x_t.clone()
+            # get batch size poath length product
+            for step in range(num_steps):
+                # current t is max(0, t - step)
+                curr_t = torch.max(t - step, torch.tensor(0).to(device))
+                x_next = x_next - (1/math.sqrt(num_steps))*self.model(x_next, curr_t.repeat(t.size()))
+
+        return x_next - x_t

@@ -17,7 +17,6 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import wandb
 
-import matplotlib.pyplot as plt
 
 wandb.require("core")
 import torch
@@ -327,19 +326,8 @@ if __name__ == "__main__":
             # found by simply integrating over the vector field. This is equivalent to instead taking the gradient of ||y - x||_2^2,
             # where y = x + v(x) and is not differentiated with respect to x. In practice, optimized results look about the same,
             # but there is a huge speedup because we don't need to backprop through the model here.
-            if args.truncate_v_gradient: 
-                def multi_step_denoising_no_noise(model, x_t, t, num_steps=1, device="cuda"):
-                    with torch.no_grad():
-                        x_next = x_t.clone()
-                        for step in range(num_steps):
-                            # current t is max(0, t - step)
-                            curr_t = torch.max(t - step, torch.tensor(0).to(device))
-                            x_next = x_next - (1/math.sqrt(num_steps))*model.model(x_next, curr_t.repeat(batch_size * path_length))
-
-                    return x_next - x_t
-                
-            
-                forces = v_scale*multi_step_denoising_no_noise(model, interpolated_images.reshape(-1,C,H,W), diff_time, v_steps)
+            if args.truncate_v_gradient:           
+                forces = v_scale*model.multi_step_denoising_no_noise(interpolated_images.reshape(-1,C,H,W), diff_time, v_steps)
 
             else:
                 forces = v_scale*model.model(
