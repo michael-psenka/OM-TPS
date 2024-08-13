@@ -186,12 +186,16 @@ class MNISTDiffusion(nn.Module):
     def multi_step_denoising_no_noise(self, x_t, t, num_steps=1, device="cuda"):
         with torch.no_grad():
             x_next = x_t.clone()
-            # get batch size poath length product
             for step in range(num_steps):
                 # current t is max(0, t - step)
                 curr_t = torch.max(t - step, torch.tensor(0).to(device))
-                x_next = x_next - (1 / math.sqrt(num_steps)) * self.model(
+                x_next = x_next - self.model(
                     x_next, curr_t.repeat(t.size())
                 )
 
-        return x_next - x_t
+        # scale down output such that scale of output step is approximately
+        # invariant to num_steps. 1/num_steps is too steep since it assumes
+        # all gradients are in line and don't shrink, both of which are typically
+        # false. 1/sqrt empirically seems to keep the scale invariant, at least
+        # as tested in smaller settings. TODO: more testing and rigorous analysis
+        return (1 / math.sqrt(num_steps))*x_next - x_t
