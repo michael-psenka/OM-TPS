@@ -110,29 +110,31 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--v_scale", type=float, help="how much to scale vector field for action", default=1.0
+        "--v_scale",
+        type=float,
+        help="how much to scale vector field for action",
+        default=1.0,
     )
-    
+
     parser.add_argument(
         "--kernel_var",
         type=float,
-        help="variance for gaussian kernel for path norm. setting to 0 uses no gaussian kernel convolution", default=0.0
+        help="variance for gaussian kernel for path norm. setting to 0 uses no gaussian kernel convolution",
+        default=0.0,
     )
 
     parser.add_argument(
         "--truncate_v_gradient",
         action="store_true",
-        help="approx gradient that doesn't go through diffusion model. essentially integrates path along vector field from diffusion model"
+        help="approx gradient that doesn't go through diffusion model. essentially integrates path along vector field from diffusion model",
     )
-    
+
     parser.add_argument(
         "--steps_v",
         type=int,
         help="how many diffusion steps to compute vector field. NOTE: only enabled if truncate_v_gradient is enabled",
         default=1,  # this saturates GPU memory on Sanjeev's Germain server for path length of 16
     )
-    
-    
 
     args = parser.parse_args()
 
@@ -179,7 +181,6 @@ if __name__ == "__main__":
     v_scale = args.v_scale
     v_steps = args.steps_v
     g_sigma = args.kernel_var
-
 
     t = torch.tensor(latent_time).unsqueeze(-1).to(device)
 
@@ -240,7 +241,6 @@ if __name__ == "__main__":
     model = model.to(device)
     model.eval()
 
- 
     if args.action == "hessian":
         action_func = HessianAction(dt=const_time, xi=path_length, D=1)
     elif args.action == "truncated":
@@ -313,7 +313,7 @@ if __name__ == "__main__":
             # It helps to anneal diffusion time
 
             scale_factor = max(1 - i / 1000, 0.1)
-            diff_time = torch.tensor((int)(999*scale_factor)).to(device)
+            diff_time = torch.tensor((int)(999 * scale_factor)).to(device)
             # diff_time = torch.tensor(100).to(device)
 
             # compute diffusion model score estimates
@@ -321,16 +321,18 @@ if __name__ == "__main__":
             #     interpolated_images.reshape(-1, C, H, W),
             #     diff_time.repeat(batch_size * path_length),
             # )
-            
+
             # approximate gradient for the vector field. Note that for stable vector fields, finding norm minimizers can also be
             # found by simply integrating over the vector field. This is equivalent to instead taking the gradient of ||y - x||_2^2,
             # where y = x + v(x) and is not differentiated with respect to x. In practice, optimized results look about the same,
             # but there is a huge speedup because we don't need to backprop through the model here.
-            if args.truncate_v_gradient:           
-                forces = v_scale*model.multi_step_denoising_no_noise(interpolated_images.reshape(-1,C,H,W), diff_time, v_steps)
+            if args.truncate_v_gradient:
+                forces = v_scale * model.multi_step_denoising_no_noise(
+                    interpolated_images.reshape(-1, C, H, W), diff_time, v_steps
+                )
 
             else:
-                forces = v_scale*model.model(
+                forces = v_scale * model.model(
                     interpolated_images.reshape(-1, C, H, W),
                     diff_time.repeat(batch_size * path_length),
                 )
@@ -352,18 +354,25 @@ if __name__ == "__main__":
 
             # compare norms of forces and forces_alt, with decorative text
             forces = forces.reshape(batch_size, path_length, C, H, W)
-            
-            
+
             # compute the path norm loss on gaussian blurred images, so that the image manifolds look smoother and the optimized paths can still promote domain transformations
             # (note that even very small domain transformations can have high L2 norm, but after gaussian blur these transformations have smaller norm)
-            if g_sigma > 0:            
-                # apply gaussian blur to use blurred norm for path length term 
-                interpolated_images_blur = transforms.functional.gaussian_blur(interpolated_images.reshape(-1,C,H,W), kernel_size=(9,9), sigma=(g_sigma,g_sigma)).reshape((batch_size, path_length, C, H, W))
+            if g_sigma > 0:
+                # apply gaussian blur to use blurred norm for path length term
+                interpolated_images_blur = transforms.functional.gaussian_blur(
+                    interpolated_images.reshape(-1, C, H, W),
+                    kernel_size=(9, 9),
+                    sigma=(g_sigma, g_sigma),
+                ).reshape((batch_size, path_length, C, H, W))
 
                 # compute the OM action from these forces (vmaped over the batch dimension)
-                total_action = torch.vmap(action_func)(interpolated_images_blur, forces).sum()
+                total_action = torch.vmap(action_func)(
+                    interpolated_images_blur, forces
+                ).sum()
             else:
-                total_action = torch.vmap(action_func)(interpolated_images, forces).sum()
+                total_action = torch.vmap(action_func)(
+                    interpolated_images, forces
+                ).sum()
 
             # test_model_grads = torch.autograd.grad(
             #     total_action,
@@ -402,7 +411,6 @@ if __name__ == "__main__":
                 #     interpolated_images[:, 0]
                 # ), torch.zeros_like(interpolated_images[:, -1])
                 # interpolated_images += noise_perturb_scale * noise
-                
 
                 if i % save_every == 0:
                     # save interpolation path
@@ -411,7 +419,7 @@ if __name__ == "__main__":
                     save = inv_normalizer(torch.clamp(save, -1.0, 1.0))
                     final_draw.append(save.cpu())
 
-        # free up gpu memory 
+        # free up gpu memory
         optimizer.zero_grad()
         del total_action, grads, forces
         torch.cuda.empty_cache()
@@ -452,13 +460,19 @@ if __name__ == "__main__":
             def update_fid_in_batches(fid_calculator, images, batch_size, is_initial):
                 num_images = images.shape[0]
                 for i in range(0, num_images, batch_size):
-                    batch_images_fid = images[i:i+batch_size]
+                    batch_images_fid = images[i : i + batch_size]
                     fid_calculator.update(batch_images_fid, is_initial)
 
             batch_size_fid = 64
-            update_fid_in_batches(fid_calculator, torch.cat([init_im, final_im]), batch_size_fid, True)
-            unnormalized_reshaped_images = unnormalized_images[:, 1:-1].reshape(-1, unnormalized_images.shape[-3], H, W)
-            update_fid_in_batches(fid_calculator, unnormalized_reshaped_images, batch_size_fid, False)
+            update_fid_in_batches(
+                fid_calculator, torch.cat([init_im, final_im]), batch_size_fid, True
+            )
+            unnormalized_reshaped_images = unnormalized_images[:, 1:-1].reshape(
+                -1, unnormalized_images.shape[-3], H, W
+            )
+            update_fid_in_batches(
+                fid_calculator, unnormalized_reshaped_images, batch_size_fid, False
+            )
 
         # Plot and log actions and images
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
