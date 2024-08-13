@@ -64,7 +64,7 @@ class MNISTDiffusion(nn.Module):
     def sample_from_t(
         self, start_t, x_t, clipped_reverse_diffusion=True, device="cuda", display=False
     ):
-        
+
         if display:
             ddpm_range = tqdm(range(start_t - 1, -1, -1))
         else:
@@ -190,6 +190,8 @@ class MNISTDiffusion(nn.Module):
             for step in range(num_steps):
                 # current t is max(0, t - step)
                 curr_t = torch.max(t - step, torch.tensor(0).to(device))
-                x_next = x_next - (1/math.sqrt(num_steps))*self.model(x_next, curr_t.repeat(t.size()))
+                x_next = x_next - (1 / math.sqrt(num_steps)) * self.model(
+                    x_next, curr_t.repeat(t.size())
+                )
 
         return x_next - x_t
