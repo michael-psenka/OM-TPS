@@ -242,7 +242,8 @@ def filter_by_rmsd(coords: torch.Tensor, n: int = 2) -> torch.Tensor:
     """
     assert_center_zero(coords)
     coords = coords.cpu().numpy()
-    seed_point = random.randint(0, coords.shape[0] - 1)
+    # seed_point = random.randint(0, coords.shape[0] - 1)
+    seed_point = 0 # fix seed point for reproducibility
     final_idxs = [seed_point]
     min_rmsds = np.array([kabsch_rmsd(coords[seed_point], coord) for coord in coords])
     for _ in range(n - 1):

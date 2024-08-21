@@ -18,6 +18,7 @@ from utils import (
     InterpolatorWrapper,
     OMInterpolatorWrapper,
     filter_by_rmsd,
+    slerp
 )
 from dynamics.langevin import temp_dict
 import mdtraj as md
@@ -103,6 +104,18 @@ parser.add_argument(
     "--temp_sim", type=float, default=None, help="temperature in Kelvin"
 )
 parser.add_argument("--kb", type=str, default="consistent", help="consistent, kcal")
+
+parser.add_argument("--latent_time", type=int, default=0, help="time at which to do latent interpolation")
+parser.add_argument(
+        "--initial_guess_method",
+        type=str,
+        help="method to generate initial interpolation path (options: 'spherical' or 'linear')",
+        default="linear",
+    )
+parser.add_argument("--anneal", action="store_true", help="whether to anneal temperature during interpolation")
+parser.add_argument(
+        "--path_length", type=int, help="length of interpolation path", default=50
+    )
 
 
 samp_args = parser.parse_args()
@@ -225,7 +238,9 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                 batch_size=1000,
                 verbose=True,
             )
+            # TODO: save endpoint candidates to directory
 
+        # TODO: come up with a more controllable/reproducible way to select endpoints
         endpoints = filter_by_rmsd(endpoint_candidates, n=2)
 
         if "om" in samp_args.gen_mode:
@@ -234,8 +249,10 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                     model.ema_model,
                     x1=endpoints[0],
                     x2=endpoints[1],
-                    path_length=50,
-                    latent_time=0,
+                    path_length=samp_args.path_length,
+                    latent_time=samp_args.latent_time,
+                    initial_guess_fn = torch.lerp if samp_args.initial_guess_method == "linear" else slerp,
+                    anneal = samp_args.anneal
                 )
                 .to(device)
                 .eval()
@@ -246,10 +263,10 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                     model.ema_model,
                     x1=endpoints[0],
                     x2=endpoints[1],
-                    path_length=50,
-                    latent_time=100,
-                    interpolation_fn=torch.lerp,
-                    temperature=1.0,
+                    path_length=samp_args.path_length,
+                    latent_time=samp_args.latent_time,
+                    interpolation_fn=torch.lerp if samp_args.initial_guess_method == "linear" else slerp,
+                    temperature=1.0
                 )
                 .to(device)
                 .eval()
