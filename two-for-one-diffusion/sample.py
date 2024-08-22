@@ -3,6 +3,7 @@ import argparse
 import pickle
 from os.path import join
 from pathlib import Path
+import numpy as np
 import torch
 from models import get_model
 from models.ddpm import GaussianDiffusion
@@ -18,7 +19,7 @@ from utils import (
     InterpolatorWrapper,
     OMInterpolatorWrapper,
     filter_by_rmsd,
-    slerp
+    slerp,
 )
 from dynamics.langevin import temp_dict
 import mdtraj as md
@@ -105,18 +106,34 @@ parser.add_argument(
 )
 parser.add_argument("--kb", type=str, default="consistent", help="consistent, kcal")
 
-parser.add_argument("--latent_time", type=int, default=0, help="time at which to do latent interpolation")
 parser.add_argument(
-        "--initial_guess_method",
-        type=str,
-        help="method to generate initial interpolation path (options: 'spherical' or 'linear')",
-        default="linear",
-    )
-parser.add_argument("--anneal", action="store_true", help="whether to anneal temperature during interpolation")
+    "--latent_time",
+    type=int,
+    default=0,
+    help="time at which to do latent interpolation",
+)
 parser.add_argument(
-        "--path_length", type=int, help="length of interpolation path", default=50
-    )
+    "--initial_guess_method",
+    type=str,
+    help="method to generate initial interpolation path (options: 'spherical' or 'linear')",
+    default="linear",
+)
+parser.add_argument(
+    "--anneal",
+    action="store_true",
+    help="whether to anneal temperature during interpolation",
+)
+parser.add_argument(
+    "--path_length", type=int, help="length of interpolation path", default=50
+)
 
+parser.add_argument(
+    "--cluster_idxs",
+    type=int,
+    nargs="+",  # This allows the argument to accept one or more integers
+    default=[0, 1],
+    help="List of integers representing cluster indices",
+)
 
 samp_args = parser.parse_args()
 
@@ -215,33 +232,44 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
     # Generate interpolated samples
     elif "interpolate" in samp_args.gen_mode:
         # first produce two i.i.d samples to interpolate between (TODO in the future, add option to specify the two samples)
-        sampler = SamplerWrapper(model.ema_model).to(device).eval()
-        if torch.cuda.device_count() > 1 and device == "cuda":
-            sampler = torch.nn.DataParallel(sampler).to(device)
-            parallel_batches = torch.cuda.device_count()
-        else:
-            parallel_batches = 1
+        # sampler = SamplerWrapper(model.ema_model).to(device).eval()
+        # if torch.cuda.device_count() > 1 and device == "cuda":
+        #     sampler = torch.nn.DataParallel(sampler).to(device)
+        #     parallel_batches = torch.cuda.device_count()
+        # else:
+        #     parallel_batches = 1
 
-        # check if there are samples already
+        # # check if there are samples already
+
+        # if iid_sample_path.exists():
+        #     endpoint_candidates = torch.load(Path(iid_sample_path, f"sample-iid.pt"))[
+        #         :1000
+        #     ]
+        # else:
+        #     # sample endpoint candidates and filter by RMSD diversity
+        #     endpoint_candidates = sample_from_model(
+        #         sampler,
+        #         num_saved_samples=1000,
+        #         batch_size=1000,
+        #         verbose=True,
+        #     )
+        #     # TODO: save endpoint candidates to directory
+
+        # choose two endpoints as cluster centers
         iid_sample_path = Path(
             os.path.join(os.path.dirname(eval_folder), "main_eval_output_iid")
         )
-        if iid_sample_path.exists():
-            endpoint_candidates = torch.load(Path(iid_sample_path, f"sample-iid.pt"))[
-                :1000
-            ]
-        else:
-            # sample endpoint candidates and filter by RMSD diversity
-            endpoint_candidates = sample_from_model(
-                sampler,
-                num_saved_samples=1000,
-                batch_size=1000,
-                verbose=True,
+        protein_name = iid_sample_path.parts[-2]
+        cluster_coords_path = Path(
+            os.path.join(
+                "evaluate",
+                "saved_references",
+                f"saved_cluster_rep_coords_{protein_name.upper()}.npy",
             )
-            # TODO: save endpoint candidates to directory
-
-        # TODO: come up with a more controllable/reproducible way to select endpoints
-        endpoints = filter_by_rmsd(endpoint_candidates, n=2)
+        )
+        cluster_coords = torch.tensor(np.load(cluster_coords_path)).to(device)
+        clusters = samp_args.cluster_idxs
+        endpoints = cluster_coords[clusters]
 
         if "om" in samp_args.gen_mode:
             interpolator = (
@@ -251,8 +279,12 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                     x2=endpoints[1],
                     path_length=samp_args.path_length,
                     latent_time=samp_args.latent_time,
-                    initial_guess_fn = torch.lerp if samp_args.initial_guess_method == "linear" else slerp,
-                    anneal = samp_args.anneal
+                    initial_guess_fn=(
+                        torch.lerp
+                        if samp_args.initial_guess_method == "linear"
+                        else slerp
+                    ),
+                    anneal=samp_args.anneal,
                 )
                 .to(device)
                 .eval()
@@ -265,8 +297,12 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                     x2=endpoints[1],
                     path_length=samp_args.path_length,
                     latent_time=samp_args.latent_time,
-                    interpolation_fn=torch.lerp if samp_args.initial_guess_method == "linear" else slerp,
-                    temperature=1.0
+                    interpolation_fn=(
+                        torch.lerp
+                        if samp_args.initial_guess_method == "linear"
+                        else slerp
+                    ),
+                    temperature=1.0,
                 )
                 .to(device)
                 .eval()

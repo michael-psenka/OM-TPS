@@ -74,7 +74,7 @@ def get_dataset(
     """
 
     if pdb_folder is None:
-        pdb_folder = "datasets/folded_pdbs/"
+        pdb_folder = os.path.join("./datasets/folded_pdbs/")
     if mol.lower() == "alanine_dipeptide_fuberlin":
         assert fold is not None and fold in [
             1,

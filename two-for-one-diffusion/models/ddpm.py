@@ -285,7 +285,7 @@ class GaussianDiffusion(nn.Module):
         mol = center_zero(mol_t)
         assert_center_zero(mol)
 
-        for j, i in enumerate(reversed(range(0, t))):
+        for j, i in tqdm(enumerate(reversed(range(0, t)))):
             mol = self.p_sample(
                 mol, torch.full((b,), i, device=device, dtype=torch.long)
             )
