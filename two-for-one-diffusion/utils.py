@@ -4,7 +4,7 @@ from inspect import isfunction
 import numpy as np
 import mdtraj as md
 import random
-from actions import SimpleAction
+from actions import SimpleAction, TruncatedAction
 from rmsd import kabsch_rmsd
 
 
@@ -312,7 +312,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         x2,
         path_length,
         latent_time,
-        action_cls=SimpleAction,
+        action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
         om_steps=100,
         lr=2e-1,

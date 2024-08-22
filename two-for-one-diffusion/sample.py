@@ -21,6 +21,8 @@ from utils import (
     filter_by_rmsd,
     slerp,
 )
+from actions import SimpleAction, TruncatedAction, S2Action
+
 from dynamics.langevin import temp_dict
 import mdtraj as md
 from torch.utils.tensorboard import SummaryWriter
@@ -62,7 +64,7 @@ parser.add_argument(
     "--num_samples_eval",
     type=int,
     default=1000,
-    help="number of samples for i.i.d. generation",
+    help="number of samples for i.i.d. generation (or number of paths for interpolation)",
 )
 parser.add_argument(
     "--batch_size_gen", type=int, default=256, help="batch size for evaluation"
@@ -126,6 +128,22 @@ parser.add_argument(
 parser.add_argument(
     "--path_length", type=int, help="length of interpolation path", default=50
 )
+
+parser.add_argument(
+    "--steps", type=int, help="number of OM optimization steps", default=100
+)
+
+parser.add_argument(
+    "--lr", type=float, help="learning rate for OM optimization", default=2e-1
+)
+
+parser.add_argument(
+    "--action",
+    type=str,
+    help="Which action to use. Options: hessian, truncated, simple",
+    default="truncated",
+)
+
 
 parser.add_argument(
     "--cluster_idxs",
@@ -231,29 +249,6 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
 
     # Generate interpolated samples
     elif "interpolate" in samp_args.gen_mode:
-        # first produce two i.i.d samples to interpolate between (TODO in the future, add option to specify the two samples)
-        # sampler = SamplerWrapper(model.ema_model).to(device).eval()
-        # if torch.cuda.device_count() > 1 and device == "cuda":
-        #     sampler = torch.nn.DataParallel(sampler).to(device)
-        #     parallel_batches = torch.cuda.device_count()
-        # else:
-        #     parallel_batches = 1
-
-        # # check if there are samples already
-
-        # if iid_sample_path.exists():
-        #     endpoint_candidates = torch.load(Path(iid_sample_path, f"sample-iid.pt"))[
-        #         :1000
-        #     ]
-        # else:
-        #     # sample endpoint candidates and filter by RMSD diversity
-        #     endpoint_candidates = sample_from_model(
-        #         sampler,
-        #         num_saved_samples=1000,
-        #         batch_size=1000,
-        #         verbose=True,
-        #     )
-        #     # TODO: save endpoint candidates to directory
 
         # choose two endpoints as cluster centers
         iid_sample_path = Path(
@@ -272,6 +267,12 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
         endpoints = cluster_coords[clusters]
 
         if "om" in samp_args.gen_mode:
+            if samp_args.action == "hessian":
+                action_cls = S2Action
+            elif samp_args.action == "truncated":
+                action_cls = TruncatedAction
+            elif samp_args.action == "simple":
+                action_cls = SimpleAction
             interpolator = (
                 OMInterpolatorWrapper(
                     model.ema_model,
@@ -284,6 +285,9 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                         if samp_args.initial_guess_method == "linear"
                         else slerp
                     ),
+                    action_cls=action_cls,
+                    om_steps=samp_args.steps,
+                    lr=samp_args.lr,
                     anneal=samp_args.anneal,
                 )
                 .to(device)

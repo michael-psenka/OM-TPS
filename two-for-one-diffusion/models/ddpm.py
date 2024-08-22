@@ -164,10 +164,8 @@ class GaussianDiffusion(nn.Module):
             1.0 * t / self.num_timesteps,
             alphas=self.sqrt_alphas_cumprod[t].pow(2),
         )
-        # force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * center_zero(
-        #     noise_pred
-        # )
-        force = -noise_pred
+        # force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * noise_pred
+        force = -noise_pred  # TODO: check that norms of forces are reasonable
         return force
 
     def laplacian_func(self, x, t):
@@ -394,7 +392,7 @@ class GaussianDiffusion(nn.Module):
         path_length,
         latent_time,
         num_paths=10,
-        action_cls=SimpleAction,
+        action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
         om_steps=100,
         lr=2e-1,
