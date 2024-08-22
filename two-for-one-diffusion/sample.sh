@@ -1,4 +1,4 @@
-for protein in "chignolin" # "bba" "protein_g" "trp_cage"
+for protein in "chignolin" "bba" "protein_g" "trp_cage"
 do
 
     # python sample.py \
@@ -6,6 +6,17 @@ do
     #     --gen_mode iid \
     #     --num_samples_eval 1000 \
     #     --batch_size_gen 256 \
+
+    python sample.py \
+            --model_path saved_models/$protein \
+            --gen_mode om_interpolate \
+            --num_samples_eval 16 \
+            --batch_size_gen 16 \
+            --latent_time 0 \
+            --append_exp_name anneal_linear_latent_time=0 \
+            --cluster_idxs 1 2 \
+            --action "simple" \
+            --anneal
 
     for latent_time in {0..800..100}
     do

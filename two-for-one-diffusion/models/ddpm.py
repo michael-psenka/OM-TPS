@@ -437,7 +437,7 @@ class GaussianDiffusion(nn.Module):
             # Optimization of path using OM action
             for i in pbar:
                 if anneal:
-                    diff_time = self.num_steps - i - 1  # anneal the time from T to 0
+                    diff_time = self.num_timesteps - i - 1  # anneal the time from T to 0
                 else:
                     diff_time = latent_time
 
