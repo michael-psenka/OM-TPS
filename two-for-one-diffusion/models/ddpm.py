@@ -462,7 +462,7 @@ class GaussianDiffusion(nn.Module):
                 action_func = action_cls(
                     force_func=force_func,
                     laplace_func=laplace,
-                    dt=1,
+                    dt=0.01,
                     gamma=12,
                     D=0.1,
                 )  # TODO: figure out dt, gamma, D
