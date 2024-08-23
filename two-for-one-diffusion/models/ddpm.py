@@ -150,9 +150,11 @@ class GaussianDiffusion(nn.Module):
 
     def scaling_factor(self, t):
         # TODO: adjust
-        assert self.temp_data is not None, "Temperature data must be provided for computing scaling factor"
+        assert (
+            self.temp_data is not None
+        ), "Temperature data must be provided for computing scaling factor"
         kbt_inv = self.kb_inv / self.temp_data
-        scaling_factor = - 1 / (kbt_inv  * self.sqrt_one_minus_alphas_cumprod[t])
+        scaling_factor = -1 / (kbt_inv * self.sqrt_one_minus_alphas_cumprod[t])
         return scaling_factor
 
     def force_func(self, x, t):
@@ -442,7 +444,9 @@ class GaussianDiffusion(nn.Module):
             # Optimization of path using OM action
             for i in pbar:
                 if anneal:
-                    diff_time = self.num_timesteps - i - 1  # anneal the time from T to 0
+                    diff_time = (
+                        self.num_timesteps - i - 1
+                    )  # anneal the time from T to 0
                 else:
                     diff_time = latent_time
 
@@ -458,8 +462,8 @@ class GaussianDiffusion(nn.Module):
                 action_func = action_cls(
                     force_func=force_func,
                     laplace_func=laplace,
-                    dt=0.01,
-                    gamma=0.01,
+                    dt=0.00077581,
+                    gamma=12,
                     D=0.1,
                 )  # TODO: figure out dt, gamma, D
                 action = torch.cat(

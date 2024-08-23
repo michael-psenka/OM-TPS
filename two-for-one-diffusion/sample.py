@@ -208,7 +208,7 @@ def main(samp_args):
         timesteps=args.diffusion_steps,
         norm_factor=norm_factor,
         loss_weights=args.loss_weights,
-        temp_data = samp_args.temp_data,
+        temp_data=samp_args.temp_data,
     ).to(device)
     model = EMA(DDPM_model)
 

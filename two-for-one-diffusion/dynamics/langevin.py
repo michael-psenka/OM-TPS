@@ -138,7 +138,9 @@ class LangevinDiffusion:
         else:
             raise Exception("Wrong kb value")
 
-        import pdb; pdb.set_trace()
+        import pdb
+
+        pdb.set_trace()
         self.model_forces = ForcesWrapper(
             model_diff,
             t,
@@ -195,6 +197,9 @@ class LangevinDiffusion:
 
         print(f"dt: {dt: .8f} (ps)")
         print(f"KbT: {temp_data/self.kb_inv: .4f}")
+        import pdb
+
+        pdb.set_trace()
 
     def sample(self):
         # Simulate
