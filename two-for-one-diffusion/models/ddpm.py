@@ -9,7 +9,8 @@ from ase import units
 import warnings
 from tqdm import tqdm
 from actions import S2Action, TruncatedAction, SimpleAction
-from dynamics.langevin import ForcesWrapper
+from dynamics.langevin import ForcesWrapper, temp_dict
+
 from utils import (
     default,
     extract,
@@ -39,6 +40,7 @@ class GaussianDiffusion(nn.Module):
         p2_loss_weight_k=1,
         norm_factor=1,  # scale input, recommended: scale by variance
         loss_weights="ones",  # ones, score_matching
+        temp_data=None,
     ):
         super().__init__()
         self.dims = 3
@@ -63,6 +65,7 @@ class GaussianDiffusion(nn.Module):
         self.num_timesteps = int(timesteps)
         self.loss_type = loss_type
         self.norm_factor = norm_factor
+        self.temp_data = temp_data
 
         def register_buffer(name, val):
             """
@@ -143,11 +146,13 @@ class GaussianDiffusion(nn.Module):
         else:
             raise Exception(f"Wrong loss_weights: {loss_weights}")
 
-        self.kb_inv = 1 / KB  # TODO account for norm factor
+        self.kb_inv = 1 / KB * self.norm_factor**2
 
     def scaling_factor(self, t):
         # TODO: adjust
-        scaling_factor = -units.kB * 300 / self.sqrt_one_minus_alphas_cumprod[t]
+        assert self.temp_data is not None, "Temperature data must be provided for computing scaling factor"
+        kbt_inv = self.kb_inv / self.temp_data
+        scaling_factor = - 1 / (kbt_inv  * self.sqrt_one_minus_alphas_cumprod[t])
         return scaling_factor
 
     def force_func(self, x, t):
@@ -164,8 +169,8 @@ class GaussianDiffusion(nn.Module):
             1.0 * t / self.num_timesteps,
             alphas=self.sqrt_alphas_cumprod[t].pow(2),
         )
-        # force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * noise_pred
-        force = -noise_pred  # TODO: check that norms of forces are reasonable
+        force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * noise_pred
+        # force = -noise_pred  # TODO: check that norms of forces are reasonable
         return force
 
     def laplacian_func(self, x, t):
@@ -441,13 +446,13 @@ class GaussianDiffusion(nn.Module):
                 else:
                     diff_time = latent_time
 
-                # force_func = lambda x: ForcesWrapper(
-                #     self,
-                #     diff_time,
-                #     self.num_timesteps,
-                #     self.kb_inv / 300,
-                # )(x)[-1]
-                force_func = lambda x: self.force_func(x, diff_time)
+                force_func = lambda x: ForcesWrapper(
+                    self,
+                    diff_time,
+                    self.num_timesteps,
+                    self.kb_inv / self.temp_data,
+                )(x)[-1]
+                # force_func = lambda x: self.force_func(x, diff_time)
 
                 laplace = lambda x: self.laplacian_func(x, diff_time)
                 action_func = action_cls(

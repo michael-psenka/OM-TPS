@@ -738,6 +738,7 @@ class Langevin:
             # produce potential and forces from model
             self.x_old = center_zero(self.x_old)
             potential, forces = self.calculate_potential_and_forces(self.x_old)
+            # print("force norm: ", forces.norm(dim = -1).median())
             potential = potential.detach()
             forces = forces.detach()
 

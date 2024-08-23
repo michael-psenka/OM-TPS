@@ -56,9 +56,11 @@ class TruncatedAction(torch.nn.Module):
         Args: path of shape [P, N, 3]
         """
         first_term = torch.square((path[1:] - path[:-1])) * (self.gamma / 4 / self.dt)
-        second_term = torch.square(self.force_func(path[:-1])) * (
+        f_n = self.force_func(path[:-1])
+        second_term = torch.square(f_n) * (
             self.dt / 4 / self.gamma
         )
+        # print("force norm: ", f_n.norm(dim = -1).mean())
         result = torch.sum(first_term + second_term)
         return result
 
@@ -86,6 +88,7 @@ class SimpleAction(torch.nn.Module):
         first_term = torch.square((path[1:] - path[:-1])) * (self.gamma / self.dt)
         f_n = self.force_func(path[:-1]).to(path.device)
         f_np = self.force_func(path[1:]).to(path.device)
+        # print("force norm: ", f_n.norm(dim = -1).mean())
         second_term = (torch.square(f_n) + torch.square(f_np)) * (
             self.dt / self.gamma / 2.0
         )

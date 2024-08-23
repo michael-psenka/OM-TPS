@@ -84,13 +84,6 @@ class ForcesWrapper(nn.Module):
 
         forces = forces / self.kbt_inv / self.sqrt_one_minus_alphas_cumprod
 
-        if self.norm is None:
-            self.norm = torch.mean(torch.norm(forces.cpu(), dim=2))
-        # TODO: force norms seem too high
-        # Force norms during MD simulation are around 400-700
-        # But during interpolation, they are around 30,000 for the endpoints
-        # print(f"Endpoint force norm: {torch.mean(torch.norm(forces[[0, -1]].cpu(), dim=2)).item()}")
-        # print(f"Force norm: {torch.mean(torch.norm(forces.cpu(), dim=2)).item()}")
         return torch.zeros(x_old.shape[0]), forces
 
 
@@ -145,6 +138,7 @@ class LangevinDiffusion:
         else:
             raise Exception("Wrong kb value")
 
+        import pdb; pdb.set_trace()
         self.model_forces = ForcesWrapper(
             model_diff,
             t,
