@@ -17,6 +17,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import wandb
 
+
 wandb.require("core")
 import torch
 from torchvision.utils import save_image, make_grid
@@ -108,6 +109,33 @@ if __name__ == "__main__":
         default=96,  # this saturates GPU memory on Sanjeev's Germain server for path length of 16
     )
 
+    parser.add_argument(
+        "--v_scale",
+        type=float,
+        help="how much to scale vector field for action",
+        default=1.0,
+    )
+
+    parser.add_argument(
+        "--kernel_var",
+        type=float,
+        help="variance for gaussian kernel for path norm. setting to 0 uses no gaussian kernel convolution",
+        default=0.0,
+    )
+
+    parser.add_argument(
+        "--truncate_v_gradient",
+        action="store_true",
+        help="approx gradient that doesn't go through diffusion model. essentially integrates path along vector field from diffusion model",
+    )
+
+    parser.add_argument(
+        "--steps_v",
+        type=int,
+        help="how many diffusion steps to compute vector field. NOTE: only enabled if truncate_v_gradient is enabled",
+        default=1,  # this saturates GPU memory on Sanjeev's Germain server for path length of 16
+    )
+
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
@@ -149,6 +177,10 @@ if __name__ == "__main__":
     lr = args.lr
     batch_size = args.batch_size
     max_batches = math.ceil(max_pairs / batch_size)
+
+    v_scale = args.v_scale
+    v_steps = args.steps_v
+    g_sigma = args.kernel_var
 
     t = torch.tensor(latent_time).unsqueeze(-1).to(device)
 
@@ -209,9 +241,8 @@ if __name__ == "__main__":
     model = model.to(device)
     model.eval()
 
- 
     if args.action == "hessian":
-        action_func = HessianAction(dt=const_time, xi=path_length)
+        action_func = HessianAction(dt=const_time, xi=path_length, D=1)
     elif args.action == "truncated":
         action_func = TruncatedAction(dt=const_time, xi=path_length)
     elif args.action == "simple":
@@ -281,14 +312,30 @@ if __name__ == "__main__":
 
             # It helps to anneal diffusion time
 
-            scale_factor = 1.0 - i / steps
-            diff_time = torch.tensor((int)(999*scale_factor)).to(device)
+            scale_factor = max(1 - i / 1000, 0.1)
+            diff_time = torch.tensor((int)(999 * scale_factor)).to(device)
+            # diff_time = torch.tensor(100).to(device)
 
             # compute diffusion model score estimates
-            noise_pred = model.model(
-                interpolated_images.reshape(-1, C, H, W),
-                diff_time.repeat(batch_size * path_length),
-            )
+            # noise_pred = model.model(
+            #     interpolated_images.reshape(-1, C, H, W),
+            #     diff_time.repeat(batch_size * path_length),
+            # )
+
+            # approximate gradient for the vector field. Note that for stable vector fields, finding norm minimizers can also be
+            # found by simply integrating over the vector field. This is equivalent to instead taking the gradient of ||y - x||_2^2,
+            # where y = x + v(x) and is not differentiated with respect to x. In practice, optimized results look about the same,
+            # but there is a huge speedup because we don't need to backprop through the model here.
+            if args.truncate_v_gradient:
+                forces = v_scale * model.multi_step_denoising_no_noise(
+                    interpolated_images.reshape(-1, C, H, W), diff_time, v_steps
+                )
+
+            else:
+                forces = v_scale * model.model(
+                    interpolated_images.reshape(-1, C, H, W),
+                    diff_time.repeat(batch_size * path_length),
+                )
 
             # scaling factor between predicted noise and force
             # See Slide 31 of https://docs.google.com/presentation/d/1hVOlNwF1ZEeOfgR7IpU7vETmQ9x7z_dLfWuIaLqqe-w/edit?usp=sharing
@@ -303,20 +350,39 @@ if __name__ == "__main__":
             # TODO squared. We will investigate further. Commenting out for now.
             # forces = -noise_pred / sqrt_one_minus_alpha_cumprod_t
 
-            forces = noise_pred
+            # forces = diff_pred - interpolated_images.reshape(-1, C, H, W)
+
+            # compare norms of forces and forces_alt, with decorative text
             forces = forces.reshape(batch_size, path_length, C, H, W)
 
-            # compute the OM action from these forces (vmaped over the batch dimension)
-            total_action = torch.vmap(action_func)(interpolated_images, forces).sum()
-            test_model_grads = torch.autograd.grad(
-                total_action,
-                model.model.parameters(),
-                retain_graph=True,
-                allow_unused=True,
-            )[0]
-            assert all(
-                [grad is not None for grad in test_model_grads]
-            ), "Action gradient w.r.t model parameters is None. Gradients wont be tracked correctly through the diffusion model."
+            # compute the path norm loss on gaussian blurred images, so that the image manifolds look smoother and the optimized paths can still promote domain transformations
+            # (note that even very small domain transformations can have high L2 norm, but after gaussian blur these transformations have smaller norm)
+            if g_sigma > 0:
+                # apply gaussian blur to use blurred norm for path length term
+                interpolated_images_blur = transforms.functional.gaussian_blur(
+                    interpolated_images.reshape(-1, C, H, W),
+                    kernel_size=(9, 9),
+                    sigma=(g_sigma, g_sigma),
+                ).reshape((batch_size, path_length, C, H, W))
+
+                # compute the OM action from these forces (vmaped over the batch dimension)
+                total_action = torch.vmap(action_func)(
+                    interpolated_images_blur, forces
+                ).sum()
+            else:
+                total_action = torch.vmap(action_func)(
+                    interpolated_images, forces
+                ).sum()
+
+            # test_model_grads = torch.autograd.grad(
+            #     total_action,
+            #     model.model.parameters(),
+            #     retain_graph=True,
+            #     allow_unused=True,
+            # )[0]
+            # assert all(
+            #     [grad is not None for grad in test_model_grads]
+            # ), "Action gradient w.r.t model parameters is None. Gradients wont be tracked correctly through the diffusion model."
 
             actions.append(total_action.unsqueeze(0).cpu().detach())
             pbar.set_description(f"Optimizing OM action: {total_action.item()}")
@@ -340,11 +406,11 @@ if __name__ == "__main__":
 
                 # add noise to the non-endpoint images (to keep it in the distribution of the model)
                 # TODO: what is the exact reasoning behind this? And how is the noise scale determined? Is it just undoing the OM optimization?
-                noise = torch.randn_like(interpolated_images)
-                noise[:, 0], noise[:, -1] = torch.zeros_like(
-                    interpolated_images[:, 0]
-                ), torch.zeros_like(interpolated_images[:, -1])
-                interpolated_images += noise_perturb_scale * noise
+                # noise = torch.randn_like(interpolated_images)
+                # noise[:, 0], noise[:, -1] = torch.zeros_like(
+                #     interpolated_images[:, 0]
+                # ), torch.zeros_like(interpolated_images[:, -1])
+                # interpolated_images += noise_perturb_scale * noise
 
                 if i % save_every == 0:
                     # save interpolation path
@@ -352,6 +418,11 @@ if __name__ == "__main__":
                     save = interpolated_images[batch_idx].detach().clone()
                     save = inv_normalizer(torch.clamp(save, -1.0, 1.0))
                     final_draw.append(save.cpu())
+
+        # free up gpu memory
+        optimizer.zero_grad()
+        del total_action, grads, forces
+        torch.cuda.empty_cache()
 
         with torch.no_grad():
             # run reverse diffusion on the final, optimized path
@@ -385,13 +456,22 @@ if __name__ == "__main__":
             ppl += _ppl.mean()
             pdv += _pdv.mean()
 
-            # Update fid calculator (on [0, 1] images)
-            fid_calculator.update(torch.cat([init_im, final_im]), True)
-            fid_calculator.update(
-                unnormalized_images[:, 1:-1].reshape(
-                    -1, unnormalized_images.shape[-3], H, W
-                ),
-                False,
+            # batch the fid update for memory
+            def update_fid_in_batches(fid_calculator, images, batch_size, is_initial):
+                num_images = images.shape[0]
+                for i in range(0, num_images, batch_size):
+                    batch_images_fid = images[i : i + batch_size]
+                    fid_calculator.update(batch_images_fid, is_initial)
+
+            batch_size_fid = 64
+            update_fid_in_batches(
+                fid_calculator, torch.cat([init_im, final_im]), batch_size_fid, True
+            )
+            unnormalized_reshaped_images = unnormalized_images[:, 1:-1].reshape(
+                -1, unnormalized_images.shape[-3], H, W
+            )
+            update_fid_in_batches(
+                fid_calculator, unnormalized_reshaped_images, batch_size_fid, False
             )
 
         # Plot and log actions and images

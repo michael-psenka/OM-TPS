@@ -14,5 +14,5 @@ ffp-output/
 torchmd-net/
 two-for-one-diffusion/
 
-# michael test notebook
+# ignore test notebook
 michael_testbed.ipynb

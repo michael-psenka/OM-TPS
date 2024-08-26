@@ -19,6 +19,12 @@ Feel free to tuning training parameters, type `python train_mnist.py -h` to get 
 python om_interpolation.py
 ```
 
+The following hyperparams should give decent interpolations on MNIST:
+
+```bash
+python om_interpolation.py --steps 1500 --batch_size 32 --truncate_v_gradient --v_scale 0.5 --kernel_var 2.1
+```
+
 ## Reference
 A neat blog explains how diffusion model works(must read!): https://lilianweng.github.io/posts/2021-07-11-diffusion-models/
 
