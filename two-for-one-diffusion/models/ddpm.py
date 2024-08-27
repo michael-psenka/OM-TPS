@@ -398,6 +398,7 @@ class GaussianDiffusion(nn.Module):
         x2,
         path_length,
         latent_time,
+        encode_and_decode=False,
         num_paths=10,
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
@@ -419,8 +420,12 @@ class GaussianDiffusion(nn.Module):
 
         with torch.no_grad():
 
-            noised_x1 = self.q_sample(x1, latent_time)
-            noised_x2 = self.q_sample(x2, latent_time)
+            if encode_and_decode:
+                noised_x1 = self.q_sample(x1, latent_time)
+                noised_x2 = self.q_sample(x2, latent_time)
+            else:
+                noised_x1 = x1
+                noised_x2 = x2
 
         # linear interpolation of noised_x1 and noised_x2
 
@@ -481,7 +486,10 @@ class GaussianDiffusion(nn.Module):
 
                 pbar.set_description(f"OM Action: {action.item()}")
 
-        xs = self.p_sample_loop(noised_xs.reshape(-1, n_atoms, 3), latent_time)
+        if encode_and_decode:
+            xs = self.p_sample_loop(noised_xs.reshape(-1, n_atoms, 3), latent_time)
+        else:
+            xs = noised_xs
 
         xs = xs.reshape(num_paths, path_length, n_atoms, 3)
         xs = xs.clone().detach()

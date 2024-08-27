@@ -122,7 +122,6 @@ class LangevinDiffusion:
             friction: friction constnat in the Langevin Simulation
             kb: what boltzmann constant to use (consistent, kcal)
         """
-        print(f"norm factor:{model_diff.norm_factor}")
         self.norm_factor = (
             model_diff.norm_factor
         )  # / model_diff.sqrt_alphas_cumprod[t].item()
@@ -138,9 +137,6 @@ class LangevinDiffusion:
         else:
             raise Exception("Wrong kb value")
 
-        import pdb
-
-        pdb.set_trace()
         self.model_forces = ForcesWrapper(
             model_diff,
             t,
@@ -197,9 +193,6 @@ class LangevinDiffusion:
 
         print(f"dt: {dt: .8f} (ps)")
         print(f"KbT: {temp_data/self.kb_inv: .4f}")
-        import pdb
-
-        pdb.set_trace()
 
     def sample(self):
         # Simulate
