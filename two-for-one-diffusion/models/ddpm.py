@@ -398,7 +398,7 @@ class GaussianDiffusion(nn.Module):
         x2,
         path_length,
         latent_time,
-        encode_and_decode=False,
+        encode_and_decode=True,
         num_paths=10,
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,

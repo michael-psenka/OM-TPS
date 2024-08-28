@@ -28,6 +28,15 @@ import mdtraj as md
 from torch.utils.tensorboard import SummaryWriter
 import time
 
+# default cluster endpoints for testing interpolation (obtained by visual inspection of what are hard transition paths to capture)
+CLUSTER_ENDPOINTS = {
+    "chignolin": [16, 6],
+    "trp_cage": [16, 6],
+    "bba": [15, 3],
+    "villin": [13, 6],
+    "protein_g": [13, 16],
+}
+
 
 parser = argparse.ArgumentParser(description="coarse-graining-evaluator")
 parser.add_argument(
@@ -144,15 +153,6 @@ parser.add_argument(
     default="truncated",
 )
 
-
-parser.add_argument(
-    "--cluster_idxs",
-    type=int,
-    nargs="+",  # This allows the argument to accept one or more integers
-    default=[0, 1],
-    help="List of integers representing cluster indices",
-)
-
 samp_args = parser.parse_args()
 
 
@@ -198,7 +198,7 @@ def main(samp_args):
 
     # Init model from args
     model_nn = get_model(args, trainset, device)
-    print(model_nn)
+    # print(model_nn)
 
     # Init DDPM from args
     DDPM_model = GaussianDiffusion(
@@ -264,7 +264,8 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
             )
         )
         cluster_coords = torch.tensor(np.load(cluster_coords_path)).to(device)
-        clusters = samp_args.cluster_idxs
+        clusters = CLUSTER_ENDPOINTS[protein_name]
+        clusters = [c - 1 for c in clusters]  # 1-indexed to 0-indexed
         endpoints = cluster_coords[clusters]
 
         if "om" in samp_args.gen_mode:

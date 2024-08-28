@@ -1,4 +1,4 @@
-for protein in "chignolin" "bba" "protein_g" "trp_cage"
+for protein in "bba" "protein_g" "villin"
 do
 
     # python sample.py \
@@ -7,16 +7,17 @@ do
     #     --num_samples_eval 1000 \
     #     --batch_size_gen 256 \
 
-    python sample.py \
+    for latent_time in {0..800..100}
+    do
+        python sample.py \
             --model_path saved_models/$protein \
-            --gen_mode om_interpolate \
+            --gen_mode interpolate \
             --num_samples_eval 16 \
             --batch_size_gen 16 \
-            --latent_time 0 \
-            --append_exp_name anneal_linear_latent_time=0 \
-            --cluster_idxs 1 2 \
-            --action "simple" \
-            --anneal
+            --latent_time $latent_time \
+            --append_exp_name linear_latent_time=$latent_time
+    done
+
 
     for latent_time in {0..800..100}
     do
@@ -27,32 +28,6 @@ do
             --batch_size_gen 16 \
             --latent_time $latent_time \
             --append_exp_name linear_latent_time=$latent_time \
-            --cluster_idxs 1 2 \
             --action "simple"
-    done
-
-    for latent_time in {0..800..100}
-    do
-        python sample.py \
-            --model_path saved_models/$protein \
-            --gen_mode interpolate \
-            --num_samples_eval 16 \
-            --batch_size_gen 16 \
-            --latent_time $latent_time \
-            --initial_guess_method spherical \
-            --append_exp_name spherical_latent_time=$latent_time \
-            --cluster_idxs 1 2
-    done
-
-    for latent_time in {0..800..100}
-    do
-        python sample.py \
-            --model_path saved_models/$protein \
-            --gen_mode interpolate \
-            --num_samples_eval 16 \
-            --batch_size_gen 16 \
-            --latent_time $latent_time \
-            --append_exp_name linear_latent_time=$latent_time \
-            --cluster_idxs 1 2
     done
 done

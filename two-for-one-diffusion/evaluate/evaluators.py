@@ -529,6 +529,7 @@ class TicEvaluator:
         title,
         file_name,
         endpoints=None,
+        ref_path=None,
         path=None,
         cmap="OrRd",
         gradient=True,
@@ -624,6 +625,23 @@ class TicEvaluator:
                     s=50,
                     linewidth=0,
                     zorder=3,
+                )
+
+        if ref_path is not None:
+            # plot a path connecting each of the points in ref_path
+            for i in range(len(ref_path) - 1):
+                start = ref_path[i]
+                end = ref_path[i + 1]
+                start_x = np.argmin(abs(self.bin_mids_x - start[0]))
+                start_y = np.argmin(abs(self.bin_mids_y - start[1]))
+                end_x = np.argmin(abs(self.bin_mids_x - end[0]))
+                end_y = np.argmin(abs(self.bin_mids_y - end[1]))
+                ax1.plot(
+                    [start_x, end_x],
+                    [start_y, end_y],
+                    color="blue",
+                    linewidth=2,
+                    zorder=2,
                 )
 
         ax1.set_xlabel("TIC 0", labelpad=10, size=12)
