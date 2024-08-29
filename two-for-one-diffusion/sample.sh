@@ -1,4 +1,4 @@
-for protein in "bba" "protein_g" "villin"
+for protein in "protein_g" "villin" #"chignolin" "trp_cage" "bba"
 do
 
     # python sample.py \
@@ -30,4 +30,5 @@ do
             --append_exp_name linear_latent_time=$latent_time \
             --action "simple"
     done
+
 done
