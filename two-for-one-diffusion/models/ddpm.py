@@ -508,7 +508,7 @@ class GaussianDiffusion(nn.Module):
                     noised_xs.grad = grads
                     optimizer.step()
 
-                # centering the path makes actions not decrease
+                # TODO: centering the path makes actions not decrease
                 # noised_xs = center_zero(noised_xs.reshape(-1, n_atoms, 3)).reshape(
                 #         num_paths, path_length, n_atoms, 3
                 #     )
