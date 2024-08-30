@@ -133,9 +133,7 @@ class LangevinDiffusion:
         if kb == "consistent":
             self.kb_inv = 1 / KB * self.norm_factor**2
         elif kb == "kcal":
-            self.kb_inv = (
-                JPERKCAL / KBOLTZMANN / AVOGADRO * (self.norm_factor**2) / 100
-            )
+            self.kb_inv = JPERKCAL / KBOLTZMANN / AVOGADRO * (self.norm_factor**2) / 100
         else:
             raise Exception("Wrong kb value")
 

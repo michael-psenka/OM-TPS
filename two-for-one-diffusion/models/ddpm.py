@@ -357,25 +357,37 @@ class GaussianDiffusion(nn.Module):
         """
 
         n_atoms = x1.shape[0]
+
         x1 = x1.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
         x2 = x2.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
+        x1 = center_zero(x1)
+        x2 = center_zero(x2)
+        assert_center_zero(x1)
+        assert_center_zero(x2)
+
+        x1 = x1 / self.norm_factor
+        x2 = x2 / self.norm_factor
 
         original_x1 = x1.clone()
         original_x2 = x2.clone()
 
+        # Encode (sample from q(x_t | x_0))
         with torch.no_grad():
 
             noised_x1 = self.q_sample(x1, latent_time)
             noised_x2 = self.q_sample(x2, latent_time)
 
-        # linear interpolation of noised_x1 and noised_x2
+        noised_x1 = center_zero(noised_x1)
+        noised_x2 = center_zero(noised_x2)
 
+        # linear interpolation of noised_x1 and noised_x2
         noised_xs = torch.stack(
             [
-                interpolation_fn(noised_x1.cpu(), noised_x2.cpu(), alpha)
+                center_zero(interpolation_fn(noised_x1.cpu(), noised_x2.cpu(), alpha))
                 for alpha in torch.linspace(0, 1, path_length)
             ]
         )
+        # noised_xs = torch.stack([noised_x1, noised_x2]).to(self.device)
 
         noised_xs = noised_xs.permute((1, 0, 2, 3)).to(
             self.device
@@ -385,12 +397,15 @@ class GaussianDiffusion(nn.Module):
         xs = self.p_sample_loop(noised_xs.reshape(-1, n_atoms, 3), latent_time)
 
         xs = xs.reshape(num_paths, path_length, n_atoms, 3)
+        # xs = xs.reshape(num_paths, 2, n_atoms, 3)
         xs = xs.clone().detach()
 
         # reset the endpoints
         xs[:, 0], xs[:, -1] = original_x1, original_x2
 
-        return xs.reshape(-1, n_atoms, 3)
+        final_path = xs.reshape(-1, n_atoms, 3) * self.norm_factor
+
+        return final_path
 
     def om_interpolate(
         self,
