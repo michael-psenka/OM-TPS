@@ -387,7 +387,6 @@ class GaussianDiffusion(nn.Module):
                 for alpha in torch.linspace(0, 1, path_length)
             ]
         )
-        # noised_xs = torch.stack([noised_x1, noised_x2]).to(self.device)
 
         noised_xs = noised_xs.permute((1, 0, 2, 3)).to(
             self.device
@@ -397,7 +396,6 @@ class GaussianDiffusion(nn.Module):
         xs = self.p_sample_loop(noised_xs.reshape(-1, n_atoms, 3), latent_time)
 
         xs = xs.reshape(num_paths, path_length, n_atoms, 3)
-        # xs = xs.reshape(num_paths, 2, n_atoms, 3)
         xs = xs.clone().detach()
 
         # reset the endpoints
@@ -430,6 +428,14 @@ class GaussianDiffusion(nn.Module):
         x1 = x1.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
         x2 = x2.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
 
+        x1 = center_zero(x1)
+        x2 = center_zero(x2)
+        assert_center_zero(x1)
+        assert_center_zero(x2)
+
+        x1 = x1 / self.norm_factor
+        x2 = x2 / self.norm_factor
+
         original_x1 = x1.clone()
         original_x2 = x2.clone()
 
@@ -442,11 +448,14 @@ class GaussianDiffusion(nn.Module):
                 noised_x1 = x1
                 noised_x2 = x2
 
+            noised_x1 = center_zero(noised_x1)
+            noised_x2 = center_zero(noised_x2)
+
         # linear interpolation of noised_x1 and noised_x2
 
         noised_xs = torch.stack(
             [
-                initial_guess_fn(noised_x1.cpu(), noised_x2.cpu(), alpha)
+                center_zero(initial_guess_fn(noised_x1.cpu(), noised_x2.cpu(), alpha))
                 for alpha in torch.linspace(0, 1, path_length)
             ]
         )
@@ -499,6 +508,11 @@ class GaussianDiffusion(nn.Module):
                     noised_xs.grad = grads
                     optimizer.step()
 
+                # centering the path makes actions not decrease
+                # noised_xs = center_zero(noised_xs.reshape(-1, n_atoms, 3)).reshape(
+                #         num_paths, path_length, n_atoms, 3
+                #     )
+
                 pbar.set_description(f"OM Action: {action.item()}")
 
         if encode_and_decode:
@@ -512,7 +526,9 @@ class GaussianDiffusion(nn.Module):
         # reset the endpoints
         xs[:, 0], xs[:, -1] = original_x1, original_x2
 
-        return xs.reshape(-1, n_atoms, 3)
+        final_path = xs.reshape(-1, n_atoms, 3) * self.norm_factor
+
+        return final_path
 
     @property
     def loss_fn(self):
