@@ -317,6 +317,26 @@ class GaussianDiffusion(nn.Module):
             * self.norm_factor
         )
 
+    # take multiple "gradient steps" with respect to the denoising mean model
+    # @torch.no_grad()
+    # def multi_step_denoising_no_noise(self, mol_t, t, num_steps=1):
+
+    #     mol_next = mol_t.clone()
+    #     for step in range(num_steps):
+    #         # current t is max(0, t - step)
+    #         curr_t = torch.max(t - step, torch.tensor(0).to(self.device))
+    #         x_next = x_next - center_zero(self.model(x_next, self.h, 1.0 * curr_t / self.num_timesteps, alphas=self.sqrt_alphas_cumprod[curr_t].pow(2))
+    #         )
+
+    #     model_output = center_zero(model_output)
+
+    #     # scale down output such that scale of output step is approximately
+    #     # invariant to num_steps. 1/num_steps is too steep since it assumes
+    #     # all gradients are in line and don't shrink, both of which are typically
+    #     # false. 1/sqrt empirically seems to keep the scale invariant, at least
+    #     # as tested in smaller settings. TODO: more testing and rigorous analysis
+    #     return (1 / math.sqrt(num_steps))*x_next - x_t
+
     def q_sample(self, x_start, t, noise=None):
         """
         Sample noisy molecule from forward process.
@@ -468,6 +488,8 @@ class GaussianDiffusion(nn.Module):
 
         pbar = tqdm(range(om_steps))
         actions = []
+        path_terms = []
+        force_terms = []
         with torch.enable_grad():
             noised_xs.requires_grad = True
             # Optimization of path using OM action
@@ -479,26 +501,34 @@ class GaussianDiffusion(nn.Module):
                 else:
                     diff_time = latent_time
 
-                force_func = lambda x: ForcesWrapper(
-                    self,
-                    diff_time,
-                    self.num_timesteps,
-                    self.kb_inv / self.temp_data,
-                )(center_zero(x))[-1]
-                # force_func = lambda x: self.force_func(x, diff_time)
+                # force_func = lambda x: ForcesWrapper(
+                #     self,
+                #     diff_time,
+                #     self.num_timesteps,
+                #     self.kb_inv / self.temp_data,
+                # )(center_zero(x))[-1]
+                force_func = lambda x: self.force_func(x, diff_time)
 
                 laplace = lambda x: self.laplacian_func(x, diff_time)
                 action_func = action_cls(
                     force_func=force_func,
                     laplace_func=laplace,
-                    dt=0.01,
-                    gamma=12,
+                    dt=0.001,
+                    gamma=100,
                     D=0.1,
                 )  # TODO: figure out dt, gamma, D (D is not used for TruncatedAction)
+                terms = [action_func(x) for x in noised_xs]
+                first_term = torch.cat([term[0].unsqueeze(0) for term in terms]).mean()
+                second_term = torch.cat([term[1].unsqueeze(0) for term in terms]).mean()
                 action = torch.cat(
-                    [action_func(x).unsqueeze(0) for x in noised_xs]
-                ).mean()  # TODO: vmap over batch dimension
+                    [(term[0] + term[1]).unsqueeze(0) for term in terms]
+                ).mean()
+                # action = torch.cat(
+                #     [action_func(x).unsqueeze(0) for x in noised_xs]
+                # ).mean()  # TODO: vmap over batch dimension
                 actions.append(action.item())
+                path_terms.append(first_term.item())
+                force_terms.append(second_term.item())
 
                 optimizer.zero_grad()
                 (grads,) = torch.autograd.grad(action, noised_xs)
@@ -508,7 +538,9 @@ class GaussianDiffusion(nn.Module):
                     noised_xs.grad = grads
                     optimizer.step()
 
-                pbar.set_description(f"OM Action: {action.item()}")
+                pbar.set_description(
+                    f"OM Action: {action.item()}, Path Contribution: {round(first_term.item() / action.item() * 100, 3)}%, Force Contribution: {round(second_term.item() / action.item() * 100, 3)}%"
+                )
 
         if encode_and_decode:
             xs = self.p_sample_loop(noised_xs.reshape(-1, n_atoms, 3), latent_time)
@@ -522,6 +554,19 @@ class GaussianDiffusion(nn.Module):
         xs[:, 0], xs[:, -1] = original_x1, original_x2
 
         final_path = xs.reshape(-1, n_atoms, 3) * self.norm_factor
+
+        # Print improvement in action
+        print(
+            f"Initial action: {actions[0]}, Final action: {actions[-1]}, Percent improvement: {(actions[0] - actions[-1]) / actions[0] * 100}%"
+        )
+        # Print improvement in path term
+        print(
+            f"Initial path norm: {path_terms[0]}, Final path norm: {path_terms[-1]}, Percent improvement: {(path_terms[0] - path_terms[-1]) / path_terms[0] * 100}%"
+        )
+        # Print improvement in force term
+        print(
+            f"Initial force norm: {force_terms[0]}, Final force norm: {force_terms[-1]}, Percent improvement: {(force_terms[0] - force_terms[-1]) / force_terms[0] * 100}%"
+        )
 
         return final_path
 

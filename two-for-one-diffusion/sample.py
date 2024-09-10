@@ -153,6 +153,12 @@ parser.add_argument(
     default="truncated",
 )
 
+parser.add_argument(
+    "--no_encode_and_decode",
+    action="store_true",
+    help="Don't encode the molecule into latent space before OM optimization, and also don't decode it after",
+)
+
 samp_args = parser.parse_args()
 
 
@@ -281,6 +287,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                     x1=endpoints[0],
                     x2=endpoints[1],
                     path_length=samp_args.path_length,
+                    encode_and_decode=not samp_args.no_encode_and_decode,
                     latent_time=samp_args.latent_time,
                     initial_guess_fn=(
                         torch.lerp

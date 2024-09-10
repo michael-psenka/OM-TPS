@@ -312,6 +312,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         x2,
         path_length,
         latent_time,
+        encode_and_decode=True,
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
         om_steps=100,
@@ -325,6 +326,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         self.x2 = x2
         self.path_length = path_length
         self.latent_time = latent_time
+        self.encode_and_decode = encode_and_decode
         self.action_cls = action_cls
         self.initial_guess_fn = initial_guess_fn
         self.om_steps = om_steps
@@ -337,6 +339,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
             x1=self.x1,
             x2=self.x2,
             path_length=self.path_length,
+            encode_and_decode=self.encode_and_decode,
             latent_time=self.latent_time,
             num_paths=num_paths,
             action_cls=self.action_cls,

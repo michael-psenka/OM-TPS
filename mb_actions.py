@@ -60,7 +60,8 @@ class TruncatedAction(torch.nn.Module):
             self.dt / 4 / self.gamma
         )
         result = torch.sum(first_term + second_term)
-        return result
+        # return result
+        return first_term.sum(), second_term.sum()
 
 
 class SimpleAction(torch.nn.Module):
