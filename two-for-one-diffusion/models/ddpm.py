@@ -474,7 +474,7 @@ class GaussianDiffusion(nn.Module):
             for i in pbar:
                 if anneal:
                     diff_time = (
-                        self.num_timesteps - i - 1
+                        self.num_timesteps - int(self.num_timesteps / om_steps) * i - 1
                     )  # anneal the time from T to 0
                 else:
                     diff_time = latent_time
@@ -484,7 +484,7 @@ class GaussianDiffusion(nn.Module):
                     diff_time,
                     self.num_timesteps,
                     self.kb_inv / self.temp_data,
-                )(x)[-1]
+                )(center_zero(x))[-1]
                 # force_func = lambda x: self.force_func(x, diff_time)
 
                 laplace = lambda x: self.laplacian_func(x, diff_time)
@@ -494,7 +494,7 @@ class GaussianDiffusion(nn.Module):
                     dt=0.01,
                     gamma=12,
                     D=0.1,
-                )  # TODO: figure out dt, gamma, D
+                )  # TODO: figure out dt, gamma, D (D is not used for TruncatedAction)
                 action = torch.cat(
                     [action_func(x).unsqueeze(0) for x in noised_xs]
                 ).mean()  # TODO: vmap over batch dimension
@@ -507,11 +507,6 @@ class GaussianDiffusion(nn.Module):
                     grads[:, 0], grads[:, -1] = 0, 0
                     noised_xs.grad = grads
                     optimizer.step()
-
-                # TODO: centering the path makes actions not decrease
-                # noised_xs = center_zero(noised_xs.reshape(-1, n_atoms, 3)).reshape(
-                #         num_paths, path_length, n_atoms, 3
-                #     )
 
                 pbar.set_description(f"OM Action: {action.item()}")
 
