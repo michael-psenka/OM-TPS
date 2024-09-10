@@ -498,7 +498,7 @@ class GaussianDiffusion(nn.Module):
             self.device
         )  # make batch dimension come first [B, path_length, n_atoms, 3]
 
-        optimizer = torch.optim.AdamW([noised_xs], lr=lr)
+        optimizer = torch.optim.Adam([noised_xs], lr=lr)
 
         pbar = tqdm(range(om_steps))
         actions = []
@@ -522,7 +522,7 @@ class GaussianDiffusion(nn.Module):
                     )
                 else:
                     # TODO: is there a difference in results between these two force parameterizations? If so, why?
-                    # Yes, there seems to be. The first one is faster but leads to poorer action improvement. Why?
+                    # Yes, there seems to be. The first one is faster but leads to poorer action improvement. TODO: Why?
                     # force_func = lambda x: ForcesWrapper(
                     #     self,
                     #     diff_time,
