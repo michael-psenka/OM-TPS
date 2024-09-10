@@ -12,7 +12,8 @@ def get_interpolation_viz(interpolated_pos):
     """
     Interpolated_pos: [N_atoms, path_length, 3] interpolated positions.
     """
-    interpolated_pos = interpolated_pos.cpu().numpy()
+    if not isinstance(interpolated_pos, np.ndarray):
+        interpolated_pos = interpolated_pos.cpu().numpy()
     # Create bonds for visualization
     senders = np.arange(interpolated_pos.shape[0] - 1)
     receivers = np.arange(1, interpolated_pos.shape[0])
