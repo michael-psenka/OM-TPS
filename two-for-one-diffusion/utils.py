@@ -318,6 +318,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         om_steps=100,
         lr=2e-1,
         anneal=False,
+        truncated_gradient=False,
         temperature=1.0,
     ):
         super(OMInterpolatorWrapper, self).__init__()
@@ -332,6 +333,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         self.om_steps = om_steps
         self.lr = lr
         self.anneal = anneal
+        self.truncated_gradient = truncated_gradient
         self.temperature = temperature
 
     def forward(self, num_paths):
@@ -347,6 +349,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
             om_steps=self.om_steps,
             lr=self.lr,
             anneal=self.anneal,
+            truncated_gradient=self.truncated_gradient,
             temperature=self.temperature,
         )
 

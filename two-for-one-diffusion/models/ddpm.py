@@ -1,6 +1,7 @@
 # Code largely based on:
 # https://github.com/lucidrains/denoising-diffusion-pytorch
 
+import math
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -318,24 +319,33 @@ class GaussianDiffusion(nn.Module):
         )
 
     # take multiple "gradient steps" with respect to the denoising mean model
-    # @torch.no_grad()
-    # def multi_step_denoising_no_noise(self, mol_t, t, num_steps=1):
+    # TODO: investigate whether scaling is correct here (should match forces)
+    @torch.no_grad()
+    def multi_step_denoising_no_noise(self, mol_t, t, num_steps=1):
 
-    #     mol_next = mol_t.clone()
-    #     for step in range(num_steps):
-    #         # current t is max(0, t - step)
-    #         curr_t = torch.max(t - step, torch.tensor(0).to(self.device))
-    #         x_next = x_next - center_zero(self.model(x_next, self.h, 1.0 * curr_t / self.num_timesteps, alphas=self.sqrt_alphas_cumprod[curr_t].pow(2))
-    #         )
+        if not isinstance(t, torch.Tensor):
+            t = torch.tensor([t]).repeat(mol_t.shape[0]).to(self.device)
 
-    #     model_output = center_zero(model_output)
+        mol_next = mol_t.clone()
+        for step in range(num_steps):
+            # current t is max(0, t - step)
+            curr_t = torch.max(torch.tensor(0).to(t.device), t - step)
+            mol_next = mol_next - center_zero(
+                self.model(
+                    mol_next,
+                    self.h,
+                    1.0 * curr_t / self.num_timesteps,
+                    alphas=self.sqrt_alphas_cumprod[curr_t].pow(2),
+                )
+            )
+            mol_next = center_zero(mol_next)
 
-    #     # scale down output such that scale of output step is approximately
-    #     # invariant to num_steps. 1/num_steps is too steep since it assumes
-    #     # all gradients are in line and don't shrink, both of which are typically
-    #     # false. 1/sqrt empirically seems to keep the scale invariant, at least
-    #     # as tested in smaller settings. TODO: more testing and rigorous analysis
-    #     return (1 / math.sqrt(num_steps))*x_next - x_t
+        # scale down output such that scale of output step is approximately
+        # invariant to num_steps. 1/num_steps is too steep since it assumes
+        # all gradients are in line and don't shrink, both of which are typically
+        # false. 1/sqrt empirically seems to keep the scale invariant, at least
+        # as tested in smaller settings. TODO: more testing and rigorous analysis
+        return (1 / math.sqrt(num_steps)) * mol_next - mol_t
 
     def q_sample(self, x_start, t, noise=None):
         """
@@ -438,11 +448,15 @@ class GaussianDiffusion(nn.Module):
         om_steps=100,
         lr=2e-1,
         anneal=False,
+        truncated_gradient=False,
         temperature=1.0,
     ):
         """
         Encode the two points into latent space, linearly or spherically interpolate, optimize OM action, and decode.
         """
+        self.model.training = (
+            True  # needed to track gradients through conservative force calculation
+        )
 
         n_atoms = x1.shape[0]
         x1 = x1.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
@@ -484,7 +498,7 @@ class GaussianDiffusion(nn.Module):
             self.device
         )  # make batch dimension come first [B, path_length, n_atoms, 3]
 
-        optimizer = torch.optim.Adam([noised_xs], lr=lr)
+        optimizer = torch.optim.AdamW([noised_xs], lr=lr)
 
         pbar = tqdm(range(om_steps))
         actions = []
@@ -501,13 +515,21 @@ class GaussianDiffusion(nn.Module):
                 else:
                     diff_time = latent_time
 
-                # force_func = lambda x: ForcesWrapper(
-                #     self,
-                #     diff_time,
-                #     self.num_timesteps,
-                #     self.kb_inv / self.temp_data,
-                # )(center_zero(x))[-1]
-                force_func = lambda x: self.force_func(x, diff_time)
+                if truncated_gradient:
+                    # Truncated gradient method: (maybe would be better to directly populate grads with the forces?)
+                    force_func = lambda x: self.multi_step_denoising_no_noise(
+                        x, diff_time, num_steps=1
+                    )
+                else:
+                    # TODO: is there a difference in results between these two force parameterizations? If so, why?
+                    # Yes, there seems to be. The first one is faster but leads to poorer action improvement. Why?
+                    # force_func = lambda x: ForcesWrapper(
+                    #     self,
+                    #     diff_time,
+                    #     self.num_timesteps,
+                    #     self.kb_inv / self.temp_data,
+                    # )(center_zero(x))[-1]
+                    force_func = lambda x: self.force_func(center_zero(x), diff_time)
 
                 laplace = lambda x: self.laplacian_func(x, diff_time)
                 action_func = action_cls(

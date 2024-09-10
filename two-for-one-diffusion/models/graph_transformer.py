@@ -110,8 +110,7 @@ class GraphTransformer(nn.Module):
                 energy = output
                 if return_energy:
                     return energy
-                # forces = compute_forces(energy, x, self.training)
-                forces = compute_forces(energy, x)
+                forces = compute_forces(energy, x, self.training)
 
             else:
                 forces = output

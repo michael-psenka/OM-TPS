@@ -159,6 +159,13 @@ parser.add_argument(
     help="Don't encode the molecule into latent space before OM optimization, and also don't decode it after",
 )
 
+parser.add_argument(
+    "--truncated_gradient",
+    action="store_true",
+    help="Instead of taking gradient through the diffusion model forces, just follow the forces",
+)
+
+
 samp_args = parser.parse_args()
 
 
@@ -298,6 +305,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                     om_steps=samp_args.steps,
                     lr=samp_args.lr,
                     anneal=samp_args.anneal,
+                    truncated_gradient=samp_args.truncated_gradient,
                 )
                 .to(device)
                 .eval()
