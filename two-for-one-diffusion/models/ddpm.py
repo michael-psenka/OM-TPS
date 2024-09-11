@@ -503,6 +503,7 @@ class GaussianDiffusion(nn.Module):
         actions = []
         path_terms = []
         force_terms = []
+        all_noised_xs = [noised_xs.clone().detach()]
         with torch.enable_grad():
             noised_xs.requires_grad = True
             # Optimization of path using OM action
@@ -560,22 +561,28 @@ class GaussianDiffusion(nn.Module):
                     noised_xs.grad = grads
                     optimizer.step()
 
+                all_noised_xs.append(noised_xs.clone().detach())
                 pbar.set_description(
                     f"OM Action: {action.item()}, Path Contribution: {round(first_term.item() / action.item() * 100, 3)}%, Force Contribution: {round(second_term.item() / action.item() * 100, 3)}%"
                 )
 
-        if encode_and_decode:
-            xs = self.p_sample_loop(noised_xs.reshape(-1, n_atoms, 3), latent_time)
-        else:
-            xs = noised_xs
+        all_denoised_paths = []
+        # decode the optimized paths (keeping all for future visualization)
+        for path in all_noised_xs:
+            if encode_and_decode:
+                denoised_path = self.p_sample_loop(
+                    path.reshape(-1, n_atoms, 3), latent_time
+                )
+            else:
+                denoised_path = path
 
-        xs = xs.reshape(num_paths, path_length, n_atoms, 3)
-        xs = xs.clone().detach()
+            denoised_path = denoised_path.reshape(num_paths, path_length, n_atoms, 3)
 
-        # reset the endpoints
-        xs[:, 0], xs[:, -1] = original_x1, original_x2
+            # reset the endpoints
+            denoised_path[:, 0], denoised_path[:, -1] = original_x1, original_x2
 
-        final_path = xs.reshape(-1, n_atoms, 3) * self.norm_factor
+            denoised_path = denoised_path.reshape(-1, n_atoms, 3) * self.norm_factor
+            all_denoised_paths.append(denoised_path)
 
         # Print improvement in action
         print(
@@ -592,7 +599,8 @@ class GaussianDiffusion(nn.Module):
 
         # return dict with final path, actions, path terms, force terms
         return {
-            "final_path": final_path,
+            "final_path": all_denoised_paths[-1],
+            "all_paths": torch.stack(all_denoised_paths),
             "actions": torch.tensor(actions),
             "path_terms": torch.tensor(path_terms),
             "force_terms": torch.tensor(force_terms),

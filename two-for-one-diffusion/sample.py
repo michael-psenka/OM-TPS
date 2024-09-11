@@ -343,6 +343,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
         )
 
         sampled_mol = output["sampled_mol"]
+
         if "actions" in output.keys():
             actions = output["actions"]
             path_terms = output["path_terms"]
@@ -359,6 +360,14 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
             ax.set_ylabel("Value")
             ax.set_yscale("log")
             plt.savefig(str(eval_folder) + "/actions_path_force_terms.png")
+
+            # History of paths along the optimization
+            all_paths = output["all_paths"]
+            # Save paths
+            torch.save(
+                all_paths,
+                str(str(eval_folder) + f"/path_history-{samp_args.gen_mode}.pt"),
+            )
 
     # Generate Langevin samples from simulation
     elif samp_args.gen_mode == "langevin":
