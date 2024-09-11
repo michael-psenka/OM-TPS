@@ -27,6 +27,7 @@ from dynamics.langevin import temp_dict
 import mdtraj as md
 from torch.utils.tensorboard import SummaryWriter
 import time
+import matplotlib.pyplot as plt
 
 # default cluster endpoints for testing interpolation (obtained by visual inspection of what are hard transition paths to capture)
 CLUSTER_ENDPOINTS = {
@@ -135,11 +136,11 @@ parser.add_argument(
     help="whether to anneal temperature during interpolation",
 )
 parser.add_argument(
-    "--path_length", type=int, help="length of interpolation path", default=50
+    "--path_length", type=int, help="length of interpolation path", default=200
 )
 
 parser.add_argument(
-    "--steps", type=int, help="number of OM optimization steps", default=100
+    "--steps", type=int, help="number of OM optimization steps", default=200
 )
 
 parser.add_argument(
@@ -334,12 +335,30 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
         else:
             parallel_batches = 1
 
-        sampled_mol = sample_interpolations_from_model(
+        output = sample_interpolations_from_model(
             interpolator,
             num_paths=samp_args.num_samples_eval // parallel_batches,
             batch_size=samp_args.batch_size_gen // parallel_batches,
             verbose=True,
         )
+
+        sampled_mol = output["sampled_mol"]
+        if "actions" in output.keys():
+            actions = output["actions"]
+            path_terms = output["path_terms"]
+            force_terms = output["force_terms"]
+
+            # make a line plot where actions, path terms, and force terms are plotted using matplotlib and save as png
+            fig, ax = plt.subplots(1, 1, figsize=(10, 5))
+            ax.plot(actions, label="Action")
+            ax.plot(path_terms, label="Path Norm Loss")
+            ax.plot(force_terms, label="Force Norm Loss")
+            ax.legend()
+            ax.set_title("Actions, Path Norms, and Force Norms")
+            ax.set_xlabel("Optimization Step")
+            ax.set_ylabel("Value")
+            ax.set_yscale("log")
+            plt.savefig(str(eval_folder) + "/actions_path_force_terms.png")
 
     # Generate Langevin samples from simulation
     elif samp_args.gen_mode == "langevin":

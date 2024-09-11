@@ -173,7 +173,6 @@ class GaussianDiffusion(nn.Module):
             alphas=self.sqrt_alphas_cumprod[t].pow(2),
         )
         force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * noise_pred
-        # force = -noise_pred  # TODO: check that norms of forces are reasonable
         return force
 
     def laplacian_func(self, x, t):
@@ -433,7 +432,7 @@ class GaussianDiffusion(nn.Module):
 
         final_path = xs.reshape(-1, n_atoms, 3) * self.norm_factor
 
-        return final_path
+        return {"final_path": final_path}
 
     def om_interpolate(
         self,
@@ -532,6 +531,7 @@ class GaussianDiffusion(nn.Module):
                     force_func = lambda x: self.force_func(center_zero(x), diff_time)
 
                 laplace = lambda x: self.laplacian_func(x, diff_time)
+                # the below settings of dt, gamma upweight the path term a lot - empirically found to work well
                 action_func = action_cls(
                     force_func=force_func,
                     laplace_func=laplace,
@@ -590,7 +590,13 @@ class GaussianDiffusion(nn.Module):
             f"Initial force norm: {force_terms[0]}, Final force norm: {force_terms[-1]}, Percent improvement: {(force_terms[0] - force_terms[-1]) / force_terms[0] * 100}%"
         )
 
-        return final_path
+        # return dict with final path, actions, path terms, force terms
+        return {
+            "final_path": final_path,
+            "actions": torch.tensor(actions),
+            "path_terms": torch.tensor(path_terms),
+            "force_terms": torch.tensor(force_terms),
+        }
 
     @property
     def loss_fn(self):

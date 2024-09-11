@@ -965,18 +965,39 @@ def sample_interpolations_from_model(
     )
     batches = num_to_groups(num_paths, batch_size)
     all_path_list = []
+    all_actions_list = []
+    all_path_terms_list = []
+    all_force_terms_list = []
     for i, batch_size in enumerate(batches):
-        all_path_list.append(
-            interpolator(
-                num_paths=batch_size,
-            )
+        output = interpolator(
+            num_paths=batch_size,
         )
+        all_path_list.append(output["final_path"])
+        if i == 0:
+            if "actions" in output.keys():
+                all_actions_list.append(output["actions"])
+            if "path_terms" in output.keys():
+                all_path_terms_list.append(output["path_terms"])
+            if "force_terms" in output.keys():
+                all_force_terms_list.append(output["force_terms"])
+
         if verbose:
             print(f"Batch {i+1} from {len(batches)} generated")
     # all_mol_list = list(map(lambda n: model.sample(batch_size=n), batches))
     all_path = torch.cat(all_path_list, dim=0).cpu()
+    all_actions = torch.cat(all_actions_list, dim=0).cpu()
+    all_path_terms = torch.cat(all_path_terms_list, dim=0).cpu()
+    all_force_terms = torch.cat(all_force_terms_list, dim=0).cpu()
+
     print(f"{int(len(all_path) / interpolator.path_length)} paths generated")
-    return all_path
+
+    output = {
+        "sampled_mol": all_path,
+        "actions": all_actions,
+        "path_terms": all_path_terms,
+        "force_terms": all_force_terms,
+    }
+    return output
 
 
 def num_to_groups(num, divisor):
