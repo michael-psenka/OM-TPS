@@ -140,7 +140,7 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--steps", type=int, help="number of OM optimization steps", default=200
+    "--steps", type=int, help="number of OM optimization steps", default=500
 )
 
 parser.add_argument(

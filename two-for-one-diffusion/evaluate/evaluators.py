@@ -988,20 +988,26 @@ def sample_interpolations_from_model(
             print(f"Batch {i+1} from {len(batches)} generated")
     # all_mol_list = list(map(lambda n: model.sample(batch_size=n), batches))
     all_path = torch.cat(all_path_list, dim=0).cpu()
-    all_paths = torch.cat(path_optimization_list, dim=0).cpu()
-    all_actions = torch.cat(all_actions_list, dim=0).cpu()
-    all_path_terms = torch.cat(all_path_terms_list, dim=0).cpu()
-    all_force_terms = torch.cat(all_force_terms_list, dim=0).cpu()
+
+    output = {"sampled_mol": all_path}
+
+    if len(path_optimization_list) > 0:
+        all_paths = torch.cat(path_optimization_list, dim=0).cpu()
+        all_actions = torch.cat(all_actions_list, dim=0).cpu()
+        all_path_terms = torch.cat(all_path_terms_list, dim=0).cpu()
+        all_force_terms = torch.cat(all_force_terms_list, dim=0).cpu()
+
+        output.update(
+            {
+                "all_paths": all_paths,
+                "actions": all_actions,
+                "path_terms": all_path_terms,
+                "force_terms": all_force_terms,
+            }
+        )
 
     print(f"{int(len(all_path) / interpolator.path_length)} paths generated")
 
-    output = {
-        "sampled_mol": all_path,
-        "all_paths": all_paths,
-        "actions": all_actions,
-        "path_terms": all_path_terms,
-        "force_terms": all_force_terms,
-    }
     return output
 
 
