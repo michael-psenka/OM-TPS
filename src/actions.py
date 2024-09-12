@@ -162,7 +162,62 @@ class TruncatedAction(torch.nn.Module):
 
         return result * self.dt / 2.0
 
+class TruncatedActionPathvar(torch.nn.Module):
+    """
+    Onsager-Machlup action, just ignoring the Hessian of energy.
+    Artur B. Adib. Stochastic actions for diffusive dynamics: Reweight-
+    ing, sampling, and minimization. The Journal of Physical Chemistry B,
+    112(19):5910–5916, 05 2008
 
+    Note: we omit the term which involves the difference of the energy at the endpoints of the path,
+    because it is constant and does not affect the optimization.
+    """
+
+    def __init__(self, dt, xi, pathvar_scale=1.0):
+        """
+        Args:
+            dt: float, time step
+            xi: float, inverse temperature
+            D: float, diffusion coefficient
+        """
+        super(TruncatedActionPathvar, self).__init__()
+        self.dt = dt
+        self.xi = xi
+        self.pathvar_scale = pathvar_scale
+
+        # When ignoring Hessian, OM action is temperatureles
+        # self.D = D
+
+    def forward(self, path: torch.Tensor, forces: torch.Tensor):
+        """
+        Args:
+            path: torch.Tensor of images of shape [P, C, H, W], where P is the number of images on the path.
+            forces: torch.Tensor of diffusion model score estimates of shape [P, C, H, W], where N is the number of points on the path.
+        Returns the OM action of the path (torch.Tensor of shape [1]).
+        """
+        # assert path.shape == forces.shape, "path and forces must have the same shape"
+        # Path and forces have different shapes in the term-by-term case - path has shape [2, C, H, W] and forces has shape [1, C, H, W]
+        assert len(path.shape) == 4, "path must have shape [P, C, H, W]"
+        assert len(forces.shape) == 4, "forces must have shape [P, C, H, W]"
+
+        # TODO ???
+        # add extra dimension to account for term-by-term case
+        # if forces[0].shape[0] == 1:
+        #    forces = forces.repeat(2, 1, 1, 1)
+
+        first_term = torch.square((path[1:] - path[:-1]) / self.dt)
+
+        second_term = torch.square(forces[:-1] / self.xi)
+
+        # Third term just ignored.
+
+        # NOTE: modification of original action
+        # third term: variance of squared distances computed from first term
+        third_term = torch.var(torch.sum(first_term, dim=(1,2,3)))
+
+        result = torch.sum(first_term + second_term) + self.pathvar_scale*third_term
+
+        return result * self.dt / 2.0
 """
 Slightly different action, TODO: understand the difference
 """
