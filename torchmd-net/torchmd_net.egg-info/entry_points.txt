@@ -1,2 +1,0 @@
-[console_scripts]
-torchmd-train = torchmdnet.scripts.train:main

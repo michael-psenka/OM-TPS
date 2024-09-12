@@ -22,6 +22,8 @@ from utils import (
     slerp,
 )
 
+from torchmdnet.models.model import load_model as load_nnip_model
+
 KB = 0.83144626181  # This is the Boltzmann constant conversed from J/K (Kg, m^2 / s^2 / K) to -> g/mol, angstroms, ps and K.
 
 
@@ -532,6 +534,19 @@ class GaussianDiffusion(nn.Module):
         # # save the figure
         # plt.savefig(f"force_norms_{protein}.png")
 
+        # load the NNIP model
+        model = load_nnip_model("/home/sanjeevr/om-diffusion/two-for-one-diffusion/nnips/cln/model.ckpt", derivative=True)
+        def get_force_from_nnip(x):
+            import pdb; pdb.set_trace()
+            batch = torch.arange(x.shape[0]).repeat_interleave(self.num_atoms).to(x.device)
+            x = x.reshape(-1, 3)
+            # TODO: get atomic numbers and batch
+            z = 0#TODO
+            
+            
+            force = model(z = z, pos = x, batch = batch)[1].reshape(-1, self.num_atoms, 3)
+            return force
+
         with torch.enable_grad():
             noised_xs.requires_grad = True
             # Optimization of path using OM action
@@ -558,9 +573,11 @@ class GaussianDiffusion(nn.Module):
                     #     self.num_timesteps,
                     #     self.kb_inv / self.temp_data,
                     # )(center_zero(x))[-1]
-                    force_func = lambda x: self.force_func(
-                        center_zero(x), diff_time
-                    )
+                    # force_func = lambda x: self.force_func(
+                    #     center_zero(x), diff_time
+                    # )
+
+                    force_func = get_force_from_nnip
 
                 laplace = lambda x: self.laplacian_func(x, diff_time)
                 action_func = action_cls(
