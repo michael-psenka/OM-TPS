@@ -12,6 +12,7 @@ guided_diffusion/
 mnist/
 ffp-output/
 torchmd-net/
+nnips/
 
 # Two for One stuff:
 

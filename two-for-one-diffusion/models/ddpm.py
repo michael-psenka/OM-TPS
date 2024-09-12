@@ -171,15 +171,15 @@ class GaussianDiffusion(nn.Module):
             1.0 * t / self.num_timesteps,
             alphas=self.sqrt_alphas_cumprod[t].pow(2),
         )
-        force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * noise_pred
-        return force
+        # force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * noise_pred
+        return noise_pred
 
     def laplacian_func(self, x, t):
-        raise NotImplementedError("Laplacian function not implemented yet.")
-        hessian_fn = torch.func.jacrev(self.force_func, argnums=0)
-        hessian = hessian_fn(x, t)  # shape of [P x 2 x P x 2]
-        indices = torch.arange(x.shape[0])
-        laplace = torch.vmap(torch.diag)(hessian[indices, :, indices, :])
+        # raise NotImplementedError("Laplacian function not implemented yet.")
+        # Taken from Martin's optimal Hessian branch, but not sure if it's correct (Laplacian term is much smaller than path and force norm terms)
+        noise_pred = self.force_func(x, t)
+        dirac = torch.nn.init.dirac_(torch.zeros(1, x.shape[1], 3)).to(noise_pred.device)
+        laplace = torch.autograd.grad(torch.sum(noise_pred, dim = 0, keepdim = True), x, grad_outputs=dirac, retain_graph=True, allow_unused=True)[0]
         return laplace
 
     def predict_start_from_noise(self, x_t, t, noise):
@@ -324,7 +324,7 @@ class GaussianDiffusion(nn.Module):
         if not isinstance(t, torch.Tensor):
             t = torch.tensor([t]).repeat(mol_t.shape[0]).to(self.device)
 
-        mol_next = mol_t.clone()
+        mol_next = center_zero(mol_t.clone())
         for step in range(num_steps):
             # current t is max(0, t - step)
             curr_t = torch.max(torch.tensor(0).to(t.device), t - step)
@@ -547,7 +547,7 @@ class GaussianDiffusion(nn.Module):
                 if truncated_gradient:
                     # Truncated gradient method: (maybe would be better to directly populate grads with the forces?)
                     force_func = lambda x: self.multi_step_denoising_no_noise(
-                        x, diff_time, num_steps=1
+                        center_zero(x), diff_time, num_steps=1
                     )
                 else:
                     # TODO: is there a difference in results between these two force parameterizations? If so, why?
@@ -560,17 +560,16 @@ class GaussianDiffusion(nn.Module):
                     # )(center_zero(x))[-1]
                     force_func = lambda x: self.force_func(
                         center_zero(x), diff_time
-                    ) / self.scaling_factor(diff_time).unsqueeze(-1).unsqueeze(-1)
+                    )
 
                 laplace = lambda x: self.laplacian_func(x, diff_time)
-                # the below settings of dt, gamma upweight the path term a lot - empirically found to work well
                 action_func = action_cls(
                     force_func=force_func,
                     laplace_func=laplace,
                     dt=0.1,
                     gamma=10,
-                    D=0.1,
-                )  # TODO: figure out dt, gamma, D (D is not used for TruncatedAction)
+                    D=100,
+                )  # (D is only used for HessianAction)
                 terms = [action_func(x) for x in noised_xs]
                 first_term = torch.cat([term[0].unsqueeze(0) for term in terms]).mean()
                 second_term = torch.cat([term[1].unsqueeze(0) for term in terms]).mean()

@@ -32,7 +32,8 @@ class S2Action(torch.nn.Module):
             self.dt * self.D / torch.tensor(2.0)
         )
         result = torch.sum(first_term + second_term + third_term)
-        return result
+        # return result
+        return first_term.sum(), (second_term + third_term).sum()
 
 
 class TruncatedAction(torch.nn.Module):
