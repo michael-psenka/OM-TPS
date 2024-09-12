@@ -536,14 +536,14 @@ class GaussianDiffusion(nn.Module):
         # plt.savefig(f"force_norms_{protein}.png")
 
         # load the NNIP model
-        model = load_nnip_model("/home/sanjeevr/om-diffusion/two-for-one-diffusion/nnips/cln/model.ckpt", derivative=True).to(self.device)
-        residue_nums = np.load("/home/sanjeevr/om-diffusion/two-for-one-diffusion/datasets/nnip_residue_numbers/chignolin_ca_embeddings.npy")
+        model = load_nnip_model("/home/sanjeevr/om-diffusion/two-for-one-diffusion/nnips/trp/model.ckpt", derivative=True).to(self.device)
+        residue_nums = np.load("/home/sanjeevr/om-diffusion/two-for-one-diffusion/datasets/nnip_residue_numbers/trp_cage_ca_embeddings.npy")
         residue_nums = torch.tensor(np.array([int(i) for i in residue_nums])).to(self.device)
         
         def get_force_from_nnip(x):
             batch = torch.arange(x.shape[0]).repeat_interleave(self.num_atoms).to(x.device)
             z = residue_nums.repeat(x.shape[0])
-            x = x.reshape(-1, 3)
+            x = x.reshape(-1, 3) * self.norm_factor
             force = model(z = z, pos = x, batch = batch)[1].reshape(-1, self.num_atoms, 3)
             return force
 
