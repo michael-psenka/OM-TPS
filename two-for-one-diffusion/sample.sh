@@ -1,14 +1,14 @@
-for protein in  "trp_cage" "bba" "villin" "protein_g" "chignolin"
-do
-    # Linear interpolation
-    python sample.py \
-        --model_path saved_models/$protein \
-        --gen_mode interpolate \
-        --num_samples_eval 2 \
-        --batch_size_gen 2 \
-        --latent_time 0 \
-        --append_exp_name linear_latent_time=0
-done
+# for protein in  "chignolin" "trp_cage" "bba" "villin" "protein_g" 
+# do
+#     # Linear interpolation
+#     python sample.py \
+#         --model_path saved_models/$protein \
+#         --gen_mode interpolate \
+#         --num_samples_eval 2 \
+#         --batch_size_gen 2 \
+#         --latent_time 0 \
+#         --append_exp_name linear_latent_time=0
+# done
 
 
 # No encode and decode using force field at time specified in Two from One paper
@@ -19,8 +19,10 @@ python sample.py \
     --batch_size_gen 2 \
     --latent_time 20 \
     --no_encode_and_decode \
-    --append_exp_name no_encode_decode_linear_latent_time=20
-
+    --append_exp_name anneal_no_encode_decode_linear_latent_time=20 \
+    --anneal \
+    --steps=1000
+    
 
 python sample.py \
     --model_path saved_models/trp_cage \
@@ -29,7 +31,9 @@ python sample.py \
     --batch_size_gen 2 \
     --latent_time 15 \
     --no_encode_and_decode \
-    --append_exp_name no_encode_decode_linear_latent_time=15
+    --append_exp_name anneal_no_encode_decode_linear_latent_time=15 \
+    --anneal \
+    --steps=1000
 
 
 python sample.py \
@@ -39,7 +43,9 @@ python sample.py \
     --batch_size_gen 2 \
     --latent_time 5 \
     --no_encode_and_decode \
-    --append_exp_name no_encode_decode_linear_latent_time=5
+    --append_exp_name anneal_no_encode_decode_linear_latent_time=5 \
+    --anneal \
+    --steps=1000
 
 
 
@@ -50,7 +56,9 @@ python sample.py \
     --batch_size_gen 2 \
     --latent_time 5 \
     --no_encode_and_decode \
-    --append_exp_name no_encode_decode_linear_latent_time=5
+    --append_exp_name anneal_no_encode_decode_linear_latent_time=5 \
+    --anneal \
+    --steps=1000
 
 
 python sample.py \
@@ -60,7 +68,10 @@ python sample.py \
     --batch_size_gen 2 \
     --latent_time 5 \
     --no_encode_and_decode \
-    --append_exp_name no_encode_decode_linear_latent_time=5
+    --append_exp_name anneal_no_encode_decode_linear_latent_time=5 \
+    ---anneal \
+    --steps=1000
+    
 
 
 

@@ -150,7 +150,6 @@ class GaussianDiffusion(nn.Module):
         self.kb_inv = 1 / KB * self.norm_factor**2
 
     def scaling_factor(self, t):
-        # TODO: adjust
         assert (
             self.temp_data is not None
         ), "Temperature data must be provided for computing scaling factor"
@@ -504,13 +503,43 @@ class GaussianDiffusion(nn.Module):
         path_terms = []
         force_terms = []
         all_noised_xs = [noised_xs.clone().detach()]
+
+        # all_norms = []
+        # with torch.no_grad():
+        #     for t in tqdm(range(self.num_timesteps)):
+        #         force = self.force_func(center_zero(all_noised_xs[0][0]), t)
+        #         # force /= self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1)
+        #         norms = torch.norm(force, dim=-1).mean(dim=-1)
+        #         all_norms.append(norms)
+
+        # import matplotlib.pyplot as plt
+        # protein = "chignolin"
+        # all_norms = torch.stack(all_norms).T
+        # # all_norms has shape [path_length, T]
+        # # for each path, plot the norm of the force as a function of time
+        # for i in range(all_norms.shape[0]):
+        #     if i % 20 != 0:
+        #         continue
+        #     weighting = i / all_norms.shape[0]
+        #     plt.plot(all_norms[i].cpu().numpy(), label=f"Linear Interpolation Weight {round(weighting, 2)}")
+        # plt.legend(loc="upper right")
+        # plt.yscale("log")
+        # plt.xlabel("Diffusion Timestep")
+        # plt.ylabel("Norm of Denoising Model Output")
+        # plt.title(protein)
+        # plt.show()
+
+        # # save the figure
+        # plt.savefig(f"force_norms_{protein}.png")
+
         with torch.enable_grad():
             noised_xs.requires_grad = True
             # Optimization of path using OM action
             for i in pbar:
                 if anneal:
-                    diff_time = (
-                        self.num_timesteps - int(self.num_timesteps / om_steps) * i - 1
+                    diff_time = max(
+                        0,
+                        self.num_timesteps - int(self.num_timesteps / om_steps) * i - 1,
                     )  # anneal the time from T to 0
                 else:
                     diff_time = latent_time
@@ -529,15 +558,17 @@ class GaussianDiffusion(nn.Module):
                     #     self.num_timesteps,
                     #     self.kb_inv / self.temp_data,
                     # )(center_zero(x))[-1]
-                    force_func = lambda x: self.force_func(center_zero(x), diff_time)
+                    force_func = lambda x: self.force_func(
+                        center_zero(x), diff_time
+                    ) / self.scaling_factor(diff_time).unsqueeze(-1).unsqueeze(-1)
 
                 laplace = lambda x: self.laplacian_func(x, diff_time)
                 # the below settings of dt, gamma upweight the path term a lot - empirically found to work well
                 action_func = action_cls(
                     force_func=force_func,
                     laplace_func=laplace,
-                    dt=0.001,
-                    gamma=100,
+                    dt=0.1,
+                    gamma=10,
                     D=0.1,
                 )  # TODO: figure out dt, gamma, D (D is not used for TruncatedAction)
                 terms = [action_func(x) for x in noised_xs]
