@@ -26,7 +26,7 @@ from torchvision import transforms
 from train_mnist import create_mnist_dataloaders
 
 from model import MNISTDiffusion
-from actions import SimpleAction, TruncatedAction, HessianAction
+from actions import SimpleAction, TruncatedAction, HessianAction, TruncatedActionPathvar
 from utils import get_initial_guess_fn, validate_git_status
 
 from torcheval.metrics import FrechetInceptionDistance
@@ -314,6 +314,9 @@ if __name__ == "__main__":
 
             scale_factor = max(1 - i / 1000, 0.1)
             diff_time = torch.tensor((int)(999 * scale_factor)).to(device)
+            
+            
+            
             # diff_time = torch.tensor(100).to(device)
 
             # compute diffusion model score estimates
@@ -369,10 +372,38 @@ if __name__ == "__main__":
                 total_action = torch.vmap(action_func)(
                     interpolated_images_blur, forces
                 ).sum()
+
+                # print first and second components
+                # with torch.no_grad():
+                #     first_component = torch.square((interpolated_images_blur[1:] - interpolated_images_blur[:-1]) / const_time).sum()
+                    
+                #     second_component = torch.square(forces[:-1] / path_length).sum()
+
+                #     print(f'First component: {first_component.item()}, second component: {second_component.item()}')
             else:
                 total_action = torch.vmap(action_func)(
                     interpolated_images, forces
                 ).sum()
+                
+                
+            # start adding path var loss at step 1000
+            # if i == 1000:
+            #     if g_sigma > 0:
+            #         # compute path norm
+            #         with torch.no_grad():
+            #             curr_var = torch.square((interpolated_images_blur[:,1:,:,:,:] - interpolated_images_blur[:,:-1,:,:,:]) / const_time).sum(dim=(0,2,3,4)).var()
+                        
+            #             scale_newterm = total_action / (curr_var + 1e-4)
+                    
+            #         action_func = TruncatedActionPathvar(dt=const_time, xi=path_length, pathvar_scale=scale_newterm)
+            #     else:
+            #         # compute path norm
+            #         with torch.no_grad():
+            #             curr_var = torch.square((interpolated_images[:,1:,:,:,:] - interpolated_images[:,:-1,:,:,:]) / const_time).sum(dim=(0,2,3,4)).var()
+                        
+            #             scale_newterm = total_action / (curr_var + 1e-4)
+                    
+            #         action_func = TruncatedActionPathvar(dt=const_time, xi=path_length, pathvar_scale=scale_newterm)
 
             # test_model_grads = torch.autograd.grad(
             #     total_action,
@@ -423,6 +454,16 @@ if __name__ == "__main__":
         optimizer.zero_grad()
         del total_action, grads, forces
         torch.cuda.empty_cache()
+        
+         # print out list of force norms throughout the path of final_draw
+        with torch.no_grad():
+            forces_finpath = model.model(
+               interpolated_images[batch_idx],
+               torch.tensor([100]).repeat(path_length).to(device)
+            )
+
+            # output norms of forces
+            print("Norms of forces: ", torch.linalg.norm(forces_finpath.reshape(path_length, C*H*W), dim=1).cpu().detach().numpy())
 
         with torch.no_grad():
             # run reverse diffusion on the final, optimized path
@@ -481,6 +522,8 @@ if __name__ == "__main__":
             f"../mnist_outputs/grid_{now}.png",
             nrow=final_draw[0].shape[0],
         )
+
+       
         if not args.disable_logging:
             im_dict = {
                 f"Decoded Interpolation Path Steps": wandb.Image(
