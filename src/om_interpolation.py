@@ -311,12 +311,24 @@ if __name__ == "__main__":
         for i in pbar:
 
             # It helps to anneal diffusion time
+            
+            scale_min = 0.1
 
-            scale_factor = max(1 - i / 1000, 0.1)
-            diff_time = torch.tensor((int)(999 * scale_factor)).to(device)
-            
-            
-            
+            scale_factor = max((1 - i / 1000), scale_min)
+            diff_time = torch.tensor((int)(999)).to(device)
+            # reshape to (batch_size, path_length)
+            diff_time = diff_time.repeat(batch_size * path_length).reshape((batch_size, path_length))
+            # for all batch, we want to multiply elements by (1 + 0.5 - abs(j-path_length/2)/path_length) for index j in path length
+            # this will make time go higher in the middle of the path
+            for j in range(path_length):
+                diff_time[:,j] = diff_time[:,j] * (scale_factor - ((scale_factor - scale_min)/0.5)*abs(j-path_length/2)/path_length)
+                
+            # convert to int, and clamp 0-999
+            diff_time = diff_time.type(torch.int).clamp(0, 999)
+             
+            # finally, flatten
+            diff_time = diff_time.flatten()
+        
             # diff_time = torch.tensor(100).to(device)
 
             # compute diffusion model score estimates
@@ -337,7 +349,7 @@ if __name__ == "__main__":
             else:
                 forces = v_scale * model.model(
                     interpolated_images.reshape(-1, C, H, W),
-                    diff_time.repeat(batch_size * path_length),
+                    diff_time,
                 )
 
             # scaling factor between predicted noise and force
@@ -367,7 +379,10 @@ if __name__ == "__main__":
                     kernel_size=(9, 9),
                     sigma=(g_sigma, g_sigma),
                 ).reshape((batch_size, path_length, C, H, W))
-
+                
+                forces = forces * torch.linalg.norm(torch.flatten(interpolated_images_blur[:,0,:,:,:] - interpolated_images_blur[:,-1,:,:,:], start_dim=1), dim=1).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+                
+                
                 # compute the OM action from these forces (vmaped over the batch dimension)
                 total_action = torch.vmap(action_func)(
                     interpolated_images_blur, forces
@@ -381,6 +396,7 @@ if __name__ == "__main__":
 
                 #     print(f'First component: {first_component.item()}, second component: {second_component.item()}')
             else:
+                forces = forces * torch.linalg.norm(torch.flatten(interpolated_images[:,0,:,:,:] - interpolated_images[:,-1,:,:,:], start_dim=1), dim=1).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
                 total_action = torch.vmap(action_func)(
                     interpolated_images, forces
                 ).sum()
@@ -464,6 +480,9 @@ if __name__ == "__main__":
 
             # output norms of forces
             print("Norms of forces: ", torch.linalg.norm(forces_finpath.reshape(path_length, C*H*W), dim=1).cpu().detach().numpy())
+            # print path norm
+            if g_sigma > 0:
+                print("Path norm: ", torch.sqrt(torch.square((interpolated_images_blur[:,1:,:,:,:] - interpolated_images_blur[:,:-1,:,:,:]) / const_time).sum(dim=(0,2,3,4))).cpu().detach().numpy())
 
         with torch.no_grad():
             # run reverse diffusion on the final, optimized path
