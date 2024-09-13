@@ -140,7 +140,7 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--steps", type=int, help="number of OM optimization steps", default=500
+    "--steps", type=int, help="number of OM optimization steps", default=1000
 )
 
 parser.add_argument(
@@ -164,6 +164,12 @@ parser.add_argument(
     "--truncated_gradient",
     action="store_true",
     help="Instead of taking gradient through the diffusion model forces, just follow the forces",
+)
+
+parser.add_argument(
+    "--mlff",
+    action="store_true",
+    help="Use a pretrained machine learning force field (MLFF) to compute forces instead of the diffusion model",
 )
 
 
@@ -302,6 +308,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                         if samp_args.initial_guess_method == "linear"
                         else slerp
                     ),
+                    mlff=samp_args.mlff,
                     action_cls=action_cls,
                     om_steps=samp_args.steps,
                     lr=samp_args.lr,

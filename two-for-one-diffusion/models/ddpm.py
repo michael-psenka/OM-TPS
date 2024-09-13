@@ -21,9 +21,10 @@ from utils import (
     center_zero,
     assert_center_zero,
     slerp,
+    NUM_RESIDUES_TO_PROTEIN,
 )
 
-from torchmdnet.models.model import load_model as load_nnip_model
+from torchmdnet.models.model import load_model as load_mlff_model
 
 KB = 0.83144626181  # This is the Boltzmann constant conversed from J/K (Kg, m^2 / s^2 / K) to -> g/mol, angstroms, ps and K.
 
@@ -49,6 +50,7 @@ class GaussianDiffusion(nn.Module):
         super().__init__()
         self.dims = 3
         self.num_atoms = num_atoms
+        self.protein = NUM_RESIDUES_TO_PROTEIN[num_atoms]
         self.model = model
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.h = features.to(self.device)
@@ -181,8 +183,16 @@ class GaussianDiffusion(nn.Module):
         # raise NotImplementedError("Laplacian function not implemented yet.")
         # Taken from Martin's optimal Hessian branch, but not sure if it's correct (Laplacian term is much smaller than path and force norm terms)
         noise_pred = self.force_func(x, t)
-        dirac = torch.nn.init.dirac_(torch.zeros(1, x.shape[1], 3)).to(noise_pred.device)
-        laplace = torch.autograd.grad(torch.sum(noise_pred, dim = 0, keepdim = True), x, grad_outputs=dirac, retain_graph=True, allow_unused=True)[0]
+        dirac = torch.nn.init.dirac_(torch.zeros(1, x.shape[1], 3)).to(
+            noise_pred.device
+        )
+        laplace = torch.autograd.grad(
+            torch.sum(noise_pred, dim=0, keepdim=True),
+            x,
+            grad_outputs=dirac,
+            retain_graph=True,
+            allow_unused=True,
+        )[0]
         return laplace
 
     def predict_start_from_noise(self, x_t, t, noise):
@@ -444,6 +454,7 @@ class GaussianDiffusion(nn.Module):
         latent_time,
         encode_and_decode=True,
         num_paths=10,
+        mlff=False,
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
         om_steps=100,
@@ -536,16 +547,28 @@ class GaussianDiffusion(nn.Module):
         # plt.savefig(f"force_norms_{protein}.png")
 
         # load the NNIP model
-        model = load_nnip_model("/home/sanjeevr/om-diffusion/two-for-one-diffusion/nnips/trp/model.ckpt", derivative=True).to(self.device)
-        residue_nums = np.load("/home/sanjeevr/om-diffusion/two-for-one-diffusion/datasets/nnip_residue_numbers/trp_cage_ca_embeddings.npy")
-        residue_nums = torch.tensor(np.array([int(i) for i in residue_nums])).to(self.device)
-        
-        def get_force_from_nnip(x):
-            batch = torch.arange(x.shape[0]).repeat_interleave(self.num_atoms).to(x.device)
-            z = residue_nums.repeat(x.shape[0])
-            x = x.reshape(-1, 3) * self.norm_factor
-            force = model(z = z, pos = x, batch = batch)[1].reshape(-1, self.num_atoms, 3)
-            return force
+        if mlff:
+            model = load_mlff_model(
+                f"mlffs/{self.protein}/model.ckpt",
+                derivative=True,
+            ).to(self.device)
+            residue_nums = np.load(
+                f"datasets/mlff_residue_numbers/{self.protein}_ca_embeddings.npy"
+            )
+            residue_nums = torch.tensor(np.array([int(i) for i in residue_nums])).to(
+                self.device
+            )
+
+            def get_force_from_mlff(x):
+                batch = (
+                    torch.arange(x.shape[0])
+                    .repeat_interleave(self.num_atoms)
+                    .to(x.device)
+                )
+                z = residue_nums.repeat(x.shape[0])
+                x = x.reshape(-1, 3) * self.norm_factor
+                force = model(z=z, pos=x, batch=batch)[1].reshape(-1, self.num_atoms, 3)
+                return force
 
         with torch.enable_grad():
             noised_xs.requires_grad = True
@@ -564,8 +587,10 @@ class GaussianDiffusion(nn.Module):
                     force_func = lambda x: self.multi_step_denoising_no_noise(
                         center_zero(x), diff_time, num_steps=1
                     )
+                elif mlff:
+                    force_func = get_force_from_mlff
                 else:
-                    # TODO: is there a difference in results between these two force parameterizations? If so, why?
+                    # Is there a difference in results between these two force parameterizations? If so, why?
                     # Yes, there seems to be. The first one is faster but leads to poorer action improvement. TODO: Why?
                     # force_func = lambda x: ForcesWrapper(
                     #     self,
@@ -573,11 +598,7 @@ class GaussianDiffusion(nn.Module):
                     #     self.num_timesteps,
                     #     self.kb_inv / self.temp_data,
                     # )(center_zero(x))[-1]
-                    # force_func = lambda x: self.force_func(
-                    #     center_zero(x), diff_time
-                    # )
-
-                    force_func = get_force_from_nnip
+                    force_func = lambda x: self.force_func(center_zero(x), diff_time)
 
                 laplace = lambda x: self.laplacian_func(x, diff_time)
                 action_func = action_cls(
@@ -587,15 +608,16 @@ class GaussianDiffusion(nn.Module):
                     gamma=10,
                     D=100,
                 )  # (D is only used for HessianAction)
+
+                # TODO: vmap over batch dimension
+                # (currently not possible because of calling requires_grad on x in GraphTransformer)
                 terms = [action_func(x) for x in noised_xs]
                 first_term = torch.cat([term[0].unsqueeze(0) for term in terms]).mean()
                 second_term = torch.cat([term[1].unsqueeze(0) for term in terms]).mean()
                 action = torch.cat(
                     [(term[0] + term[1]).unsqueeze(0) for term in terms]
                 ).mean()
-                # action = torch.cat(
-                #     [action_func(x).unsqueeze(0) for x in noised_xs]
-                # ).mean()  # TODO: vmap over batch dimension
+
                 actions.append(action.item())
                 path_terms.append(first_term.item())
                 force_terms.append(second_term.item())

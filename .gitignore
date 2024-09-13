@@ -11,8 +11,8 @@ wandb/
 guided_diffusion/
 mnist/
 ffp-output/
-nnips/
-nnip_residue_numbers/
+mlffs/
+mlff_residue_numbers/
 
 # Two for One stuff:
 

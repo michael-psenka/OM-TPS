@@ -7,6 +7,16 @@ import random
 from actions import SimpleAction, TruncatedAction
 from rmsd import kabsch_rmsd
 
+# chignolin has 10 residues, trp_cage has 20, bba has 28, villin has 35, and protein_g has 56
+
+NUM_RESIDUES_TO_PROTEIN = {
+    10: "chignolin",
+    20: "trp_cage",
+    28: "bba",
+    35: "villin",
+    56: "protein_g",
+}
+
 
 def exists(x):
     """
@@ -313,6 +323,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         path_length,
         latent_time,
         encode_and_decode=True,
+        mlff=False,
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
         om_steps=100,
@@ -328,6 +339,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         self.path_length = path_length
         self.latent_time = latent_time
         self.encode_and_decode = encode_and_decode
+        self.mlff = mlff
         self.action_cls = action_cls
         self.initial_guess_fn = initial_guess_fn
         self.om_steps = om_steps
@@ -344,6 +356,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
             encode_and_decode=self.encode_and_decode,
             latent_time=self.latent_time,
             num_paths=num_paths,
+            mlff=self.mlff,
             action_cls=self.action_cls,
             initial_guess_fn=self.initial_guess_fn,
             om_steps=self.om_steps,

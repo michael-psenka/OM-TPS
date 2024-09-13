@@ -19,9 +19,9 @@ python sample.py \
     --batch_size_gen 2 \
     --latent_time 20 \
     --no_encode_and_decode \
-    --append_exp_name anneal_no_encode_decode_linear_latent_time=20 \
-    --anneal \
-    --steps=1000
+    --append_exp_name mlff \
+    --mlff
+   
     
 
 python sample.py \
@@ -32,8 +32,8 @@ python sample.py \
     --latent_time 15 \
     --no_encode_and_decode \
     --append_exp_name anneal_no_encode_decode_linear_latent_time=15 \
-    --anneal \
-    --steps=1000
+    --append_exp_name mlff \
+    --mlff
 
 
 python sample.py \
@@ -44,8 +44,8 @@ python sample.py \
     --latent_time 5 \
     --no_encode_and_decode \
     --append_exp_name anneal_no_encode_decode_linear_latent_time=5 \
-    --anneal \
-    --steps=1000
+    --append_exp_name mlff \
+    --mlff
 
 
 
@@ -57,8 +57,8 @@ python sample.py \
     --latent_time 5 \
     --no_encode_and_decode \
     --append_exp_name anneal_no_encode_decode_linear_latent_time=5 \
-    --anneal \
-    --steps=1000
+    --append_exp_name mlff \
+    --mlff
 
 
 python sample.py \
@@ -69,8 +69,8 @@ python sample.py \
     --latent_time 5 \
     --no_encode_and_decode \
     --append_exp_name anneal_no_encode_decode_linear_latent_time=5 \
-    ---anneal \
-    --steps=1000
+    --append_exp_name mlff \
+    --mlff
     
 
 
