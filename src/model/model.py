@@ -190,7 +190,7 @@ class MNISTDiffusion(nn.Module):
                 # current t is max(0, t - step)
                 curr_t = torch.max(t - step, torch.tensor(0).to(device))
                 x_next = x_next - self.model(
-                    x_next, curr_t.repeat(t.size())
+                    x_next, curr_t
                 )
 
         # scale down output such that scale of output step is approximately
