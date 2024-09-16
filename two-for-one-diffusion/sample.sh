@@ -19,11 +19,10 @@ python sample.py \
     --batch_size_gen 2 \
     --latent_time 20 \
     --no_encode_and_decode \
-    --append_exp_name mlff \
-    --mlff
+    --append_exp_name shortened_anneal \
+    --anneal
    
     
-
 python sample.py \
     --model_path saved_models/trp_cage \
     --gen_mode om_interpolate \
@@ -31,21 +30,18 @@ python sample.py \
     --batch_size_gen 2 \
     --latent_time 15 \
     --no_encode_and_decode \
-    --append_exp_name anneal_no_encode_decode_linear_latent_time=15 \
-    --append_exp_name mlff \
-    --mlff
-
+    --append_exp_name shortened_anneal \
+    --anneal
 
 python sample.py \
     --model_path saved_models/bba \
     --gen_mode om_interpolate \
     --num_samples_eval 2 \
     --batch_size_gen 2 \
-    --latent_time 5 \
+    --latent_time 20 \
     --no_encode_and_decode \
-    --append_exp_name anneal_no_encode_decode_linear_latent_time=5 \
-    --append_exp_name mlff \
-    --mlff
+    --append_exp_name shortened_anneal \
+    --anneal
 
 
 
@@ -56,9 +52,8 @@ python sample.py \
     --batch_size_gen 2 \
     --latent_time 5 \
     --no_encode_and_decode \
-    --append_exp_name anneal_no_encode_decode_linear_latent_time=5 \
-    --append_exp_name mlff \
-    --mlff
+    --append_exp_name shortened_anneal \
+    --anneal
 
 
 python sample.py \
@@ -68,9 +63,8 @@ python sample.py \
     --batch_size_gen 2 \
     --latent_time 5 \
     --no_encode_and_decode \
-    --append_exp_name anneal_no_encode_decode_linear_latent_time=5 \
-    --append_exp_name mlff \
-    --mlff
+    --append_exp_name shortened_anneal \
+    --anneal
     
 
 

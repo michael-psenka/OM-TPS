@@ -7,8 +7,6 @@ import random
 from actions import SimpleAction, TruncatedAction
 from rmsd import kabsch_rmsd
 
-# chignolin has 10 residues, trp_cage has 20, bba has 28, villin has 35, and protein_g has 56
-
 NUM_RESIDUES_TO_PROTEIN = {
     10: "chignolin",
     20: "trp_cage",

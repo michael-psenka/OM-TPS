@@ -519,19 +519,23 @@ class GaussianDiffusion(nn.Module):
         all_noised_xs = [noised_xs.clone().detach()]
 
         # all_norms = []
+        # all_cosine_sims = []
+        # ref_time = {"chignolin":100, "bba": 5, "trp_cage": 100, "villin": 5, "protein_g": 5}
+        # ref_force = self.force_func(center_zero(all_noised_xs[0][0]), ref_time[self.protein])
         # with torch.no_grad():
         #     for t in tqdm(range(self.num_timesteps)):
         #         force = self.force_func(center_zero(all_noised_xs[0][0]), t)
-        #         # force /= self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1)
+        #         cosine_sim = F.cosine_similarity(force, ref_force, dim=-1).mean(dim=-1)
+        #         all_cosine_sims.append(cosine_sim)
         #         norms = torch.norm(force, dim=-1).mean(dim=-1)
         #         all_norms.append(norms)
 
         # import matplotlib.pyplot as plt
-        # protein = "chignolin"
         # all_norms = torch.stack(all_norms).T
+        # all_cosine_sims = torch.stack(all_cosine_sims).T
         # # all_norms has shape [path_length, T]
         # # for each path, plot the norm of the force as a function of time
-        # for i in range(all_norms.shape[0]):
+        # for i in range(int(all_norms.shape[0] / 2) + 1):
         #     if i % 20 != 0:
         #         continue
         #     weighting = i / all_norms.shape[0]
@@ -540,11 +544,28 @@ class GaussianDiffusion(nn.Module):
         # plt.yscale("log")
         # plt.xlabel("Diffusion Timestep")
         # plt.ylabel("Norm of Denoising Model Output")
-        # plt.title(protein)
+        # plt.title(self.protein)
         # plt.show()
 
         # # save the figure
-        # plt.savefig(f"force_norms_{protein}.png")
+        # plt.savefig(f"force_norms_{self.protein}.png")
+        # plt.close()
+
+        # for i in range(int(all_cosine_sims.shape[0] / 2) + 1):
+        #     if i % 20 != 0:
+        #         continue
+        #     weighting = i / all_norms.shape[0]
+        #     plt.plot(all_cosine_sims[i].cpu().numpy(), label=f"Linear Interpolation Weight {round(weighting, 2)}")
+        # plt.legend(loc="upper right")
+        # # plt.yscale("log")
+        # plt.xlabel("Diffusion Timestep")
+        # plt.ylabel("Cosine Similarity of Denoising Model Output to Reference Force")
+        # plt.axvline(x=ref_time[self.protein], color="red", linestyle="--", label="Reference Time")
+        # plt.title(self.protein)
+        # plt.show()
+
+        # # save the figure
+        # plt.savefig(f"cosine_sims_{self.protein}.png")
 
         # load the NNIP model
         if mlff:
@@ -570,15 +591,28 @@ class GaussianDiffusion(nn.Module):
                 force = model(z=z, pos=x, batch=batch)[1].reshape(-1, self.num_atoms, 3)
                 return force
 
+        anneal_schedule = torch.linspace(200, latent_time, om_steps // 2)
+        # add a bunch latent times to the anneal schedule
+        anneal_schedule = (
+            torch.cat(
+                [
+                    anneal_schedule,
+                    torch.linspace(latent_time, latent_time, om_steps // 2),
+                ]
+            )
+            .to(self.device)
+            .long()
+        )
         with torch.enable_grad():
             noised_xs.requires_grad = True
             # Optimization of path using OM action
             for i in pbar:
                 if anneal:
-                    diff_time = max(
-                        0,
-                        self.num_timesteps - int(self.num_timesteps / om_steps) * i - 1,
-                    )  # anneal the time from T to 0
+                    # diff_time = max(
+                    #     0,
+                    #     self.num_timesteps - int(self.num_timesteps / om_steps) * i - 1,
+                    # )  # anneal the time from T to 0
+                    diff_time = anneal_schedule[i].item()
                 else:
                     diff_time = latent_time
 

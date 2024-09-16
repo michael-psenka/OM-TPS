@@ -428,10 +428,21 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
 
     # Save generated samples
     torch.save(sampled_mol, str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pt"))
+
+    # Add bonds to topology (#TODO: these still aren't getting added/displayed in the pdb)
+    for i in range(len(list(trainset.topology.atoms)) - 1):
+        trainset.topology.add_bond(
+            trainset.topology.atom(i), trainset.topology.atom(i + 1)
+        )
+
     # Save subset as pdb
     all_mol_traj = md.Trajectory(
         sampled_mol[0:1000].numpy() / 10, topology=trainset.topology
     )
+
+    # filename = str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb")
+    # pdb_file = md.formats.PDBTrajectoryFile(filename, "w")
+    # pdb_file.write(all_mol_traj.xyz, all_mol_traj.topology)
     all_mol_traj.save_pdb(str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb"))
 
     return sampled_mol
