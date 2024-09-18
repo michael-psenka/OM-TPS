@@ -2,10 +2,79 @@ import numpy as np
 from PIL import Image
 import io
 import os
+import torch
+import gsd.hoomd
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from IPython.display import Image as IPyImage, display
+
+
+def save_ovito_traj(positions, filename):
+    """
+    Save the given positions to a GSD file using Ovito.
+    """
+    t = gsd.hoomd.open(name=filename, mode="w")
+    cell = 1.5 * torch.eye(3) * positions.abs().max()
+    for i, pos in enumerate(positions):
+        t.append(create_frame(i, pos, cell))
+    t.close()
+
+
+def create_frame(step, position, cell):
+    """
+    Create an Ovito frame from the given positions.
+    """
+    # Particle positions, velocities, diameter
+
+    natoms = position.shape[0]
+    position = torch.Tensor(position)
+    partpos = position.tolist()
+    diameter = 0.8 * np.ones((natoms,))
+    diameter = diameter.tolist()
+    # Now make gsd file
+    s = gsd.hoomd.Frame()
+    s.configuration.step = step
+    s.particles.N = natoms
+    s.particles.position = partpos
+    s.particles.diameter = diameter
+    s.configuration.box = [cell[0][0], cell[1][1], cell[2][2], 0, 0, 0]
+
+    # Bonds for visualization
+    senders = np.arange(position.shape[0] - 1)
+    receivers = np.arange(1, position.shape[0])
+    bonds = np.stack([senders, receivers], axis=1)
+
+    s.bonds.N = bonds.shape[0]
+    s.bonds.group = bonds
+    return s
+
+
+def visualize_interpolation(
+    protein_name, gen_mode, append_exp_name, subsample=None, ref_path=None
+):
+    """
+    Ball-and-stick visualization of the interpolated path.
+    """
+    # Load data
+    append_exp_name_str = "_" + append_exp_name if append_exp_name else ""
+    eval_folder = f"../saved_models/{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}"
+    sample_path = Path(eval_folder, f"sample-{gen_mode}.pt")
+    pdb_file = (
+        f"../datasets/folded_pdbs/{Molecules[protein_name.upper()].value}-0-c-alpha.pdb"
+    )
+
+    # Load sampled molecules
+    sampled_mol = torch.load(sample_path)
+    if subsample is not None:
+        sampled_mol = sampled_mol[np.random.permutation(subsample)]
+    n_atoms = sampled_mol.shape[1]
+
+    vis_in = sampled_mol.reshape(sampled_mol.shape[0], -1, n_atoms, 3)[0].permute(
+        1, 0, 2
+    )
+    visualization = get_interpolation_viz(vis_in)
+    return visualization
 
 
 def get_interpolation_viz(interpolated_pos):
@@ -132,107 +201,3 @@ def visualize_trajectory(
         image_meta.append(plot_and_save_wrapper(i))
 
     return np.stack(image_meta, axis=0)
-
-
-def visualize_contact_map(
-    true_positions, predicted_positions: np.ndarray, threshold: float = 10.0
-):
-    """
-    Compute and plot normalized contact maps from atomic positions.
-
-    Args:
-        true_positions: numpy array of shape (N_samples, N_residues, 3)
-        predicted_positions: numpy array of shape (N_samples, N_residues, 3)
-        threshold: float, distance threshold in Angstroms for contact definition
-
-    Returns:
-        numpy array of the plot of shape (height, width, channel)
-    """
-
-    def compute_normalized_log_contact_map(positions):
-        diff = positions[:, :, None, :] - positions[:, None, :, :]
-        distances = np.sqrt(np.sum(diff**2, axis=-1))
-        contact_map = (distances < threshold).astype(float)
-        normalized_log_contact_map = np.log10(
-            np.mean(contact_map, axis=0) + 1e-10
-        )  # Add small value to avoid log(0)
-        return normalized_log_contact_map
-
-    # Compute contact maps
-    true_contact_map = compute_normalized_log_contact_map(true_positions[::100])
-    predicted_contact_map = compute_normalized_log_contact_map(predicted_positions)
-
-    # Plotting the contact maps side by side with a common colorbar and no axis labels or ticks
-    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
-    im1 = axes[0].imshow(true_contact_map, cmap="viridis_r")
-    axes[0].set_title("True Log Contact Map")
-    axes[0].axis("off")  # Remove axis labels and ticks
-
-    im2 = axes[1].imshow(predicted_contact_map, cmap="viridis_r")
-    axes[1].set_title("Predicted Log Contact Map")
-    axes[1].axis("off")  # Remove axis labels and ticks
-
-    # Add a single colorbar for both images
-    fig.colorbar(im1, ax=axes, orientation="vertical", fraction=0.1)
-
-    # Save to buffer and convert to numpy array
-    with io.BytesIO() as buff:
-        fig.savefig(buff, format="png")
-        buff.seek(0)
-        im = Image.open(buff)
-
-        # Convert image to RGB if it has an alpha channel
-        if im.mode == "RGBA":
-            im = im.convert("RGB")
-
-    w, h = fig.canvas.get_width_height()
-    im_array = np.array(im).reshape((h, w, -1))
-
-    plt.close(fig)  # Close the figure to free memory
-    return im_array
-
-
-# TODO: incorporate k3d at some point
-# def make_k3d_plot(positions, positions_estimated, graph, animation_time):
-#     n_nodes, n_time, _ = positions.shape
-#     color_palette = sns.color_palette("husl", n_nodes)
-
-#     all_positions = np.concatenate([positions, positions_estimated], axis=0)
-
-#     positions_time = {}
-#     for time_index in range(n_time):
-#         animation_time_index = time_index * animation_time / n_time
-#         positions_time[f"{animation_time_index:.2f}"] = all_positions[:, time_index, :]
-
-#     colors = np.array([[DARK_GREEN_HEX] * n_nodes + [0x990000] * n_nodes])
-
-#     plot = k3d.plot(grid_visible=False, camera_auto_fit=True)
-
-#     points = k3d.points(all_positions[:, 0, 0:3], point_size=0.1, colors=colors)
-#     plot += points
-
-#     for i in range(n_nodes):
-#         plot += k3d.line(
-#             np.array(positions[i, :, :]).astype(np.float32),
-#             color=convert_rgb_to_hex((int(e * 255) for e in color_palette[i])),
-#         )
-
-#     for i in range(n_nodes):
-#         plot += k3d.line(
-#             np.array(positions_estimated[i, :, :]).astype(np.float32),
-#             color=convert_rgb_to_hex((int(e * 255) for e in color_palette[i])),
-#             opacity=0.2,
-#         )
-
-#     for s, r in zip(graph.senders, graph.receivers):
-#         plot += k3d.line(
-#             np.array([positions[s, 0, :], positions[r, 0, :]]).astype(np.float32),
-#             color=DARK_GREY_HEX,
-#         )
-
-#     points.positions = positions_time
-
-#     with open("k3d.html", "w") as f:
-#         f.write(plot.get_snapshot())
-
-#     wandb.log({"k3d_visualization": wandb.Html(open("k3d.html"), inject=False)})

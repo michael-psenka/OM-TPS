@@ -9,6 +9,7 @@ from models import get_model
 from models.ddpm import GaussianDiffusion
 from ema_pytorch import EMA
 from datasets.dataset_utils_empty import get_dataset
+from evaluate.evaluate_fastfolders import evaluate_fastfolders
 from evaluate.evaluators import (
     sample_from_model,
     sample_interpolations_from_model,
@@ -21,6 +22,7 @@ from utils import (
     filter_by_rmsd,
     slerp,
 )
+from logging_utils import save_ovito_traj
 from actions import SimpleAction, TruncatedAction, S2Action
 
 from dynamics.langevin import temp_dict
@@ -191,6 +193,7 @@ def main(samp_args):
         samp_args.temp_sim = samp_args.temp_sim
 
     basic_append = f"_{samp_args.gen_mode}"
+    samp_args.original_append_exp_name = samp_args.append_exp_name
     samp_args.append_exp_name = (
         basic_append
         if samp_args.append_exp_name is None
@@ -429,21 +432,22 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
     # Save generated samples
     torch.save(sampled_mol, str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pt"))
 
-    # Add bonds to topology (#TODO: these still aren't getting added/displayed in the pdb)
-    for i in range(len(list(trainset.topology.atoms)) - 1):
-        trainset.topology.add_bond(
-            trainset.topology.atom(i), trainset.topology.atom(i + 1)
-        )
-
     # Save subset as pdb
     all_mol_traj = md.Trajectory(
         sampled_mol[0:1000].numpy() / 10, topology=trainset.topology
     )
-
-    # filename = str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb")
-    # pdb_file = md.formats.PDBTrajectoryFile(filename, "w")
-    # pdb_file.write(all_mol_traj.xyz, all_mol_traj.topology)
     all_mol_traj.save_pdb(str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb"))
+
+    # Also save as gsd
+    save_ovito_traj(
+        sampled_mol[: samp_args.path_length],
+        str(eval_folder) + f"/sample-{samp_args.gen_mode}.gsd",
+    )
+
+    # Perform final evaluations (producing plots, GIFs, etc.)
+    evaluate_fastfolders(
+        protein_name, samp_args.gen_mode, samp_args.original_append_exp_name
+    )
 
     return sampled_mol
 

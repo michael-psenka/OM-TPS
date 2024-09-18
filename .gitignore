@@ -6,6 +6,7 @@ mnist_data/
 data
 *.png
 *.pyc
+*.gsd
 *ipynb_checkpoints/
 wandb/
 guided_diffusion/

@@ -151,7 +151,7 @@ class DihedralEnergiesEvaluator:
         topology,
         plots_folder=None,
         n_bins=61,
-        saved_ref="./saved_references/saved_dih_probs_ala2_testset.pickle",
+        saved_ref="./evaluate/saved_references/saved_dih_probs_ala2_testset.pickle",
     ):
         self.topology = topology
         self.plots_folder = plots_folder
@@ -251,7 +251,7 @@ class PwdEvaluator:
         self.resolution = 0.1
 
         if saved_ref == "none":
-            saved_ref = f"./saved_references/saved_pwd_{mol_name.upper()}_{evalset}_offset_{self.offset}.pickle"
+            saved_ref = f"./evaluate/saved_references/saved_pwd_{mol_name.upper()}_{evalset}_offset_{self.offset}.pickle"
 
         if os.path.exists(saved_ref):
             with open(saved_ref, "rb") as f:
@@ -394,9 +394,7 @@ class TicEvaluator:
 
         # Check if the computed objects are already saved
         if saved_ref == "none":
-            saved_ref = (
-                f"./saved_references/saved_TICA_{mol_name.upper()}_{evalset}.pickle"
-            )
+            saved_ref = f"./evaluate/saved_references/saved_TICA_{mol_name.upper()}_{evalset}.pickle"
         if os.path.exists(saved_ref):
             # Load the saved objects
             with open(saved_ref, "rb") as f:
@@ -669,7 +667,7 @@ class TicEvaluator:
         if save_plot:
             plt.savefig(file_name)
 
-        return fig
+        plt.close()
 
 
 class RmsdEvaluator:
@@ -689,7 +687,7 @@ class RmsdEvaluator:
         self.mol_name = mol_name
 
         # Parameters from the reference data plot
-        self.saved_ref = f"./saved_references/saved_rmsd_{self.mol_name.upper()}_reference_total.pickle"
+        self.saved_ref = f"e/saved_references/saved_rmsd_{self.mol_name.upper()}_reference_total.pickle"
         self.cutoff_dict_ref = {
             "chignolin": 10,
             "trp_cage": 12,
