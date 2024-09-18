@@ -177,7 +177,7 @@ class GaussianDiffusion(nn.Module):
             alphas=self.sqrt_alphas_cumprod[t].pow(2),
         )
         # force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * noise_pred
-        return noise_pred
+        return -noise_pred
 
     def laplacian_func(self, x, t):
         # raise NotImplementedError("Laplacian function not implemented yet.")
@@ -518,54 +518,116 @@ class GaussianDiffusion(nn.Module):
         force_terms = []
         all_noised_xs = [noised_xs.clone().detach()]
 
-        # all_norms = []
-        # all_cosine_sims = []
-        # ref_time = {"chignolin":100, "bba": 5, "trp_cage": 100, "villin": 5, "protein_g": 5}
-        # ref_force = self.force_func(center_zero(all_noised_xs[0][0]), ref_time[self.protein])
-        # with torch.no_grad():
-        #     for t in tqdm(range(self.num_timesteps)):
-        #         force = self.force_func(center_zero(all_noised_xs[0][0]), t)
-        #         cosine_sim = F.cosine_similarity(force, ref_force, dim=-1).mean(dim=-1)
-        #         all_cosine_sims.append(cosine_sim)
-        #         norms = torch.norm(force, dim=-1).mean(dim=-1)
-        #         all_norms.append(norms)
+        all_norms = []
+        all_cosine_sims = []
+        ref_time = {
+            "chignolin": 20,
+            "bba": 5,
+            "trp_cage": 15,
+            "villin": 5,
+            "protein_g": 5,
+        }
+        model = load_mlff_model(
+            f"mlffs/{self.protein}/model.ckpt",
+            derivative=True,
+        ).to(self.device)
+        residue_nums = np.load(
+            f"datasets/mlff_residue_numbers/{self.protein}_ca_embeddings.npy"
+        )
+        residue_nums = torch.tensor(np.array([int(i) for i in residue_nums])).to(
+            self.device
+        )
 
-        # import matplotlib.pyplot as plt
-        # all_norms = torch.stack(all_norms).T
-        # all_cosine_sims = torch.stack(all_cosine_sims).T
-        # # all_norms has shape [path_length, T]
-        # # for each path, plot the norm of the force as a function of time
-        # for i in range(int(all_norms.shape[0] / 2) + 1):
-        #     if i % 20 != 0:
-        #         continue
-        #     weighting = i / all_norms.shape[0]
-        #     plt.plot(all_norms[i].cpu().numpy(), label=f"Linear Interpolation Weight {round(weighting, 2)}")
-        # plt.legend(loc="upper right")
+        def get_force_from_mlff(x):
+            batch = (
+                torch.arange(x.shape[0]).repeat_interleave(self.num_atoms).to(x.device)
+            )
+            z = residue_nums.repeat(x.shape[0])
+            x = x.reshape(-1, 3) * self.norm_factor
+            force = model(z=z, pos=x, batch=batch)[1].reshape(-1, self.num_atoms, 3)
+            return force
+
+        ref_force = get_force_from_mlff(all_noised_xs[0][0])
+        force = self.force_func(
+            center_zero(all_noised_xs[0][0]), ref_time[self.protein]
+        )
+        ref_force_norms = torch.norm(ref_force, dim=-1).mean(-1)
+        force_norms = torch.norm(force, dim=-1).mean(-1)
+
+        # plot this
+        import matplotlib.pyplot as plt
+
+        plt.plot(
+            ref_force_norms.detach().cpu().numpy(), label="Reference MLFF Force Norm"
+        )
+        plt.plot(force_norms.detach().cpu().numpy(), label="Diffusion Force Norm")
+        plt.ylabel("Force Norm")
+        plt.xlabel("Path Step")
+        plt.legend()
+        plt.title(self.protein)
+        plt.show()
+        # save the figure
+        plt.savefig(f"mlff_force_norms_{self.protein}.png")
+        plt.close()
+
+        import pdb
+
+        pdb.set_trace()
+        with torch.no_grad():
+            for t in tqdm(range(self.num_timesteps)):
+                force = self.force_func(center_zero(all_noised_xs[0][0]), t)
+                cosine_sim = F.cosine_similarity(force, ref_force, dim=-1).mean(dim=-1)
+                all_cosine_sims.append(cosine_sim)
+                norms = (
+                    torch.norm(force, dim=-1) / torch.norm(ref_force, dim=-1)
+                ).mean(dim=-1)
+                all_norms.append(norms)
+
+        import matplotlib.pyplot as plt
+
+        all_norms = torch.stack(all_norms).T
+        all_cosine_sims = torch.stack(all_cosine_sims).T
+        # all_norms has shape [path_length, T]
+        # for each path, plot the norm of the force as a function of time
+        for i in range(int(all_norms.shape[0] / 2) + 1):
+            if i % 20 != 0:
+                continue
+            weighting = i / all_norms.shape[0]
+            plt.plot(
+                all_norms[i].cpu().numpy(),
+                label=f"Linear Interpolation Weight {round(weighting, 2)}",
+            )
+        plt.legend(loc="upper right")
+        plt.yscale("log")
+        plt.xlabel("Diffusion Timestep")
+        plt.ylabel("Norm Ratio of Denoising Model Output w.r.t Reference MLFF Force")
+        plt.title(self.protein)
+        plt.show()
+
+        # save the figure
+        plt.savefig(f"ratio_force_norms_{self.protein}.png")
+        plt.close()
+
+        for i in range(int(all_cosine_sims.shape[0] / 2) + 1):
+            if i % 20 != 0:
+                continue
+            weighting = i / all_norms.shape[0]
+            plt.plot(
+                all_cosine_sims[i].cpu().numpy(),
+                label=f"Linear Interpolation Weight {round(weighting, 2)}",
+            )
+        plt.legend(loc="upper right")
         # plt.yscale("log")
-        # plt.xlabel("Diffusion Timestep")
-        # plt.ylabel("Norm of Denoising Model Output")
-        # plt.title(self.protein)
-        # plt.show()
-
-        # # save the figure
-        # plt.savefig(f"force_norms_{self.protein}.png")
-        # plt.close()
-
-        # for i in range(int(all_cosine_sims.shape[0] / 2) + 1):
-        #     if i % 20 != 0:
-        #         continue
-        #     weighting = i / all_norms.shape[0]
-        #     plt.plot(all_cosine_sims[i].cpu().numpy(), label=f"Linear Interpolation Weight {round(weighting, 2)}")
-        # plt.legend(loc="upper right")
-        # # plt.yscale("log")
-        # plt.xlabel("Diffusion Timestep")
-        # plt.ylabel("Cosine Similarity of Denoising Model Output to Reference Force")
+        plt.xlabel("Diffusion Timestep")
+        plt.ylabel(
+            "Cosine Similarity of Denoising Model Output to Reference MLFF Force"
+        )
         # plt.axvline(x=ref_time[self.protein], color="red", linestyle="--", label="Reference Time")
-        # plt.title(self.protein)
-        # plt.show()
+        plt.title(self.protein)
+        plt.show()
 
-        # # save the figure
-        # plt.savefig(f"cosine_sims_{self.protein}.png")
+        # save the figure
+        plt.savefig(f"mlff_cosine_sims_{self.protein}.png")
 
         # load the NNIP model
         if mlff:

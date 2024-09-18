@@ -12,15 +12,15 @@
 
 
 # No encode and decode using force field at time specified in Two from One paper
-python sample.py \
-    --model_path saved_models/chignolin \
-    --gen_mode om_interpolate \
-    --num_samples_eval 2 \
-    --batch_size_gen 2 \
-    --latent_time 20 \
-    --no_encode_and_decode \
-    --append_exp_name shortened_anneal \
-    --anneal
+# python sample.py \
+#     --model_path saved_models/chignolin \
+#     --gen_mode om_interpolate \
+#     --num_samples_eval 2 \
+#     --batch_size_gen 2 \
+#     --latent_time 20 \
+#     --no_encode_and_decode \
+#     --append_exp_name shortened_anneal \
+#     --anneal
    
     
 python sample.py \
@@ -30,41 +30,40 @@ python sample.py \
     --batch_size_gen 2 \
     --latent_time 15 \
     --no_encode_and_decode \
-    --append_exp_name shortened_anneal \
-    --anneal
+    --append_exp_name test \
 
-python sample.py \
-    --model_path saved_models/bba \
-    --gen_mode om_interpolate \
-    --num_samples_eval 2 \
-    --batch_size_gen 2 \
-    --latent_time 20 \
-    --no_encode_and_decode \
-    --append_exp_name shortened_anneal \
-    --anneal
-
+# python sample.py \
+#     --model_path saved_models/bba \
+#     --gen_mode om_interpolate \
+#     --num_samples_eval 2 \
+#     --batch_size_gen 2 \
+#     --latent_time 20 \
+#     --no_encode_and_decode \
+#     --append_exp_name shortened_anneal \
+#     --anneal
 
 
-python sample.py \
-    --model_path saved_models/villin \
-    --gen_mode om_interpolate \
-    --num_samples_eval 2 \
-    --batch_size_gen 2 \
-    --latent_time 5 \
-    --no_encode_and_decode \
-    --append_exp_name shortened_anneal \
-    --anneal
+
+# python sample.py \
+#     --model_path saved_models/villin \
+#     --gen_mode om_interpolate \
+#     --num_samples_eval 2 \
+#     --batch_size_gen 2 \
+#     --latent_time 5 \
+#     --no_encode_and_decode \
+#     --append_exp_name shortened_anneal \
+#     --anneal
 
 
-python sample.py \
-    --model_path saved_models/protein_g \
-    --gen_mode om_interpolate \
-    --num_samples_eval 2 \
-    --batch_size_gen 2 \
-    --latent_time 5 \
-    --no_encode_and_decode \
-    --append_exp_name shortened_anneal \
-    --anneal
+# python sample.py \
+#     --model_path saved_models/protein_g \
+#     --gen_mode om_interpolate \
+#     --num_samples_eval 2 \
+#     --batch_size_gen 2 \
+#     --latent_time 5 \
+#     --no_encode_and_decode \
+#     --append_exp_name shortened_anneal \
+#     --anneal
     
 
 
