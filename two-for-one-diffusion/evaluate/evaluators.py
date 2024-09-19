@@ -542,7 +542,7 @@ class TicEvaluator:
         fig, (ax1, ax2) = plt.subplots(
             1, 2, dpi=150, gridspec_kw={"width_ratios": [24, 1]}
         )
-        ax1.imshow(probs.T, norm=LogNorm(vmax=10, vmin=1e-4), origin="lower", zorder=1)
+        ax1.imshow(probs.T, norm=Normalize(vmax=10, vmin=0), origin="lower", zorder=1)
         ax1.set_xticks(
             range(len(self.bin_mids_x))[5::15],
             [f"{num:.02f}" for num in self.bin_mids_x[5::15]],
