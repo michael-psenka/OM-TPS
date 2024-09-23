@@ -5,6 +5,40 @@ from .unet import Unet
 from tqdm import tqdm
 
 
+# essentially a wrapper for the base Unet model, but adding sampling methods in same format
+class CelebADiffusion(nn.Module):
+    def __init__(
+        self, n_channels=3, t_emb_dim=128, bilinear=True
+    ):
+        super().__init__()
+
+        self.model = Unet(n_channels, t_emb_dim, bilinear=bilinear)
+        
+    def forward(self, x, t):
+        return self.model((x,t,))
+    
+def sampling(self, size, T, Alpha, Alpha_bar, Sigma, device="cuda"):
+    """
+    Perform the complete sampling step according to p(x_0|x_T)
+    """
+    assert len(Alpha) == T
+    assert len(Alpha_bar) == T
+    assert len(Sigma) == T
+    assert len(size) == 4
+    print('begin sampling, total steps = %s' % T)
+
+    x = torch.normal(0, 1, size=size, device=device)
+    with torch.no_grad():
+        for t in range(T-1,-1,-1):
+            if t % 100 == 0:
+                print('reverse step:', t)
+            ts = (t * torch.ones((size[0], 1))).cuda()
+            epsilon_theta = self.model((x,ts,))
+            x = (x - (1-Alpha[t])/torch.sqrt(1-Alpha_bar[t]) * epsilon_theta) / torch.sqrt(Alpha[t])
+            if t > 0:
+                x = x + Sigma[t] * torch.normal(0, 1, size=size, device=device)
+    return x
+
 class MNISTDiffusion(nn.Module):
     def __init__(
         self,
@@ -14,11 +48,13 @@ class MNISTDiffusion(nn.Module):
         timesteps=1000,
         base_dim=32,
         dim_mults=[1, 2, 4, 8],
+        use_alt_timesampling=False
     ):
         super().__init__()
         self.timesteps = timesteps
         self.in_channels = in_channels
         self.image_size = image_size
+        self.use_alt_timesampling = use_alt_timesampling
 
         betas = self._cosine_variance_schedule(timesteps)
 
@@ -39,7 +75,15 @@ class MNISTDiffusion(nn.Module):
 
     def forward(self, x, noise):
         # x:NCHW
-        t = torch.randint(0, self.timesteps, (x.shape[0],)).to(x.device)
+        if self.use_alt_timesampling:
+            t_mask = torch.rand(x.shape[0], device=x.device) < 0.5
+            # first dist, just in first 10th
+            t = torch.randint(0, self.timesteps // 10, (x.shape[0],)).to(x.device)
+            # with probability 1/2, sample from rest
+            t_g = torch.randint(self.timesteps // 10, self.timesteps, (x.shape[0],)).to(x.device)
+            t[t_mask] = t_g[t_mask]
+        else:
+            t = torch.randint(0, self.timesteps, (x.shape[0],)).to(x.device)
         x_t = self._forward_diffusion(x, t, noise)
         pred_noise = self.model(x_t, t)
 
@@ -62,26 +106,38 @@ class MNISTDiffusion(nn.Module):
 
     @torch.no_grad()
     def sample_from_t(
-        self, start_t, x_t, clipped_reverse_diffusion=True, device="cuda", display=False
-    ):
+        self, start_t, x_t, clipped_reverse_diffusion=True, device="cuda", display=False,
+        addnoise = True, save_intermediate=False):
 
+        if save_intermediate:
+            x_t_list = []
         if display:
             ddpm_range = tqdm(range(start_t - 1, -1, -1))
         else:
             ddpm_range = range(start_t - 1, -1, -1)
         for i in ddpm_range:
-            noise = torch.randn_like(x_t).to(device)
+            if addnoise:
+                noise = torch.randn_like(x_t).to(device)
+            else:
+                noise = torch.zeros_like(x_t).to(device)
             t = torch.tensor([i for _ in range(x_t.shape[0])]).to(device)
 
             if clipped_reverse_diffusion:
                 x_t = self._reverse_diffusion_with_clip(x_t, t, noise)
             else:
                 x_t = self._reverse_diffusion(x_t, t, noise)
+            if save_intermediate:
+                x_t_list.append(x_t)
 
         # Using transformation to do that
         # x_t=(x_t+1.)/2. #[-1,1] to [0,1]
+        if save_intermediate:
 
-        return x_t
+            # flip the indexing of x_t_list
+            x_t_list = x_t_list[::-1]
+            return x_t_list
+        else:
+            return x_t
 
     def _cosine_variance_schedule(self, timesteps, epsilon=0.008):
         steps = torch.linspace(0, timesteps, steps=timesteps + 1, dtype=torch.float32)
