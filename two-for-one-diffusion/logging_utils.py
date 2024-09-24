@@ -3,6 +3,7 @@ from PIL import Image
 import io
 import os
 import torch
+from tqdm import tqdm
 import gsd.hoomd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,8 +16,8 @@ def save_ovito_traj(positions, filename):
     Save the given positions to a GSD file using Ovito.
     """
     t = gsd.hoomd.open(name=filename, mode="w")
-    cell = 1.5 * torch.eye(3) * positions.abs().max()
-    for i, pos in enumerate(positions):
+    cell = 1.5 * torch.eye(3) * positions.cpu().abs().max()
+    for i, pos in tqdm(enumerate(positions)):
         t.append(create_frame(i, pos, cell))
     t.close()
 

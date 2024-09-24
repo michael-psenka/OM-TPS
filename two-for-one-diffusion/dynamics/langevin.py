@@ -142,7 +142,7 @@ class LangevinDiffusion:
             t,
             diffusion_steps,
             kbt_inv=self.kb_inv / temp_data,
-        )
+        ).eval()
 
         if friction is None:
             friction_aux = 1

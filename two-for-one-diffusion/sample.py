@@ -33,9 +33,9 @@ import matplotlib.pyplot as plt
 
 # default cluster endpoints for testing interpolation (obtained by visual inspection of what are hard transition paths to capture)
 CLUSTER_ENDPOINTS = {
-    "chignolin": [16, 6],
-    "trp_cage": [16, 6],
-    "bba": [15, 3],
+    "chignolin": [9, 17],
+    "trp_cage": [14, 13],
+    "bba": [18, 3],
     "villin": [13, 6],
     "protein_g": [13, 16],
 }
@@ -256,7 +256,12 @@ def main(samp_args):
 
 
 def generate_samples(model, trainset, noise_level, args, device, eval_folder):
-    # Generate iid samples
+    # Generate samples from diffusion model
+    iid_sample_path = Path(
+        os.path.join(os.path.dirname(eval_folder), "main_eval_output_iid")
+    )
+
+    protein_name = iid_sample_path.parts[-2]
     if samp_args.gen_mode == "iid":
         sampler = SamplerWrapper(model.ema_model).to(device).eval()
         if torch.cuda.device_count() > 1 and device == "cuda":
@@ -275,10 +280,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
     elif "interpolate" in samp_args.gen_mode:
 
         # choose two endpoints as cluster centers
-        iid_sample_path = Path(
-            os.path.join(os.path.dirname(eval_folder), "main_eval_output_iid")
-        )
-        protein_name = iid_sample_path.parts[-2]
+
         cluster_coords_path = Path(
             os.path.join(
                 "evaluate",
@@ -440,13 +442,20 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
 
     # Also save as gsd
     save_ovito_traj(
-        sampled_mol[: samp_args.path_length],
+        (
+            sampled_mol[: samp_args.path_length]
+            if "interpolate" in samp_args.gen_mode
+            else sampled_mol
+        ),
         str(eval_folder) + f"/sample-{samp_args.gen_mode}.gsd",
     )
 
     # Perform final evaluations (producing plots, GIFs, etc.)
     evaluate_fastfolders(
-        protein_name, samp_args.gen_mode, samp_args.original_append_exp_name
+        protein_name,
+        samp_args.gen_mode,
+        samp_args.original_append_exp_name,
+        model=model.ema_model,
     )
 
     return sampled_mol

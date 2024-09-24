@@ -522,6 +522,19 @@ class TicEvaluator:
 
         return tic_js, fig
 
+    def tic_to_xyz(self, query_tic_coords, xyz_samples):
+        """
+        Convert TIC coordinates back to Cartesian coordinates using the TIC evaluator.
+        """
+        sample_tic_features = self.get_tic_features(xyz_samples, self.folded)
+        transformed_samples = self.tica(sample_tic_features)
+        # Find the closest point in the transformed samples
+        dists = np.linalg.norm(
+            transformed_samples[None] - query_tic_coords[:, None], axis=-1
+        )
+        closest_idx = np.argmin(dists, axis=-1)
+        return xyz_samples[closest_idx]
+
     def _plot_tic(
         self,
         probs,
@@ -542,7 +555,7 @@ class TicEvaluator:
         fig, (ax1, ax2) = plt.subplots(
             1, 2, dpi=150, gridspec_kw={"width_ratios": [24, 1]}
         )
-        ax1.imshow(probs.T, norm=Normalize(vmax=10, vmin=0), origin="lower", zorder=1)
+        ax1.imshow(probs.T, norm=LogNorm(vmax=10, vmin=1e-4), origin="lower", zorder=1)
         ax1.set_xticks(
             range(len(self.bin_mids_x))[5::15],
             [f"{num:.02f}" for num in self.bin_mids_x[5::15]],

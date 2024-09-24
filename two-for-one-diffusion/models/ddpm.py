@@ -1,6 +1,7 @@
 # Code largely based on:
 # https://github.com/lucidrains/denoising-diffusion-pytorch
 
+import os
 import math
 import numpy as np
 import torch
@@ -10,6 +11,7 @@ from einops import reduce
 from ase import units
 import warnings
 from tqdm import tqdm
+from rmsd import kabsch_rotate
 from actions import S2Action, TruncatedAction, SimpleAction
 from dynamics.langevin import ForcesWrapper, temp_dict
 
@@ -26,7 +28,7 @@ from utils import (
 
 from torchmdnet.models.model import load_model as load_mlff_model
 
-KB = 0.83144626181  # This is the Boltzmann constant conversed from J/K (Kg, m^2 / s^2 / K) to -> g/mol, angstroms, ps and K.
+KB = 0.83144626181  # This is the Boltzmann constant converted from J/K (Kg, m^2 / s^2 / K) to -> g/mol, angstroms, ps and K.
 
 
 class GaussianDiffusion(nn.Module):
@@ -399,6 +401,9 @@ class GaussianDiffusion(nn.Module):
 
         n_atoms = x1.shape[0]
 
+        # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
+        x2 = torch.tensor(kabsch_rotate(x2.cpu(), x1.cpu())).to(x2.device)
+
         x1 = x1.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
         x2 = x2.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
         x1 = center_zero(x1)
@@ -470,6 +475,9 @@ class GaussianDiffusion(nn.Module):
             True  # needed to track gradients through conservative force calculation
         )
 
+        # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
+        x2 = torch.tensor(kabsch_rotate(x2.cpu(), x1.cpu())).to(x2.device)
+
         n_atoms = x1.shape[0]
         x1 = x1.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
         x2 = x2.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
@@ -498,7 +506,11 @@ class GaussianDiffusion(nn.Module):
             noised_x2 = center_zero(noised_x2)
 
         # linear interpolation of noised_x1 and noised_x2
-
+        # if os.path.exists(f"saved_models/{self.protein}/main_eval_output_om_interpolate_test/ground_truth_path.pt"):
+        #     ground_truth_path = torch.load(f"saved_models/{self.protein}/main_eval_output_om_interpolate_test/ground_truth_path.pt").to(self.device)
+        #     noised_xs = ground_truth_path.unsqueeze(1).repeat(1, num_paths, 1, 1) / self.norm_factor
+        #     path_length = noised_xs.shape[0]
+        # else:
         noised_xs = torch.stack(
             [
                 center_zero(initial_guess_fn(noised_x1.cpu(), noised_x2.cpu(), alpha))
@@ -508,7 +520,7 @@ class GaussianDiffusion(nn.Module):
 
         noised_xs = noised_xs.permute((1, 0, 2, 3)).to(
             self.device
-        )  # make batch dimension come first [B, path_length, n_atoms, 3]
+        )  # make batch dimension come first [num_paths, path_length, n_atoms, 3]
 
         optimizer = torch.optim.Adam([noised_xs], lr=lr)
 
@@ -518,31 +530,31 @@ class GaussianDiffusion(nn.Module):
         force_terms = []
         all_noised_xs = [noised_xs.clone().detach()]
         """Some plotting/analysis code for understanding force norms and cosine similarities"""
-        all_norms = []
+        # all_norms = []
 
-        model = load_mlff_model(
-            f"mlffs/{self.protein}/model.ckpt",
-            derivative=True,
-        ).to(self.device)
-        residue_nums = np.load(
-            f"datasets/mlff_residue_numbers/{self.protein}_ca_embeddings.npy"
-        )
-        residue_nums = torch.tensor(np.array([int(i) for i in residue_nums])).to(
-            self.device
-        )
+        # model = load_mlff_model(
+        #     f"mlffs/{self.protein}/model.ckpt",
+        #     derivative=True,
+        # ).to(self.device)
+        # residue_nums = np.load(
+        #     f"datasets/mlff_residue_numbers/{self.protein}_ca_embeddings.npy"
+        # )
+        # residue_nums = torch.tensor(np.array([int(i) for i in residue_nums])).to(
+        #     self.device
+        # )
 
-        langevin_samples = torch.load(
-            f"saved_models/{self.protein}/main_eval_output_langevin/sample-langevin.pt"
-        ).to(self.device)
+        # langevin_samples = torch.load(
+        #     f"saved_models/{self.protein}/main_eval_output_langevin/sample-langevin.pt"
+        # ).to(self.device)
 
-        def get_force_from_mlff(x):
-            batch = (
-                torch.arange(x.shape[0]).repeat_interleave(self.num_atoms).to(x.device)
-            )
-            z = residue_nums.repeat(x.shape[0])
-            x = x.reshape(-1, 3) * self.norm_factor
-            force = model(z=z, pos=x, batch=batch)[1].reshape(-1, self.num_atoms, 3)
-            return force
+        # def get_force_from_mlff(x):
+        #     batch = (
+        #         torch.arange(x.shape[0]).repeat_interleave(self.num_atoms).to(x.device)
+        #     )
+        #     z = residue_nums.repeat(x.shape[0])
+        #     x = x.reshape(-1, 3) * self.norm_factor
+        #     force = model(z=z, pos=x, batch=batch)[1].reshape(-1, self.num_atoms, 3)
+        #     return force
 
         # with torch.no_grad():
         #     for t in tqdm(range(self.num_timesteps)[::5]):
