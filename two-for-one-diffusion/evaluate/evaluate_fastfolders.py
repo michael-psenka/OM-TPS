@@ -134,7 +134,7 @@ def evaluate_fastfolders(
         "langevin",
         append_exp_name=None,
         num_clusters=20,
-        subsample=subsample,
+        subsample=np.arange(0, 12000),
     )
 
     # Then, find the most probable path between the start and end states
@@ -247,11 +247,51 @@ def get_tic_free_energy_plots(
     free_energy_paths = (
         []
     )  # To keep track of the free energy image paths for creating a GIF
+    dihedral_hist_paths = (
+        []
+    )  # To keep track of the dihedral angle histograms for creating a GIF
+    pwd_hist_paths = (
+        []
+    )  # To keep track of the pairwise distance histograms for creating a GIF
 
     for i, path in enumerate(loop):
         # Get samples TIC free energy landscape
-        sample_tic_features = tic_evaluator.get_tic_features(path, tic_evaluator.folded)
+        dihedrals, pwds = tic_evaluator.get_tic_features(
+            path, tic_evaluator.folded, separate=True
+        )
+        sample_tic_features = np.hstack((dihedrals, pwds))
         transformed_samples = tic_evaluator.tica(sample_tic_features)
+
+        dihedral_hist = np.histogram(np.ravel(dihedrals), bins=100)[0]
+        pwd_hist = np.histogram(np.ravel(pwds), bins=100)[0]
+
+        # Plot dihedral angle histogram
+        plt.figure()
+        plt.plot(dihedral_hist)
+        plt.title(f"Step {i}: Dihedral angular distribution function")
+
+        plt.xlabel("Dihedral angle (degrees)")
+        plt.ylabel("Frequency")
+        plt.ylim(0, dihedrals.shape[0])
+        plt.show()
+        file_name = join(gif_folder, f"dihedral_{i}.png")
+        plt.savefig(file_name)
+        plt.close()
+        dihedral_hist_paths.append(file_name)
+
+        # Plot pairwise distance histogram
+        plt.figure()
+        plt.plot(pwd_hist)
+        plt.title(f"Step {i}: Pairwise distance distribution function")
+
+        plt.xlabel("Pairwise distance (Angstroms)")
+        plt.ylabel("Frequency")
+        plt.ylim(0, 0.1 * np.ravel(pwds).shape[0])
+        plt.show()
+        file_name = join(gif_folder, f"pwd_{i}.png")
+        plt.savefig(file_name)
+        plt.close()
+        pwd_hist_paths.append(file_name)
 
         # Find the bins of the samples
         bins_x = np.digitize(transformed_samples[:, 0], tic_evaluator.bin_edges_x)
@@ -260,7 +300,7 @@ def get_tic_free_energy_plots(
         bins_x = np.clip(bins_x, 0, tic_evaluator.bins - 1)
         bins_y = np.clip(bins_y, 0, tic_evaluator.bins - 1)
 
-        # probailities of the samples as a function of path position
+        # probabilities of the samples as a function of path position
         gt_probs = np.zeros((path.shape[0],))
 
         # probabilities of the samples as a function of TICA bins
@@ -361,8 +401,36 @@ def get_tic_free_energy_plots(
         loop=0,  # Loop forever
     )
 
+    # Repeat for the dihedral angle histograms
+    dihedral_hist_gif_path = join(tic_evaluator.plots_folder, "dihedral_hist.gif")
+    images = [
+        Image.open(dihedral_hist_path) for dihedral_hist_path in dihedral_hist_paths
+    ]
+    images[0].save(
+        dihedral_hist_gif_path,
+        save_all=True,
+        append_images=images[1:],
+        optimize=False,
+        duration=100,  # Duration for each frame in milliseconds
+        loop=0,  # Loop forever
+    )
+
+    # Repeat for the pairwise distance histograms
+    pwd_hist_gif_path = join(tic_evaluator.plots_folder, "pwd_hist.gif")
+    images = [Image.open(pwd_hist_path) for pwd_hist_path in pwd_hist_paths]
+    images[0].save(
+        pwd_hist_gif_path,
+        save_all=True,
+        append_images=images[1:],
+        optimize=False,
+        duration=100,  # Duration for each frame in milliseconds
+        loop=0,  # Loop forever
+    )
+
     # Remove the temporary image files
-    for image_path in tic_paths + free_energy_paths:
+    for image_path in (
+        tic_paths + free_energy_paths + dihedral_hist_paths + pwd_hist_paths
+    ):
         os.remove(image_path)
 
 

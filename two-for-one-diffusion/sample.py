@@ -132,6 +132,13 @@ parser.add_argument(
     help="method to generate initial interpolation path (options: 'spherical' or 'linear')",
     default="linear",
 )
+
+parser.add_argument(
+    "--initial_guess_level",
+    type=int,
+    help="At what latent level to generate the initial interpolation path",
+    default=0,
+)
 parser.add_argument(
     "--anneal",
     action="store_true",
@@ -147,6 +154,13 @@ parser.add_argument(
 
 parser.add_argument(
     "--lr", type=float, help="learning rate for OM optimization", default=2e-1
+)
+
+parser.add_argument(
+    "--interpolation_temp",
+    type=float,
+    help="temperature for initial path generation",
+    default=1.0,
 )
 
 parser.add_argument(
@@ -313,12 +327,14 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                         if samp_args.initial_guess_method == "linear"
                         else slerp
                     ),
+                    initial_guess_level=samp_args.initial_guess_level,
                     mlff=samp_args.mlff,
                     action_cls=action_cls,
                     om_steps=samp_args.steps,
                     lr=samp_args.lr,
                     anneal=samp_args.anneal,
                     truncated_gradient=samp_args.truncated_gradient,
+                    temperature=samp_args.interpolation_temp,
                 )
                 .to(device)
                 .eval()
@@ -336,7 +352,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                         if samp_args.initial_guess_method == "linear"
                         else slerp
                     ),
-                    temperature=1.0,
+                    temperature=interpolation_temp,
                 )
                 .to(device)
                 .eval()

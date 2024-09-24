@@ -453,7 +453,7 @@ class TicEvaluator:
         self.bin_x_folded = np.argmin(abs(self.bin_mids_x - folded_transform[0]))
         self.bin_y_folded = np.argmin(abs(self.bin_mids_y - folded_transform[1]))
 
-    def get_tic_features(self, xyz, folded):
+    def get_tic_features(self, xyz, folded, separate=False):
         """
         Calculate features for TIC analysis, dihedrals and pairwise distances.
         """
@@ -464,7 +464,8 @@ class TicEvaluator:
         dihedrals = md.compute_dihedrals(traj, ind)
 
         pwds = get_pwd_triu_batch(xyz).numpy()
-
+        if separate:
+            return dihedrals, pwds
         return np.hstack((dihedrals, pwds))
 
     def eval(

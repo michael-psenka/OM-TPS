@@ -324,6 +324,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         mlff=False,
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
+        initial_guess_level=0,
         om_steps=100,
         lr=2e-1,
         anneal=False,
@@ -340,6 +341,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         self.mlff = mlff
         self.action_cls = action_cls
         self.initial_guess_fn = initial_guess_fn
+        self.initial_guess_level = initial_guess_level
         self.om_steps = om_steps
         self.lr = lr
         self.anneal = anneal
@@ -357,6 +359,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
             mlff=self.mlff,
             action_cls=self.action_cls,
             initial_guess_fn=self.initial_guess_fn,
+            initial_guess_level=self.initial_guess_level,
             om_steps=self.om_steps,
             lr=self.lr,
             anneal=self.anneal,

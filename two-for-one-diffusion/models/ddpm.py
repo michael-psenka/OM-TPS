@@ -279,7 +279,7 @@ class GaussianDiffusion(nn.Module):
         return model_mean, posterior_variance, posterior_log_variance
 
     @torch.no_grad()
-    def p_sample(self, x, t):
+    def p_sample(self, x, t, temperature=1.0):
         """
         Single sample from model given (noisy) molecule x and timestep t.
         """
@@ -291,10 +291,13 @@ class GaussianDiffusion(nn.Module):
         noise = center_zero(noise)
         # no noise when t == 0
         nonzero_mask = (1 - (t == 0).float()).reshape(b, *((1,) * (len(x.shape) - 1)))
-        return model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise
+        return (
+            model_mean
+            + nonzero_mask * (0.5 * model_log_variance).exp() * noise * temperature
+        )
 
     @torch.no_grad()
-    def p_sample_loop(self, mol_t, t):
+    def p_sample_loop(self, mol_t, t, temperature=1.0):
         """
         Loop over diffusion timesteps to go from noise to molecule starting at t=t.
         """
@@ -306,7 +309,9 @@ class GaussianDiffusion(nn.Module):
 
         for j, i in tqdm(enumerate(reversed(range(0, t)))):
             mol = self.p_sample(
-                mol, torch.full((b,), i, device=device, dtype=torch.long)
+                mol,
+                torch.full((b,), i, device=device, dtype=torch.long),
+                temperature=temperature,
             )
             if (mol.max() > 1000) or (mol.min() < -1000):
                 warnings.warn("Large molecule encountered in sampling")
@@ -317,7 +322,7 @@ class GaussianDiffusion(nn.Module):
         return mol
 
     @torch.no_grad()
-    def sample(self, batch_size):
+    def sample(self, batch_size, temperature=1.0):
         """
         Sample from model starting from t = T.
         """
@@ -327,7 +332,9 @@ class GaussianDiffusion(nn.Module):
             torch.randn((batch_size, num_atoms, dims), device=self.betas.device)
         )
         return (
-            self.p_sample_loop(mol_t=starting_mol, t=self.num_timesteps)
+            self.p_sample_loop(
+                mol_t=starting_mol, t=self.num_timesteps, temperature=temperature
+            )
             * self.norm_factor
         )
 
@@ -439,7 +446,9 @@ class GaussianDiffusion(nn.Module):
         )  # make batch dimension come first [B, path_length, n_atoms, 3]
 
         # decode
-        xs = self.p_sample_loop(noised_xs.reshape(-1, n_atoms, 3), latent_time)
+        xs = self.p_sample_loop(
+            noised_xs.reshape(-1, n_atoms, 3), latent_time, temperature=temperature
+        )
 
         xs = xs.reshape(num_paths, path_length, n_atoms, 3)
         xs = xs.clone().detach()
@@ -462,6 +471,7 @@ class GaussianDiffusion(nn.Module):
         mlff=False,
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
+        initial_guess_level=0,
         om_steps=100,
         lr=2e-1,
         anneal=False,
@@ -498,6 +508,9 @@ class GaussianDiffusion(nn.Module):
             if encode_and_decode:
                 noised_x1 = self.q_sample(x1, latent_time)
                 noised_x2 = self.q_sample(x2, latent_time)
+            elif initial_guess_level != 0:
+                noised_x1 = self.q_sample(x1, initial_guess_level)
+                noised_x2 = self.q_sample(x2, initial_guess_level)
             else:
                 noised_x1 = x1
                 noised_x2 = x2
@@ -506,20 +519,26 @@ class GaussianDiffusion(nn.Module):
             noised_x2 = center_zero(noised_x2)
 
         # linear interpolation of noised_x1 and noised_x2
-        # if os.path.exists(f"saved_models/{self.protein}/main_eval_output_om_interpolate_test/ground_truth_path.pt"):
-        #     ground_truth_path = torch.load(f"saved_models/{self.protein}/main_eval_output_om_interpolate_test/ground_truth_path.pt").to(self.device)
-        #     noised_xs = ground_truth_path.unsqueeze(1).repeat(1, num_paths, 1, 1) / self.norm_factor
-        #     path_length = noised_xs.shape[0]
-        # else:
         noised_xs = torch.stack(
             [
                 center_zero(initial_guess_fn(noised_x1.cpu(), noised_x2.cpu(), alpha))
                 for alpha in torch.linspace(0, 1, path_length)
             ]
-        )
+        ).to(self.device)
 
-        noised_xs = noised_xs.permute((1, 0, 2, 3)).to(
-            self.device
+        if initial_guess_level != 0:
+            # denoise to data space before optimization
+            noised_xs = self.p_sample_loop(
+                noised_xs.reshape(-1, n_atoms, 3),
+                initial_guess_level,
+                temperature=temperature,
+            )
+            noised_xs = noised_xs.reshape(path_length, num_paths, n_atoms, 3)
+            # reset the endpoints
+            noised_xs[0], noised_xs[-1] = original_x1, original_x2
+
+        noised_xs = noised_xs.permute(
+            (1, 0, 2, 3)
         )  # make batch dimension come first [num_paths, path_length, n_atoms, 3]
 
         optimizer = torch.optim.Adam([noised_xs], lr=lr)
@@ -597,13 +616,13 @@ class GaussianDiffusion(nn.Module):
                 force = model(z=z, pos=x, batch=batch)[1].reshape(-1, self.num_atoms, 3)
                 return force
 
-        anneal_schedule = torch.linspace(200, latent_time, om_steps // 2)
+        anneal_schedule = torch.linspace(200, latent_time, om_steps // 4)
         # add a bunch latent times to the anneal schedule
         anneal_schedule = (
             torch.cat(
                 [
                     anneal_schedule,
-                    torch.linspace(latent_time, latent_time, om_steps // 2),
+                    torch.linspace(latent_time, latent_time, 3 * om_steps // 4),
                 ]
             )
             .to(self.device)
@@ -680,7 +699,7 @@ class GaussianDiffusion(nn.Module):
         for path in all_noised_xs[::10]:
             if encode_and_decode:
                 denoised_path = self.p_sample_loop(
-                    path.reshape(-1, n_atoms, 3), latent_time
+                    path.reshape(-1, n_atoms, 3), latent_time, temperature=temperature
                 )
             else:
                 denoised_path = path
