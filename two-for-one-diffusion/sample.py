@@ -457,14 +457,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
     all_mol_traj.save_pdb(str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb"))
 
     # Also save as gsd
-    save_ovito_traj(
-        (
-            sampled_mol[: samp_args.path_length]
-            if "interpolate" in samp_args.gen_mode
-            else sampled_mol
-        ),
-        str(eval_folder) + f"/sample-{samp_args.gen_mode}.gsd",
-    )
+    save_ovito_traj(sampled_mol, str(eval_folder) + f"/sample-{samp_args.gen_mode}.gsd")
 
     # Perform final evaluations (producing plots, GIFs, etc.)
     evaluate_fastfolders(
@@ -472,6 +465,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
         samp_args.gen_mode,
         samp_args.original_append_exp_name,
         model=model.ema_model,
+        num_paths=samp_args.num_samples_eval,
     )
 
     return sampled_mol
