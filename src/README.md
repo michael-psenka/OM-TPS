@@ -22,7 +22,7 @@ python om_interpolation.py
 The following hyperparams should give decent interpolations on MNIST:
 
 ```bash
-python om_interpolation.py --steps 1500 --batch_size 32 --truncate_v_gradient --v_scale 0.5 --kernel_var 2.1
+python om_interpolation.py --steps 1500 --batch_size 32 --truncate_v_gradient --v_scale 0.08 --kernel_var 2.1 --disable_logging --lr 5e-2
 ```
 
 ## Reference
