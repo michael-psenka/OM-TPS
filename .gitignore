@@ -16,3 +16,7 @@ two-for-one-diffusion/
 
 # ignore test notebook
 michael_testbed.ipynb
+src/model/checkpoints
+
+# vs code
+.vscode/
