@@ -2,42 +2,116 @@ import torch.nn as nn
 import torch
 import math
 from .unet import Unet
+from .unet_celeba import UNet as CelebAUnet
 from tqdm import tqdm
+
+from diffusers import DDPMPipeline
+
+class CelebADiffusion(nn.Module):
+    def __init__(
+        self):
+        super().__init__()
+
+        model_id = "google/ddpm-celebahq-256"
+
+        # load model and scheduler
+        self.ddpm = DDPMPipeline.from_pretrained(model_id, device_map={"": "cuda:0"}) 
+        self.model = lambda x, t: self.ddpm.unet(x, t).sample
+        
+    def sampling(self, n_samples):
+        return self.ddpm(batch_size=n_samples, output_type="np.array")
+    
+    def sample_from_t(self, start_t, image):
+
+        # set step values
+        # self.scheduler.set_timesteps(num_inference_steps)
+
+        # for t in self.progress_bar(self.scheduler.timesteps):
+        #     # 1. predict noise model_output
+        #     model_output = self.unet(image, t).sample
+
+        #     # 2. compute previous image: x_t -> x_t-1
+        #     image = self.scheduler.step(model_output, t, image, generator=generator).prev_sample
+
+        # image = (image / 2 + 0.5).clamp(0, 1)
+
+        return -1
 
 
 # essentially a wrapper for the base Unet model, but adding sampling methods in same format
-class CelebADiffusion(nn.Module):
-    def __init__(
-        self, n_channels=3, t_emb_dim=128, bilinear=True
-    ):
-        super().__init__()
+# class CelebADiffusion(nn.Module):
+#     def __init__(
+#         self, n_channels=3, t_emb_dim=128, timesteps=1000, bilinear=True
+#     ):
+#         super().__init__()
 
-        self.model = Unet(n_channels, t_emb_dim, bilinear=bilinear)
+#         self.model = CelebAUnet(n_channels, t_emb_dim, bilinear=bilinear)
+#         self.data_shape = (3,256,256)
+#         self.timesteps = timesteps
         
-    def forward(self, x, t):
-        return self.model((x,t,))
-    
-def sampling(self, size, T, Alpha, Alpha_bar, Sigma, device="cuda"):
-    """
-    Perform the complete sampling step according to p(x_0|x_T)
-    """
-    assert len(Alpha) == T
-    assert len(Alpha_bar) == T
-    assert len(Sigma) == T
-    assert len(size) == 4
-    print('begin sampling, total steps = %s' % T)
+#         self.beta_0 = 0.0001
+#         self.beta_T = 0.02
+        
+#     def forward(self, x, t):
+#         return self.model((x,t,))
 
-    x = torch.normal(0, 1, size=size, device=device)
-    with torch.no_grad():
-        for t in range(T-1,-1,-1):
-            if t % 100 == 0:
-                print('reverse step:', t)
-            ts = (t * torch.ones((size[0], 1))).cuda()
-            epsilon_theta = self.model((x,ts,))
-            x = (x - (1-Alpha[t])/torch.sqrt(1-Alpha_bar[t]) * epsilon_theta) / torch.sqrt(Alpha[t])
-            if t > 0:
-                x = x + Sigma[t] * torch.normal(0, 1, size=size, device=device)
-    return x
+#     def load_state_dict(self, state_dict):
+#         self.model.load_state_dict(state_dict)
+    
+#     @torch.no_grad()
+#     def sampling(self, n_samples, device="cuda"):
+#         """
+#         Perform the complete sampling step according to p(x_0|x_T)
+#         """
+#         T = self.timesteps
+#         Beta = torch.linspace(self.beta_0, self.beta_T, T).cuda()
+#         Alpha = 1 - Beta
+#         Alpha_bar = torch.ones(T).cuda()
+#         Beta_tilde = Beta + 0
+#         for t in range(T):
+#             Alpha_bar[t] *= Alpha[t] * Alpha_bar[t-1] if t else Alpha[t]
+#             if t > 0:
+#                 Beta_tilde[t] *= (1-Alpha_bar[t-1]) / (1-Alpha_bar[t])
+#         Sigma = torch.sqrt(Beta_tilde)
+
+#         x = torch.normal(0, 1, size=(n_samples,) + self.data_shape, device=device)
+#         for t in range(T-1,-1,-1):
+#             if t % 100 == 0:
+#                 print('reverse step:', t)
+#             ts = (t * torch.ones((n_samples, 1))).cuda()
+#             epsilon_theta = self.model((x,ts,))
+#             x = (x - (1-Alpha[t])/torch.sqrt(1-Alpha_bar[t]) * epsilon_theta) / torch.sqrt(Alpha[t])
+#             if t > 0:
+#                 x = x + Sigma[t] * torch.normal(0, 1, size=(n_samples,) + self.data_shape, device=device)
+#         return x
+    
+#     @torch.no_grad()
+#     def sample_from_t(
+#         self, start_t, x, device="cuda",
+#         addnoise = True, save_intermediate=False):
+
+#         Beta = torch.linspace(self.beta_0, (start_t / self.timesteps)*self.beta_T, start_t).cuda()
+#         Alpha = 1 - Beta
+#         Alpha_bar = torch.ones(start_t).cuda()
+#         Beta_tilde = Beta + 0
+#         for t in range(start_t):
+#             Alpha_bar[t] *= Alpha[t] * Alpha_bar[t-1] if t else Alpha[t]
+#             if t > 0:
+#                 Beta_tilde[t] *= (1-Alpha_bar[t-1]) / (1-Alpha_bar[t])
+#         Sigma = torch.sqrt(Beta_tilde)
+
+#         for t in range(start_t-1,-1,-1):
+#             if t % 100 == 0:
+#                 print('reverse step:', t)
+#             ts = (t * torch.ones((x.shape[0], 1))).cuda()
+#             epsilon_theta = self.model((x,ts,))
+#             x = (x - (1-Alpha[t])/torch.sqrt(1-Alpha_bar[t]) * epsilon_theta) / torch.sqrt(Alpha[t])
+#             if t > 0:
+#                 x = x + Sigma[t] * torch.normal(0, 1, x.shape, device=device)
+#         return x
+
+
+
 
 class MNISTDiffusion(nn.Module):
     def __init__(

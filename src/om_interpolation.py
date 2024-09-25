@@ -311,24 +311,31 @@ if __name__ == "__main__":
         for i in pbar:
 
             # It helps to anneal diffusion time
-            
+
             scale_min = 0.1
 
             scale_factor = max((1 - i / 1000), scale_min)
             diff_time = torch.tensor((int)(999)).to(device)
             # reshape to (batch_size, path_length)
-            diff_time = diff_time.repeat(batch_size * path_length).reshape((batch_size, path_length))
+            diff_time = diff_time.repeat(batch_size * path_length).reshape(
+                (batch_size, path_length)
+            )
             # for all batch, we want to multiply elements by (1 + 0.5 - abs(j-path_length/2)/path_length) for index j in path length
             # this will make time go higher in the middle of the path
             for j in range(path_length):
-                diff_time[:,j] = diff_time[:,j] * (scale_factor - ((scale_factor - scale_min)/0.5)*abs(j-path_length/2)/path_length)
-                
+                diff_time[:, j] = diff_time[:, j] * (
+                    scale_factor
+                    - ((scale_factor - scale_min) / 0.5)
+                    * abs(j - path_length / 2)
+                    / path_length
+                )
+
             # convert to int, and clamp 0-999
             diff_time = diff_time.type(torch.int).clamp(0, 999)
-             
+
             # finally, flatten
             diff_time = diff_time.flatten()
-        
+
             # diff_time = torch.tensor(100).to(device)
 
             # compute diffusion model score estimates
@@ -342,9 +349,17 @@ if __name__ == "__main__":
             # where y = x + v(x) and is not differentiated with respect to x. In practice, optimized results look about the same,
             # but there is a huge speedup because we don't need to backprop through the model here.
             if args.truncate_v_gradient:
-                forces = v_scale * model.multi_step_denoising_no_noise(
-                    interpolated_images.reshape(-1, C, H, W), diff_time, v_steps
-                )
+                # forces = v_scale * model.multi_step_denoising_no_noise(
+                #     interpolated_images.reshape(-1, C, H, W), diff_time, v_steps
+                # )
+
+                with torch.no_grad():
+                    target = interpolated_images.reshape(-1, C, H, W) + model.model(
+                        interpolated_images.reshape(-1, C, H, W),
+                        diff_time,
+                    )
+                    
+                forces = v_scale * (target - interpolated_images.reshape(-1, C, H, W))
 
             else:
                 forces = v_scale * model.model(
@@ -379,10 +394,16 @@ if __name__ == "__main__":
                     kernel_size=(9, 9),
                     sigma=(g_sigma, g_sigma),
                 ).reshape((batch_size, path_length, C, H, W))
-                
-                forces = forces * torch.linalg.norm(torch.flatten(interpolated_images_blur[:,0,:,:,:] - interpolated_images_blur[:,-1,:,:,:], start_dim=1), dim=1).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
-                
-                
+
+                forces = forces * torch.linalg.norm(
+                    torch.flatten(
+                        interpolated_images_blur[:, 0, :, :, :]
+                        - interpolated_images_blur[:, -1, :, :, :],
+                        start_dim=1,
+                    ),
+                    dim=1,
+                ).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+
                 # compute the OM action from these forces (vmaped over the batch dimension)
                 total_action = torch.vmap(action_func)(
                     interpolated_images_blur, forces
@@ -391,34 +412,40 @@ if __name__ == "__main__":
                 # print first and second components
                 # with torch.no_grad():
                 #     first_component = torch.square((interpolated_images_blur[1:] - interpolated_images_blur[:-1]) / const_time).sum()
-                    
+
                 #     second_component = torch.square(forces[:-1] / path_length).sum()
 
                 #     print(f'First component: {first_component.item()}, second component: {second_component.item()}')
             else:
-                forces = forces * torch.linalg.norm(torch.flatten(interpolated_images[:,0,:,:,:] - interpolated_images[:,-1,:,:,:], start_dim=1), dim=1).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
+                forces = forces * torch.linalg.norm(
+                    torch.flatten(
+                        interpolated_images[:, 0, :, :, :]
+                        - interpolated_images[:, -1, :, :, :],
+                        start_dim=1,
+                    ),
+                    dim=1,
+                ).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)
                 total_action = torch.vmap(action_func)(
                     interpolated_images, forces
                 ).sum()
-                
-                
+
             # start adding path var loss at step 1000
             # if i == 1000:
             #     if g_sigma > 0:
             #         # compute path norm
             #         with torch.no_grad():
             #             curr_var = torch.square((interpolated_images_blur[:,1:,:,:,:] - interpolated_images_blur[:,:-1,:,:,:]) / const_time).sum(dim=(0,2,3,4)).var()
-                        
+
             #             scale_newterm = total_action / (curr_var + 1e-4)
-                    
+
             #         action_func = TruncatedActionPathvar(dt=const_time, xi=path_length, pathvar_scale=scale_newterm)
             #     else:
             #         # compute path norm
             #         with torch.no_grad():
             #             curr_var = torch.square((interpolated_images[:,1:,:,:,:] - interpolated_images[:,:-1,:,:,:]) / const_time).sum(dim=(0,2,3,4)).var()
-                        
+
             #             scale_newterm = total_action / (curr_var + 1e-4)
-                    
+
             #         action_func = TruncatedActionPathvar(dt=const_time, xi=path_length, pathvar_scale=scale_newterm)
 
             # test_model_grads = torch.autograd.grad(
@@ -470,19 +497,39 @@ if __name__ == "__main__":
         optimizer.zero_grad()
         del total_action, grads, forces
         torch.cuda.empty_cache()
-        
-         # print out list of force norms throughout the path of final_draw
+
+        # print out list of force norms throughout the path of final_draw
         with torch.no_grad():
             forces_finpath = model.model(
-               interpolated_images[batch_idx],
-               torch.tensor([100]).repeat(path_length).to(device)
+                interpolated_images[batch_idx],
+                torch.tensor([100]).repeat(path_length).to(device),
             )
 
             # output norms of forces
-            print("Norms of forces: ", torch.linalg.norm(forces_finpath.reshape(path_length, C*H*W), dim=1).cpu().detach().numpy())
+            print(
+                "Norms of forces: ",
+                torch.linalg.norm(forces_finpath.reshape(path_length, C * H * W), dim=1)
+                .cpu()
+                .detach()
+                .numpy(),
+            )
             # print path norm
             if g_sigma > 0:
-                print("Path norm: ", torch.sqrt(torch.square((interpolated_images_blur[:,1:,:,:,:] - interpolated_images_blur[:,:-1,:,:,:]) / const_time).sum(dim=(0,2,3,4))).cpu().detach().numpy())
+                print(
+                    "Path norm: ",
+                    torch.sqrt(
+                        torch.square(
+                            (
+                                interpolated_images_blur[:, 1:, :, :, :]
+                                - interpolated_images_blur[:, :-1, :, :, :]
+                            )
+                            / const_time
+                        ).sum(dim=(0, 2, 3, 4))
+                    )
+                    .cpu()
+                    .detach()
+                    .numpy(),
+                )
 
         with torch.no_grad():
             # run reverse diffusion on the final, optimized path
@@ -542,7 +589,6 @@ if __name__ == "__main__":
             nrow=final_draw[0].shape[0],
         )
 
-       
         if not args.disable_logging:
             im_dict = {
                 f"Decoded Interpolation Path Steps": wandb.Image(
