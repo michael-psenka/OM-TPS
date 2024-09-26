@@ -92,3 +92,37 @@ class SimpleAction(torch.nn.Module):
         third_term = (path[1:] - path[:-1]) * (f_np - f_n)
         result = torch.sum(first_term + second_term + third_term)
         return result / torch.tensor(4.0)
+
+class HutchinsonAction(torch.nn.Module):
+    """
+    Action with some randomness in hessian calculation. Saves one function call. 
+    """
+
+    def __init__(self, force_func, dt, gamma):
+        self.force_func = force_func
+        self.dt = dt
+        self.gamma = gamma
+        
+        def laplace(f: torch.tensor, x:torch.tensor):
+            size = f.shape[0]
+            v = torch.randint(0, 2, (size,), dtype=torch.float32) * 2 - 1
+
+            Av = torch.grad(f, x, grad_tensor=v)[0]
+            return torch.sum(v*Av)
+
+
+        self.laplace_func = laplace
+
+    
+    def forward(self, path: torch.Tensor):
+        
+        first_term = torch.square((path[1:] - path[:-1])) * (self.gamma / self.dt)
+        f_n = self.force_func(path[:-1]).to(path.device)
+        f_np = self.force_func(path[1:]).to(path.device)
+        second_term = (torch.square(f_n) + torch.square(f_np)) * (
+            self.dt / self.gamma / 2.0
+        )
+        third_term = self.laplace_func(f, path[:-1]) * self.dt * self.D / torch.tensor(2.0)
+        result = torch.sum(first_term + second_term + third_term)
+        return result / torch.tensor(4.0)
+
