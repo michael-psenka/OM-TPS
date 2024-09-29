@@ -2,114 +2,92 @@ import torch.nn as nn
 import torch
 import math
 from .unet import Unet
-from .unet_celeba import UNet as CelebAUnet
 from tqdm import tqdm
 
 from diffusers import DDPMPipeline
 
+
 class CelebADiffusion(nn.Module):
-    def __init__(
-        self):
+    def __init__(self):
         super().__init__()
 
         model_id = "google/ddpm-celebahq-256"
 
-        # load model and scheduler
-        self.ddpm = DDPMPipeline.from_pretrained(model_id, device_map={"": "cuda:0"}) 
+        # load model and scheduler. ddpm doesn't support multi-gpu, map to first available device1q
+        self.ddpm = DDPMPipeline.from_pretrained(model_id, device_map={"": "cuda:0"})
         self.model = lambda x, t: self.ddpm.unet(x, t).sample
-        
+
+        # Set device
+        self.device = self.ddpm.device
+
+        # # Define image preprocessing and postprocessing transforms
+        # self.preprocess = transforms.Compose([
+        #     transforms.Resize((256, 256)),
+        #     transforms.ToTensor(),               # Convert to tensor [0, 1]
+        #     transforms.Normalize([0.5], [0.5])   # Normalize to [-1, 1]
+        # ])
+        # self.postprocess = transforms.Compose([
+        #     transforms.Normalize([-1], [2]),    # Scale from [-1, 1] to [0, 1]
+        # ])
+
     def sampling(self, n_samples):
         return self.ddpm(batch_size=n_samples, output_type="np.array")
-    
-    def sample_from_t(self, start_t, image):
 
-        # set step values
-        # self.scheduler.set_timesteps(num_inference_steps)
+    def forward_diffusion(self, x0, t, noise=None):
+        """
+        Adds noise to the input image x0 at timestep t using the scheduler's add_noise method.
 
-        # for t in self.progress_bar(self.scheduler.timesteps):
-        #     # 1. predict noise model_output
-        #     model_output = self.unet(image, t).sample
+        Args:
+            x0 (torch.FloatTensor): Original image tensor of shape [batch_size, channels, height, width].
+            t (int): Timestep at which to add noise.
 
-        #     # 2. compute previous image: x_t -> x_t-1
-        #     image = self.scheduler.step(model_output, t, image, generator=generator).prev_sample
+        Returns:
+            torch.FloatTensor: Noised image tensor at timestep t.
+        """
+        x0 = x0.to(self.device)
+        # Generate noise if none given
+        if noise is None:
+            noise = torch.randn_like(x0, device=self.device)
 
-        # image = (image / 2 + 0.5).clamp(0, 1)
+        assert (
+            noise.shape == x0.shape
+        ), "Noise and image tensor must have the same shape."
+        # Create timesteps tensor
+        timesteps = torch.tensor(
+            t, device=self.device, dtype=torch.long
+        )
+        # Use scheduler's add_noise method
+        x_t = self.ddpm.scheduler.add_noise(x0, noise, timesteps)
+        return x_t
 
-        return -1
+    def sample_from_t(self, x_t, t, num_inference_steps=None):
+        """
+        Performs reverse denoising starting from x_t at timestep t down to t=0.
 
+        Args:
+            x_t (torch.FloatTensor): Starting image tensor at timestep t.
+            t (int): Starting timestep.
+            num_inference_steps (int, optional): Number of denoising steps. Defaults to t+1.
 
-# essentially a wrapper for the base Unet model, but adding sampling methods in same format
-# class CelebADiffusion(nn.Module):
-#     def __init__(
-#         self, n_channels=3, t_emb_dim=128, timesteps=1000, bilinear=True
-#     ):
-#         super().__init__()
-
-#         self.model = CelebAUnet(n_channels, t_emb_dim, bilinear=bilinear)
-#         self.data_shape = (3,256,256)
-#         self.timesteps = timesteps
-        
-#         self.beta_0 = 0.0001
-#         self.beta_T = 0.02
-        
-#     def forward(self, x, t):
-#         return self.model((x,t,))
-
-#     def load_state_dict(self, state_dict):
-#         self.model.load_state_dict(state_dict)
-    
-#     @torch.no_grad()
-#     def sampling(self, n_samples, device="cuda"):
-#         """
-#         Perform the complete sampling step according to p(x_0|x_T)
-#         """
-#         T = self.timesteps
-#         Beta = torch.linspace(self.beta_0, self.beta_T, T).cuda()
-#         Alpha = 1 - Beta
-#         Alpha_bar = torch.ones(T).cuda()
-#         Beta_tilde = Beta + 0
-#         for t in range(T):
-#             Alpha_bar[t] *= Alpha[t] * Alpha_bar[t-1] if t else Alpha[t]
-#             if t > 0:
-#                 Beta_tilde[t] *= (1-Alpha_bar[t-1]) / (1-Alpha_bar[t])
-#         Sigma = torch.sqrt(Beta_tilde)
-
-#         x = torch.normal(0, 1, size=(n_samples,) + self.data_shape, device=device)
-#         for t in range(T-1,-1,-1):
-#             if t % 100 == 0:
-#                 print('reverse step:', t)
-#             ts = (t * torch.ones((n_samples, 1))).cuda()
-#             epsilon_theta = self.model((x,ts,))
-#             x = (x - (1-Alpha[t])/torch.sqrt(1-Alpha_bar[t]) * epsilon_theta) / torch.sqrt(Alpha[t])
-#             if t > 0:
-#                 x = x + Sigma[t] * torch.normal(0, 1, size=(n_samples,) + self.data_shape, device=device)
-#         return x
-    
-#     @torch.no_grad()
-#     def sample_from_t(
-#         self, start_t, x, device="cuda",
-#         addnoise = True, save_intermediate=False):
-
-#         Beta = torch.linspace(self.beta_0, (start_t / self.timesteps)*self.beta_T, start_t).cuda()
-#         Alpha = 1 - Beta
-#         Alpha_bar = torch.ones(start_t).cuda()
-#         Beta_tilde = Beta + 0
-#         for t in range(start_t):
-#             Alpha_bar[t] *= Alpha[t] * Alpha_bar[t-1] if t else Alpha[t]
-#             if t > 0:
-#                 Beta_tilde[t] *= (1-Alpha_bar[t-1]) / (1-Alpha_bar[t])
-#         Sigma = torch.sqrt(Beta_tilde)
-
-#         for t in range(start_t-1,-1,-1):
-#             if t % 100 == 0:
-#                 print('reverse step:', t)
-#             ts = (t * torch.ones((x.shape[0], 1))).cuda()
-#             epsilon_theta = self.model((x,ts,))
-#             x = (x - (1-Alpha[t])/torch.sqrt(1-Alpha_bar[t]) * epsilon_theta) / torch.sqrt(Alpha[t])
-#             if t > 0:
-#                 x = x + Sigma[t] * torch.normal(0, 1, x.shape, device=device)
-#         return x
-
+        Returns:
+            torch.FloatTensor: Denoised image tensor at timestep 0.
+        """
+        x_t = x_t.to(self.device)
+        # Set custom timesteps in the scheduler from t down to 0
+        if num_inference_steps is None:
+            num_inference_steps = t + 1  # Ensure we have steps from t down to 0
+        timesteps = list(range(t, -1, -1))
+        self.ddpm.scheduler.set_timesteps(timesteps=timesteps)
+        # Denoising loop
+        image = x_t
+        for timestep in self.ddpm.scheduler.timesteps:
+            # Predict the noise
+            model_output = self.ddpm.unet(image, timestep).sample
+            # Step through the scheduler
+            image = self.ddpm.scheduler.step(model_output, timestep, image).prev_sample
+        # Post-process the image to [-1,1] range
+        image = image.clamp(-1, 1)
+        return image
 
 
 
@@ -122,7 +100,7 @@ class MNISTDiffusion(nn.Module):
         timesteps=1000,
         base_dim=32,
         dim_mults=[1, 2, 4, 8],
-        use_alt_timesampling=False
+        use_alt_timesampling=False,
     ):
         super().__init__()
         self.timesteps = timesteps
@@ -154,7 +132,9 @@ class MNISTDiffusion(nn.Module):
             # first dist, just in first 10th
             t = torch.randint(0, self.timesteps // 10, (x.shape[0],)).to(x.device)
             # with probability 1/2, sample from rest
-            t_g = torch.randint(self.timesteps // 10, self.timesteps, (x.shape[0],)).to(x.device)
+            t_g = torch.randint(self.timesteps // 10, self.timesteps, (x.shape[0],)).to(
+                x.device
+            )
             t[t_mask] = t_g[t_mask]
         else:
             t = torch.randint(0, self.timesteps, (x.shape[0],)).to(x.device)
@@ -180,8 +160,15 @@ class MNISTDiffusion(nn.Module):
 
     @torch.no_grad()
     def sample_from_t(
-        self, start_t, x_t, clipped_reverse_diffusion=True, device="cuda", display=False,
-        addnoise = True, save_intermediate=False):
+        self,
+        x_t,
+        start_t,
+        clipped_reverse_diffusion=True,
+        device="cuda",
+        display=False,
+        addnoise=True,
+        save_intermediate=False,
+    ):
 
         if save_intermediate:
             x_t_list = []
@@ -223,7 +210,11 @@ class MNISTDiffusion(nn.Module):
 
         return betas
 
-    def _forward_diffusion(self, x_0, t, noise):
+    def forward_diffusion(self, x_0, t, noise=None):
+
+        if noise is None:
+            noise = torch.randn_like(x_0)
+
         assert x_0.shape == noise.shape
         # q(x_{t}|x_{t-1})
         return (
@@ -319,13 +310,11 @@ class MNISTDiffusion(nn.Module):
             for step in range(num_steps):
                 # current t is max(0, t - step)
                 curr_t = torch.max(t - step, torch.tensor(0).to(device))
-                x_next = x_next - self.model(
-                    x_next, curr_t
-                )
+                x_next = x_next - self.model(x_next, curr_t)
 
         # scale down output such that scale of output step is approximately
         # invariant to num_steps. 1/num_steps is too steep since it assumes
         # all gradients are in line and don't shrink, both of which are typically
         # false. 1/sqrt empirically seems to keep the scale invariant, at least
         # as tested in smaller settings. TODO: more testing and rigorous analysis
-        return (1 / math.sqrt(num_steps))*x_next - x_t
+        return (1 / math.sqrt(num_steps)) * x_next - x_t
