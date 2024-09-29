@@ -490,37 +490,37 @@ if __name__ == "__main__":
         # torch.cuda.empty_cache()
 
         # print out list of force norms throughout the path of final_draw
-        with torch.no_grad():
-            forces_finpath = model.model(
-                interpolated_images[batch_idx],
-                torch.tensor([100]).repeat(path_length).to(device),
-            )
+        # with torch.no_grad():
+        #     forces_finpath = model.model(
+        #         interpolated_images[batch_idx],
+        #         torch.tensor([100]).repeat(path_length).to(device),
+        #     )
 
-            # output norms of forces
-            print(
-                "Norms of forces: ",
-                torch.linalg.norm(forces_finpath.reshape(path_length, C * H * W), dim=1)
-                .cpu()
-                .detach()
-                .numpy(),
-            )
-            # print path norm
-            if g_sigma > 0:
-                print(
-                    "Path norm: ",
-                    torch.sqrt(
-                        torch.square(
-                            (
-                                interpolated_images_blur[:, 1:, :, :, :]
-                                - interpolated_images_blur[:, :-1, :, :, :]
-                            )
-                            / const_time
-                        ).sum(dim=(0, 2, 3, 4))
-                    )
-                    .cpu()
-                    .detach()
-                    .numpy(),
-                )
+        #     # output norms of forces
+        #     print(
+        #         "Norms of forces: ",
+        #         torch.linalg.norm(forces_finpath.reshape(path_length, C * H * W), dim=1)
+        #         .cpu()
+        #         .detach()
+        #         .numpy(),
+        #     )
+        #     # print path norm
+        #     if g_sigma > 0:
+        #         print(
+        #             "Path norm: ",
+        #             torch.sqrt(
+        #                 torch.square(
+        #                     (
+        #                         interpolated_images_blur[:, 1:, :, :, :]
+        #                         - interpolated_images_blur[:, :-1, :, :, :]
+        #                     )
+        #                     / const_time
+        #                 ).sum(dim=(0, 2, 3, 4))
+        #             )
+        #             .cpu()
+        #             .detach()
+        #             .numpy(),
+        #         )
 
         with torch.no_grad():
             # run reverse diffusion on the final, optimized path
