@@ -81,7 +81,7 @@ class CelebADataset(Dataset):
         return image, 0
 
 
-def create_celeba_dataloaders(batch_size):
+def create_celeba_dataloaders(batch_size, root_dir):
     transform = transforms.Compose(
         [
             # transforms.Resize((256, 256)),  # Resize to 256x256 if necessary
@@ -91,8 +91,8 @@ def create_celeba_dataloaders(batch_size):
     )
 
     # Define the directories
-    train_dir = "/shared/mpsenka/celebahq256/train"
-    valid_dir = "/shared/mpsenka/celebahq256/valid"
+    train_dir = root_dir + "/train"
+    valid_dir = root_dir + "/valid"
 
     # Create the train and validation datasets using the custom dataset
     train_dataset = CelebADataset(train_dir, transform=transform)

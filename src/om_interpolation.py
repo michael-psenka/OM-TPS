@@ -143,6 +143,13 @@ if __name__ == "__main__":
         default="mnist",
     )
 
+    parser.add_argument(
+        "--data_dir",
+        type=str,
+        help="Which directory to load datasets from",
+        default="data",
+    )
+
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
@@ -197,7 +204,7 @@ if __name__ == "__main__":
     if args.dataset == "mnist":
         train_dataloader, test_dataloader = create_mnist_dataloaders(batch_size=batch_size)
     elif args.dataset == "celeba":
-        train_dataloader, test_dataloader = create_celeba_dataloaders(batch_size=batch_size)
+        train_dataloader, test_dataloader = create_celeba_dataloaders(batch_size=batch_size, root_dir=args.data_dir)
     else:
         raise ValueError(f"Dataset {args.dataset} not recognized")
     
