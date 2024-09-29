@@ -32,3 +32,12 @@ The Denoising Diffusion Probabilistic Models paper: https://arxiv.org/pdf/2006.1
 
 A pytorch version of DDPM: https://github.com/lucidrains/denoising-diffusion-pytorch
 
+# CelebaHQ installation
+
+1. Download the CelebaHQ dataset from the following website: https://www.kaggle.com/datasets/denislukovnikov/celebahq256-images-only. Place it in a directory of choice. The structure should look like: `/path/to/celebaHQ/train` and `/path/to/celebaHQ/valid`.
+2. When creating the celeba dataloader from `data/dataloaders.py`, change the `root` parameter to the path of the celebaHQ dataset, so a call would look like the following:
+
+```python
+celeba_dataloader = CelebaDataLoader(batch_size=32, root_dir="/path/to/celebaHQ")
+```
+
