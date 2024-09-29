@@ -99,7 +99,9 @@ def create_celeba_dataloaders(batch_size, root_dir):
     valid_dataset = CelebADataset(valid_dir, transform=transform)
 
     # Create DataLoaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    train_loader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=4
+    )
     valid_loader = DataLoader(
         valid_dataset, batch_size=batch_size, shuffle=False, num_workers=4
     )

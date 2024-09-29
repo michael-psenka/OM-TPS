@@ -162,6 +162,7 @@ class TruncatedAction(torch.nn.Module):
 
         return result * self.dt / 2.0
 
+
 """
 Slightly different action, TODO: understand the difference
 """

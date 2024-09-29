@@ -53,9 +53,7 @@ class CelebADiffusion(nn.Module):
             noise.shape == x0.shape
         ), "Noise and image tensor must have the same shape."
         # Create timesteps tensor
-        timesteps = torch.tensor(
-            t, device=self.device, dtype=torch.long
-        )
+        timesteps = torch.tensor(t, device=self.device, dtype=torch.long)
         # Use scheduler's add_noise method
         x_t = self.ddpm.scheduler.add_noise(x0, noise, timesteps)
         return x_t
@@ -88,7 +86,6 @@ class CelebADiffusion(nn.Module):
         # Post-process the image to [-1,1] range
         image = image.clamp(-1, 1)
         return image
-
 
 
 class MNISTDiffusion(nn.Module):
