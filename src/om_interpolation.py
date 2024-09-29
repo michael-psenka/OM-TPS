@@ -202,12 +202,16 @@ if __name__ == "__main__":
 
     # Instantiate dataloader
     if args.dataset == "mnist":
-        train_dataloader, test_dataloader = create_mnist_dataloaders(batch_size=batch_size)
+        train_dataloader, test_dataloader = create_mnist_dataloaders(
+            batch_size=batch_size
+        )
     elif args.dataset == "celeba":
-        train_dataloader, test_dataloader = create_celeba_dataloaders(batch_size=batch_size, root_dir=args.data_dir)
+        train_dataloader, test_dataloader = create_celeba_dataloaders(
+            batch_size=batch_size, root_dir=args.data_dir
+        )
     else:
         raise ValueError(f"Dataset {args.dataset} not recognized")
-    
+
     train_iterator = iter(train_dataloader)
     test_iterator = iter(test_dataloader)
 
@@ -261,7 +265,6 @@ if __name__ == "__main__":
 
         elif args.dataset == "celeba":
             model = CelebADiffusion()
-
 
     model = model.to(device)
     model.eval()
@@ -378,7 +381,7 @@ if __name__ == "__main__":
                         interpolated_images.reshape(-1, C, H, W),
                         diff_time,
                     )
-                    
+
                 forces = v_scale * (target - interpolated_images.reshape(-1, C, H, W))
 
             else:
@@ -604,13 +607,8 @@ if __name__ == "__main__":
 
         # go to next pair of images
 
-        if args.dataset == "mnist":
-            init_im, _ = next(test_iterator)
-            final_im, _ = next(test_iterator)
-
-        else:
-            init_im = next(test_iterator)
-            final_im = next(test_iterator)
+        init_im, _ = next(test_iterator)
+        final_im, _ = next(test_iterator)
 
     # PPL
     ppl = ppl / iters
