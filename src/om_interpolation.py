@@ -23,10 +23,10 @@ import torch
 from torchvision.utils import save_image, make_grid
 from torchvision import transforms
 
-from train_mnist import create_mnist_dataloaders
+from data.dataloaders import create_mnist_dataloaders, create_celeba_dataloaders
 
-from model import MNISTDiffusion
-from actions import SimpleAction, TruncatedAction, HessianAction, TruncatedActionPathvar
+from model import MNISTDiffusion, CelebADiffusion
+from actions import SimpleAction, TruncatedAction, HessianAction
 from utils import get_initial_guess_fn, validate_git_status
 
 from torcheval.metrics import FrechetInceptionDistance
@@ -136,6 +136,13 @@ if __name__ == "__main__":
         default=1,  # this saturates GPU memory on Sanjeev's Germain server for path length of 16
     )
 
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        help="Which dataset (and corresponding trained model) to use. Options: mnist, celeba",
+        default="mnist",
+    )
+
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
@@ -182,17 +189,24 @@ if __name__ == "__main__":
     v_steps = args.steps_v
     g_sigma = args.kernel_var
 
-    t = torch.tensor(latent_time).unsqueeze(-1).to(device)
+    t = torch.tensor(latent_time).to(device)
 
     os.makedirs("../mnist_outputs/", exist_ok=True)
 
     # Instantiate dataloader
-    train_dataloader, test_dataloader = create_mnist_dataloaders(batch_size=batch_size)
+    if args.dataset == "mnist":
+        train_dataloader, test_dataloader = create_mnist_dataloaders(batch_size=batch_size)
+    elif args.dataset == "celeba":
+        train_dataloader, test_dataloader = create_celeba_dataloaders(batch_size=batch_size)
+    else:
+        raise ValueError(f"Dataset {args.dataset} not recognized")
+    
     train_iterator = iter(train_dataloader)
     test_iterator = iter(test_dataloader)
 
     init_im, _ = next(test_iterator)
     final_im, _ = next(test_iterator)
+
     _, C, H, W = init_im.shape
 
     # Un-normalize images from [-1, 1]  to [0, 1]
@@ -226,17 +240,21 @@ if __name__ == "__main__":
         base_dim = 64
         dim_mults = [2, 4]
 
-        model = MNISTDiffusion(
-            28,
-            in_channels,
-            timesteps=timesteps,
-            time_embedding_dim=time_embedding_dim,
-            base_dim=base_dim,
-            dim_mults=dim_mults,
-        )
+        if args.dataset == "mnist":
+            model = MNISTDiffusion(
+                28,
+                in_channels,
+                timesteps=timesteps,
+                time_embedding_dim=time_embedding_dim,
+                base_dim=base_dim,
+                dim_mults=dim_mults,
+            )
+            ckpt = torch.load(ckpt_path, map_location=device)
+            model.load_state_dict(ckpt["model"])
 
-        ckpt = torch.load(ckpt_path, map_location=device)
-        model.load_state_dict(ckpt["model"])
+        elif args.dataset == "celeba":
+            model = CelebADiffusion()
+
 
     model = model.to(device)
     model.eval()
@@ -270,11 +288,11 @@ if __name__ == "__main__":
 
         # Forward diffusion for both images
         with torch.no_grad():
-            heated_init = model._forward_diffusion(
-                init_im, t.repeat(batch_size), noise_1
+            heated_init = model.forward_diffusion(
+                init_im, t.unsqueeze(-1).repeat(batch_size), noise_1
             )
-            heated_final = model._forward_diffusion(
-                final_im, t.repeat(batch_size), noise_1
+            heated_final = model.forward_diffusion(
+                final_im, t.unsqueeze(-1).repeat(batch_size), noise_1
             )
 
         # Generate a range of interpolation factors
@@ -293,7 +311,8 @@ if __name__ == "__main__":
         # save initial guess
         # choose random batch element to plot
         batch_idx = np.random.randint(0, batch_size)
-        saved = model.sample_from_t(t, interpolated_images[batch_idx]).detach().cpu()
+        # saved = model.sample_from_t(interpolated_images[batch_idx], t).detach().cpu()
+        saved = interpolated_images[batch_idx].detach().cpu()
         to_draw = inv_normalizer(torch.clamp(saved, -1, 1))
         final_draw = []
         final_draw.append(to_draw)
@@ -338,12 +357,6 @@ if __name__ == "__main__":
 
             # diff_time = torch.tensor(100).to(device)
 
-            # compute diffusion model score estimates
-            # noise_pred = model.model(
-            #     interpolated_images.reshape(-1, C, H, W),
-            #     diff_time.repeat(batch_size * path_length),
-            # )
-
             # approximate gradient for the vector field. Note that for stable vector fields, finding norm minimizers can also be
             # found by simply integrating over the vector field. This is equivalent to instead taking the gradient of ||y - x||_2^2,
             # where y = x + v(x) and is not differentiated with respect to x. In practice, optimized results look about the same,
@@ -354,7 +367,7 @@ if __name__ == "__main__":
                 # )
 
                 with torch.no_grad():
-                    target = interpolated_images.reshape(-1, C, H, W) + model.model(
+                    target = interpolated_images.reshape(-1, C, H, W) - model.model(
                         interpolated_images.reshape(-1, C, H, W),
                         diff_time,
                     )
@@ -429,35 +442,6 @@ if __name__ == "__main__":
                     interpolated_images, forces
                 ).sum()
 
-            # start adding path var loss at step 1000
-            # if i == 1000:
-            #     if g_sigma > 0:
-            #         # compute path norm
-            #         with torch.no_grad():
-            #             curr_var = torch.square((interpolated_images_blur[:,1:,:,:,:] - interpolated_images_blur[:,:-1,:,:,:]) / const_time).sum(dim=(0,2,3,4)).var()
-
-            #             scale_newterm = total_action / (curr_var + 1e-4)
-
-            #         action_func = TruncatedActionPathvar(dt=const_time, xi=path_length, pathvar_scale=scale_newterm)
-            #     else:
-            #         # compute path norm
-            #         with torch.no_grad():
-            #             curr_var = torch.square((interpolated_images[:,1:,:,:,:] - interpolated_images[:,:-1,:,:,:]) / const_time).sum(dim=(0,2,3,4)).var()
-
-            #             scale_newterm = total_action / (curr_var + 1e-4)
-
-            #         action_func = TruncatedActionPathvar(dt=const_time, xi=path_length, pathvar_scale=scale_newterm)
-
-            # test_model_grads = torch.autograd.grad(
-            #     total_action,
-            #     model.model.parameters(),
-            #     retain_graph=True,
-            #     allow_unused=True,
-            # )[0]
-            # assert all(
-            #     [grad is not None for grad in test_model_grads]
-            # ), "Action gradient w.r.t model parameters is None. Gradients wont be tracked correctly through the diffusion model."
-
             actions.append(total_action.unsqueeze(0).cpu().detach())
             pbar.set_description(f"Optimizing OM action: {total_action.item()}")
 
@@ -488,15 +472,15 @@ if __name__ == "__main__":
 
                 if i % save_every == 0:
                     # save interpolation path
-                    # save = model.sample_from_t(t, interpolated_images[batch_idx])
+                    # save = model.sample_from_t(interpolated_images[batch_idx], t)
                     save = interpolated_images[batch_idx].detach().clone()
                     save = inv_normalizer(torch.clamp(save, -1.0, 1.0))
                     final_draw.append(save.cpu())
 
         # free up gpu memory
-        optimizer.zero_grad()
-        del total_action, grads, forces
-        torch.cuda.empty_cache()
+        # optimizer.zero_grad()
+        # del total_action, grads, forces
+        # torch.cuda.empty_cache()
 
         # print out list of force norms throughout the path of final_draw
         with torch.no_grad():
@@ -534,7 +518,7 @@ if __name__ == "__main__":
         with torch.no_grad():
             # run reverse diffusion on the final, optimized path
             interpolated_images = model.sample_from_t(
-                t, interpolated_images.reshape(-1, C, H, W)
+                interpolated_images.reshape(-1, C, H, W), t
             )
 
             interpolated_images = interpolated_images.reshape(
@@ -555,6 +539,10 @@ if __name__ == "__main__":
             unnormalized_images = inv_normalizer(clamped_interpolated_images)
             init_im = inv_normalizer(init_im)
             final_im = inv_normalizer(final_im)
+
+            # add to final draw
+            if t > 0:
+                final_draw.append(unnormalized_images[batch_idx].detach().cpu())
 
             # Calculate PPL/PDV metrics (on [-1, 1] images)
             _ppl, _pdv = perceptual_path_length_and_variance(
@@ -608,8 +596,14 @@ if __name__ == "__main__":
             wandb.log(im_dict, step=iters - 1)
 
         # go to next pair of images
-        init_im, _ = next(test_iterator)
-        final_im, _ = next(test_iterator)
+
+        if args.dataset == "mnist":
+            init_im, _ = next(test_iterator)
+            final_im, _ = next(test_iterator)
+
+        else:
+            init_im = next(test_iterator)
+            final_im = next(test_iterator)
 
     # PPL
     ppl = ppl / iters
