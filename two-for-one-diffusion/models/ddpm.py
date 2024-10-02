@@ -537,13 +537,13 @@ class GaussianDiffusion(nn.Module):
             # reset the endpoints
             noised_xs[0], noised_xs[-1] = original_x1, original_x2
 
-            noised_xs = noised_xs.cpu().numpy()
-            # kabsch rotate the noised_xs to match the original x1 and x2
-            # leads to a slight improvement in initial path norms
-            for i in range(path_length):
-                for j in range(num_paths):
-                    noised_xs[i, j] = kabsch_rotate(noised_xs[i, j], noised_xs[0, j])
-            noised_xs = torch.tensor(noised_xs).to(self.device)
+            # noised_xs = noised_xs.cpu().numpy()
+            # # kabsch rotate the noised_xs to match the original x1 and x2
+            # # leads to a slight improvement in initial path norms
+            # for i in range(path_length):
+            #     for j in range(num_paths):
+            #         noised_xs[i, j] = kabsch_rotate(noised_xs[i, j], noised_xs[0, j])
+            # noised_xs = torch.tensor(noised_xs).to(self.device)
 
         noised_xs = noised_xs.permute(
             (1, 0, 2, 3)
