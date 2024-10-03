@@ -450,7 +450,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
     # Save generated samples
     torch.save(sampled_mol, str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pt"))
 
-    # Save subset as pdb
+    # Save subset as pdb - convert from angstrom to nm
     all_mol_traj = md.Trajectory(
         sampled_mol[0:1000].numpy() / 10, topology=trainset.topology
     )
