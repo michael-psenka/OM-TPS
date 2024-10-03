@@ -42,7 +42,7 @@ CLUSTER_ENDPOINTS = {
     "trp_cage": [14, 13],
     "bba": [18, 3],
     "villin": [13, 6],
-    "protein_g": [13, 16],
+    "protein_g": [17, 2],
 }
 
 start_tica_coords = {
