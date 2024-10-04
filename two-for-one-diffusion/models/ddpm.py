@@ -338,34 +338,6 @@ class GaussianDiffusion(nn.Module):
             * self.norm_factor
         )
 
-    # take multiple "gradient steps" with respect to the denoising mean model
-    # TODO: investigate whether scaling is correct here (should match forces)
-    @torch.no_grad()
-    def multi_step_denoising_no_noise(self, mol_t, t, num_steps=1):
-
-        if not isinstance(t, torch.Tensor):
-            t = torch.tensor([t]).repeat(mol_t.shape[0]).to(self.device)
-
-        mol_next = center_zero(mol_t.clone())
-        for step in range(num_steps):
-            # current t is max(0, t - step)
-            curr_t = torch.max(torch.tensor(0).to(t.device), t - step)
-            mol_next = mol_next - center_zero(
-                self.model(
-                    mol_next,
-                    self.h,
-                    1.0 * curr_t / self.num_timesteps,
-                    alphas=self.sqrt_alphas_cumprod[curr_t].pow(2),
-                )
-            )
-            mol_next = center_zero(mol_next)
-
-        # scale down output such that scale of output step is approximately
-        # invariant to num_steps. 1/num_steps is too steep since it assumes
-        # all gradients are in line and don't shrink, both of which are typically
-        # false. 1/sqrt empirically seems to keep the scale invariant, at least
-        # as tested in smaller settings. TODO: more testing and rigorous analysis
-        return (1 / math.sqrt(num_steps)) * mol_next - mol_t
 
     def q_sample(self, x_start, t, noise=None):
         """
@@ -539,7 +511,7 @@ class GaussianDiffusion(nn.Module):
 
             # noised_xs = noised_xs.cpu().numpy()
             # # kabsch rotate the noised_xs to match the original x1 and x2
-            # # leads to a slight improvement in initial path norms
+            # # leads to a slight improvement in initial path norms, but reduces diversity in the produced paths
             # for i in range(path_length):
             #     for j in range(num_paths):
             #         noised_xs[i, j] = kabsch_rotate(noised_xs[i, j], noised_xs[0, j])
@@ -651,11 +623,16 @@ class GaussianDiffusion(nn.Module):
 
                 if truncated_gradient:
                     # Truncated gradient method: (maybe would be better to directly populate grads with the forces?)
-                    force_func = lambda x: self.multi_step_denoising_no_noise(
-                        center_zero(x), diff_time, num_steps=1
-                    )
+                    force_func = None
+                    
+                    with torch.no_grad():
+                        targets = [x + self.force_func(center_zero(x), diff_time) for x in noised_xs]
+                    forces = [target - x for x, target in zip(noised_xs, targets)]
+
+                    
                 elif mlff:
                     force_func = get_force_from_mlff
+                    forces = [None] * len(noised_xs)
                 else:
                     # Is there a difference in results between these two force parameterizations? If so, why?
                     # Yes, there seems to be. The first one is faster but leads to poorer action improvement. TODO: Why?
@@ -666,19 +643,21 @@ class GaussianDiffusion(nn.Module):
                     #     self.kb_inv / self.temp_data,
                     # )(center_zero(x))[-1]
                     force_func = lambda x: self.force_func(center_zero(x), diff_time)
+                    forces = [None] * len(noised_xs)
 
                 laplace = lambda x: self.laplacian_func(x, diff_time)
                 action_func = action_cls(
                     force_func=force_func,
                     laplace_func=laplace,
-                    dt=0.1,
+                    dt=0.01 if mlff else 0.1, # MLFFs tend to have higher force norms, so we need a smaller dt to upweight the path term
                     gamma=10,
                     D=100,
                 )  # (D is only used for HessianAction)
 
                 # TODO: vmap over batch dimension
                 # (currently not possible because of calling requires_grad on x in GraphTransformer)
-                terms = [action_func(x) for x in noised_xs]
+                
+                terms = [action_func(x, force) for x, force in zip(noised_xs, forces)]
                 first_term = torch.cat([term[0].unsqueeze(0) for term in terms]).mean()
                 second_term = torch.cat([term[1].unsqueeze(0) for term in terms]).mean()
                 action = torch.cat(
