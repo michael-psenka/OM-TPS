@@ -1,4 +1,5 @@
 import argparse
+import json
 import torch
 from torch_scatter import scatter_mean
 import numpy as np
@@ -150,23 +151,8 @@ def evaluate_fastfolders(
     path = [i - 1 for i in path]  # Convert back to zero indexing
     path_centers = kmeans_cluster_centers[path]
 
-    # Compute the action of the ground truth path and visualize it
-    # path_term, force_term, path = ground_truth_path_analysis(sampled_mol, path_centers, model, tic_evaluator, latent_time = ref_time[protein_name])
-    # save_ovito_traj(
-    #     path,
-    #     str(eval_folder) + f"/ground_truth_path.gsd",
-    # )
-    # #save the path itself
-    # torch.save(path, str(eval_folder) + "/ground_truth_path.pt")
-
-    # print(f"Ground truth path - force action={force_term.item()} (path length={len(path)})")
-
-    # force_norm_analysis(
-    #     protein_name, "langevin", None, subsample, ref_path=path_centers
-    # )
-
     # # Finally, visualize the model-produced interpolation along with the reference (most probable) path
-    get_tic_free_energy_plots(
+    free_energies, fraction_unphysical = get_tic_free_energy_plots(
         protein_name,
         gen_mode,
         append_exp_name,
@@ -178,6 +164,19 @@ def evaluate_fastfolders(
         ref_dihedrals=ref_dihedrals,
         ref_pwds=ref_pwds,
     )
+
+    # Save final metrics to a JSON file
+    max_free_energies = np.array(
+        [np.max(free_energy_profile) for free_energy_profile in free_energies]
+    )
+    metrics = {
+        "Max Free Energy (kBT) Mean: ": max_free_energies.mean(),
+        "Max Free Energy (kBT) Std: ": max_free_energies.std(),
+        "Fraction of Unphysical Paths": fraction_unphysical,
+    }
+    # TODO: other metrics to add: probaility of paths under the reference MSM, JS divergence between the reference and generated paths, etc.
+    with open(join(eval_folder, "final_metrics.json"), "w") as f:
+        json.dump(metrics, f, indent=4)  # Add indent for better readability
 
 
 def get_tic_free_energy_plots(
@@ -321,6 +320,13 @@ def get_tic_free_energy_plots(
         plt.close()
         pwd_hist_paths.append(file_name)
 
+        if i == len(loop) - 1:
+
+            pwds = pwds.reshape(num_paths, -1, pwds.shape[-1])
+            pwd_mins = np.min(pwds, axis=(1, 2))
+            path_is_unphysical = np.where(pwd_mins < 0.5)[0]
+            fraction_unphysical = path_is_unphysical.sum() / num_paths
+
         # Find the bins of the samples
         bins_x = np.digitize(transformed_samples[:, 0], tic_evaluator.bin_edges_x)
         bins_y = np.digitize(transformed_samples[:, 1], tic_evaluator.bin_edges_y)
@@ -460,6 +466,8 @@ def get_tic_free_energy_plots(
         tic_paths + free_energy_paths + dihedral_hist_paths + pwd_hist_paths
     ):
         os.remove(image_path)
+
+    return free_energies, fraction_unphysical
 
 
 def force_norm_analysis(

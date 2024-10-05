@@ -338,7 +338,6 @@ class GaussianDiffusion(nn.Module):
             * self.norm_factor
         )
 
-
     def q_sample(self, x_start, t, noise=None):
         """
         Sample noisy molecule from forward process.
@@ -624,12 +623,14 @@ class GaussianDiffusion(nn.Module):
                 if truncated_gradient:
                     # Truncated gradient method: (maybe would be better to directly populate grads with the forces?)
                     force_func = None
-                    
+
                     with torch.no_grad():
-                        targets = [x + self.force_func(center_zero(x), diff_time) for x in noised_xs]
+                        targets = [
+                            x + self.force_func(center_zero(x), diff_time)
+                            for x in noised_xs
+                        ]
                     forces = [target - x for x, target in zip(noised_xs, targets)]
 
-                    
                 elif mlff:
                     force_func = get_force_from_mlff
                     forces = [None] * len(noised_xs)
@@ -649,14 +650,16 @@ class GaussianDiffusion(nn.Module):
                 action_func = action_cls(
                     force_func=force_func,
                     laplace_func=laplace,
-                    dt=0.01 if mlff else 0.1, # MLFFs tend to have higher force norms, so we need a smaller dt to upweight the path term
+                    dt=(
+                        0.01 if mlff else 0.1
+                    ),  # MLFFs tend to have higher force norms, so we need a smaller dt to upweight the path term
                     gamma=10,
                     D=100,
                 )  # (D is only used for HessianAction)
 
                 # TODO: vmap over batch dimension
                 # (currently not possible because of calling requires_grad on x in GraphTransformer)
-                
+
                 terms = [action_func(x, force) for x, force in zip(noised_xs, forces)]
                 first_term = torch.cat([term[0].unsqueeze(0) for term in terms]).mean()
                 second_term = torch.cat([term[1].unsqueeze(0) for term in terms]).mean()
@@ -682,8 +685,8 @@ class GaussianDiffusion(nn.Module):
                 )
 
         all_denoised_paths = []
-        # decode the optimized paths (keeping every 10 for future visualization)
-        for path in all_noised_xs[::10]:
+        # decode the optimized paths (keeping every 20 for future visualization)
+        for path in all_noised_xs[::20]:
             if encode_and_decode:
                 denoised_path = self.p_sample_loop(
                     path.reshape(-1, n_atoms, 3), latent_time, temperature=temperature

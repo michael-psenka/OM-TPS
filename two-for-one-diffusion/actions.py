@@ -62,9 +62,7 @@ class TruncatedAction(torch.nn.Module):
         else:
             f_n = self.force_func(path[:-1])
         second_term = torch.square(f_n) * (self.dt / 4 / self.gamma)
-        # print("force norm: ", f_n.norm(dim=-1).mean())
-        result = torch.sum(first_term + second_term)
-        # return result
+
         return first_term.sum(), second_term.sum()
 
 
