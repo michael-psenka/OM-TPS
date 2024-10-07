@@ -621,7 +621,9 @@ class TicEvaluator:
 
         # plot path endpoints used in interpolation
         if endpoints is not None:
-            for point in endpoints:
+            # reshape from [2, P, N, 3] to [2*P, N, 3]
+            endpoints = endpoints.reshape(-1, endpoints.shape[-2], endpoints.shape[-1])
+            for i, point in enumerate(endpoints):
                 endpoint_transform = self.tica.transform(
                     self.get_tic_features(
                         torch.from_numpy(point[None, :, :]), self.folded
@@ -634,7 +636,7 @@ class TicEvaluator:
                     bin_x_endpoint,
                     bin_y_endpoint,
                     marker="X",
-                    c="blue",
+                    c="blue" if i < len(endpoints) // 2 else "red",
                     s=50,
                     linewidth=0,
                     zorder=3,
@@ -968,24 +970,24 @@ def sample_from_model(sampler, num_saved_samples, batch_size, verbose=False):
 
 
 def sample_interpolations_from_model(
-    interpolator, num_paths, batch_size, verbose=False
+    interpolator, endpoint_1_samples, endpoint_2_samples, batch_size, verbose=False
 ):
     """
     Sample interpolations from the model.
     """
+    num_paths = endpoint_1_samples.shape[0] // torch.cuda.device_count()
     print(
         f"Generating {num_paths} interpolation paths per GPU. This may take some time."
     )
-    batches = num_to_groups(num_paths, batch_size)
     all_path_list = []
     path_optimization_list = []
     all_actions_list = []
     all_path_terms_list = []
     all_force_terms_list = []
-    for i, batch_size in enumerate(batches):
-        output = interpolator(
-            num_paths=batch_size,
-        )
+    endpoint_1_split = endpoint_1_samples.split(batch_size)
+    endpoint_2_split = endpoint_2_samples.split(batch_size)
+    for i, (x1, x2) in enumerate(zip(endpoint_1_split, endpoint_2_split)):
+        output = interpolator(x1, x2)
         all_path_list.append(output["final_path"])
         if i == 0:
             if "all_paths" in output.keys():
@@ -998,7 +1000,7 @@ def sample_interpolations_from_model(
                 all_force_terms_list.append(output["force_terms"])
 
         if verbose:
-            print(f"Batch {i+1} from {len(batches)} generated")
+            print(f"Batch {i+1} from {len(endpoint_1_split)} generated")
     # all_mol_list = list(map(lambda n: model.sample(batch_size=n), batches))
     all_path = torch.cat(all_path_list, dim=0).cpu()
 

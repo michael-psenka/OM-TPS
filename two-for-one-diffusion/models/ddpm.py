@@ -361,26 +361,25 @@ class GaussianDiffusion(nn.Module):
         x2,
         path_length,
         latent_time,
-        num_paths=10,
         interpolation_fn=torch.lerp,
         temperature=1.0,
     ):
         """
         Encode the two points into latent space, linearly or spherically interpolate, and decode.
         Args:
-            x1: torch.Tensor, shape of [num_atoms x 3]
-            x2: torch.Tensor, shape of [num_atoms x 3]
+            x1: torch.Tensor, shape of [n_paths, num_atoms x 3]
+            x2: torch.Tensor, shape of [n_paths, num_atoms x 3]
             path_length: int, length of the path to interpolate
             latent_time: float, time at which to interpolate
-            num_paths: int, number of paths to interpolate
             interpolation_fn: function, interpolation function
             temperature: float, temperature for sampling
         """
 
-        n_atoms = x1.shape[0]
+        num_paths, n_atoms = x1.shape[0], x1.shape[1]
 
-        # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
-        x2 = torch.tensor(kabsch_rotate(x2.cpu(), x1.cpu())).to(x2.device)
+        for i in range(num_paths):
+            # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
+            x2[i] = torch.tensor(kabsch_rotate(x2[i].cpu(), x1[i].cpu())).to(x2.device)
 
         x1 = x1.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
         x2 = x2.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
@@ -438,7 +437,6 @@ class GaussianDiffusion(nn.Module):
         path_length,
         latent_time,
         encode_and_decode=True,
-        num_paths=10,
         mlff=False,
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
@@ -456,12 +454,11 @@ class GaussianDiffusion(nn.Module):
             True  # needed to track gradients through conservative force calculation
         )
 
-        # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
-        x2 = torch.tensor(kabsch_rotate(x2.cpu(), x1.cpu())).to(x2.device)
+        num_paths, n_atoms = x1.shape[0], x1.shape[1]
 
-        n_atoms = x1.shape[0]
-        x1 = x1.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
-        x2 = x2.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
+        for i in range(num_paths):
+            # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
+            x2[i] = torch.tensor(kabsch_rotate(x2[i].cpu(), x1[i].cpu())).to(x2.device)
 
         x1 = center_zero(x1)
         x2 = center_zero(x2)
@@ -527,49 +524,6 @@ class GaussianDiffusion(nn.Module):
         path_terms = []
         force_terms = []
         all_noised_xs = [noised_xs.clone().detach()]
-        """Some plotting/analysis code for understanding force norms and cosine similarities"""
-        # all_norms = []
-
-        # model = load_mlff_model(
-        #     f"mlffs/{self.protein}/model.ckpt",
-        #     derivative=True,
-        # ).to(self.device)
-        # residue_nums = np.load(
-        #     f"datasets/mlff_residue_numbers/{self.protein}_ca_embeddings.npy"
-        # )
-        # residue_nums = torch.tensor(np.array([int(i) for i in residue_nums])).to(
-        #     self.device
-        # )
-
-        # langevin_samples = torch.load(
-        #     f"saved_models/{self.protein}/main_eval_output_langevin/sample-langevin.pt"
-        # ).to(self.device)
-
-        # def get_force_from_mlff(x):
-        #     batch = (
-        #         torch.arange(x.shape[0]).repeat_interleave(self.num_atoms).to(x.device)
-        #     )
-        #     z = residue_nums.repeat(x.shape[0])
-        #     x = x.reshape(-1, 3) * self.norm_factor
-        #     force = model(z=z, pos=x, batch=batch)[1].reshape(-1, self.num_atoms, 3)
-        #     return force
-
-        # with torch.no_grad():
-        #     for t in tqdm(range(self.num_timesteps)[::5]):
-        #         # compute forces in batches of 1000
-        #         norms =[]
-        #         for samples in torch.split(langevin_samples, 2000):
-
-        #             force = self.force_func(center_zero(samples), t)
-        #             norm = torch.norm(force, dim=-1).mean(dim=-1)
-        #             norms.append(norm)
-        #         all_norms.append(torch.cat(norms))
-
-        # # save all_norms
-        # torch.save(all_norms, f"saved_models/{self.protein}/main_eval_output_langevin/diffusion_force_norms.pt")
-        # import pdb; pdb.set_trace()
-
-        """End of plotting/analysis code"""
 
         # load the NNIP model
         if mlff:

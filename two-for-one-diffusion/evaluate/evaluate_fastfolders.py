@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from os.path import join
 from deeptime.clustering import MiniBatchKMeans
-from deeptime.markov import TransitionCountEstimator
+from deeptime.markov import TransitionCountEstimator, pcca
 from sklearn.preprocessing import normalize
 import seaborn as sns
 from pathlib import Path
@@ -27,6 +27,7 @@ from evaluate.evaluators import (
 )
 from actions import S2Action, TruncatedAction, SimpleAction
 from utils import center_zero
+from evaluate.msm_utils import find_min_flux_states
 
 from datasets.dataset_utils_empty import Molecules
 from logging_utils import get_interpolation_viz, visualize_gif, save_ovito_traj
@@ -134,8 +135,6 @@ def evaluate_fastfolders(
     (
         prob_matrix,
         kmeans_cluster_centers,
-        tic_evaluator,
-        sampled_mol,
         ref_dihedrals,
         ref_pwds,
     ) = dynamics_analysis(
@@ -174,7 +173,11 @@ def evaluate_fastfolders(
         "Max Free Energy (kBT) Std: ": max_free_energies.std(),
         "Fraction of Unphysical Paths": fraction_unphysical,
     }
-    # TODO: other metrics to add: probaility of paths under the reference MSM, JS divergence between the reference and generated paths, etc.
+    # TODO: other metrics to add:
+    # 1. Probablity of paths under the reference MSM (mean and std)
+    # 2. Percentage of valid (non-zero probability) paths
+    # 3. JS divergence of state distributions between the reference and generated paths (mean and std)
+    # 4. Diversity of the generated paths (average pairwise RMSD)
     with open(join(eval_folder, "final_metrics.json"), "w") as f:
         json.dump(metrics, f, indent=4)  # Add indent for better readability
 
@@ -216,11 +219,11 @@ def get_tic_free_energy_plots(
     topology = md.load(pdb_file).topology
     # print(f"Atoms: {[a for a in topology.atoms]}")
 
-    # store endpoints if interpolation is used (assumes endpoints for all batches are the same)
+    # store endpoints if interpolation is used
     if "interpolate" in gen_mode:
         endpoints = sampled_mol.reshape(num_paths, -1, n_atoms, 3)[
-            0, [0, -1]
-        ].numpy()  # [2, n_atoms, 3]
+            :, [0, -1]
+        ].numpy()  # [num_paths, 2, n_atoms, 3]
 
     # Initialize evaluator
     tic_evaluator = TicEvaluator(
@@ -712,73 +715,48 @@ def dynamics_analysis(
 
     assignments = kmeans.fit_transform(transformed_samples)
 
-    # Count transition probabilities
+    # Create MSM with 20 states
     count_matrix = TransitionCountEstimator.count(
         count_mode="sliding", dtrajs=[assignments.astype("int")], lagtime=1
     )
+    count_matrix = normalize(count_matrix, axis=1, norm="l1")
 
-    cluster_centers = kmeans._model.cluster_centers
-
-    cluster_assignments = np.argmin(
-        np.linalg.norm(transformed_samples[:, None] - cluster_centers, axis=-1), axis=-1
+    # TODO: this should only be done for the reference MSM
+    start_cluster_idx, end_cluster_idx = find_min_flux_states(count_matrix)
+    np.save(
+        f"./evaluate/saved_references/saved_cluster_endpoints_{protein_name.upper()}.npy",
+        np.array([start_cluster_idx, end_cluster_idx]),
     )
-    distance_to_clusters = np.linalg.norm(
-        transformed_samples - cluster_centers[cluster_assignments], axis=-1
+
+    # count_matrix = make_reversible(count_matrix)
+
+    # # Coarse-grain the MSM to 10 states
+    # pcca_msm = pcca(count_matrix, 10)
+
+    kmeans_cluster_centers = kmeans._model.cluster_centers
+    np.save(
+        f"./evaluate/saved_references/saved_cluster_centers_{protein_name.upper()}.npy",
+        kmeans_cluster_centers,
     )
-    cluster_rep_idxs = [
-        np.argmin(distance_to_clusters[cluster_assignments == i], axis=0)
-        for i in range(cluster_centers.shape[0])
-    ]
-    cluster_rep_coords = np.stack(
-        [
-            sampled_mol[cluster_assignments == i][idx]
-            for i, idx in enumerate(cluster_rep_idxs)
-        ]
-    )
-    # np.save(f"saved_references/saved_cluster_rep_coords_{protein_name.upper()}.npy", cluster_rep_coords)
+    # kmeans_cluster_assignments = np.argmin(np.linalg.norm(transformed_samples[:, None] - kmeans_cluster_centers, axis=-1), axis=-1)
 
-    count_matrix = np.round(normalize(count_matrix, axis=1, norm="l1"), 2)
+    # pcca_cluster_assignments = pcca_msm.assignments[kmeans_cluster_assignments]
 
-    # Plot 1: show cluster assignments in TIC-space
-    save_plot = True  # Whether or not to save the displayed plots
-
-    # plt.figure(figsize=(6,5))
-    # colors_50 = [
-    # '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f',
-    # '#bcbd22', '#17becf', '#f4a582', '#e41a1c', '#377eb8', '#4daf4a', '#ff7f00', '#f781bf',
-    # '#a65628', '#ffff33', '#e5c494', '#d95f02', '#1b9e77', '#d84d08', '#ffbb78', '#e7298a',
-    # '#66a61e', '#e6ab02', '#a6761d', '#6a3d9a', '#b15928', '#f0027f', '#beaed4', '#fdc086',
-    # '#fbb4ae', '#c7eae5', '#c7c7c7', '#e41a1c', '#377eb8', '#4daf4a', '#ff7f00', '#ffff33',
-    # '#a65628', '#f781bf', '#e41a1c', '#377eb8', '#4daf4a', '#ff7f00', '#ffff33', '#e5c494',
-    # '#f4a582', '#e7298a', '#66a61e', '#e6ab02', '#a6761d', '#6a3d9a', '#b15928'
+    # distance_to_clusters = np.linalg.norm(
+    #     transformed_samples - kmeans_cluster_centers[kmeans_cluster_assignments], axis=-1
+    # )
+    # cluster_rep_idxs = [
+    #     np.argmin(distance_to_clusters[kmeans_cluster_assignments == i], axis=0)
+    #     for i in range(kmeans_cluster_centers.shape[0])
     # ]
-    # cmap = plt.get_cmap("viridis")
-    # cmap = ListedColormap(colors_50)
+    # cluster_rep_coords = np.stack(
+    #     [
+    #         sampled_mol[kmeans_cluster_assignments == i][idx]
+    #         for i, idx in enumerate(cluster_rep_idxs)
+    #     ]
+    # )
 
-    # handles=[]
-    # for i in range(num_clusters):
-    #     plt.scatter(*transformed_samples[assignments==i].T, color=cmap(i), s=5, alpha=.1)
-    #     handles.append(mpatches.Patch(color=cmap(i), label=f'Class {i+1}'))
-    # # plt.legend(handles=handles)
-    # plt.title(f'Transformed state assignments')
-    # if save_plot:
-    #     plt.savefig(join(eval_folder, f'{protein_name}_{gen_mode}_kmeans.png'))
-    #     plt.show()
-
-    # # Plot 2: transition probability matrix
-    # save_plot = True # Whether or not to save the displayed plots
-
-    # n_clusters=num_clusters
-    # plt.figure(figsize=(6,6))
-    # sns.heatmap(count_matrix, annot=True, square=True, cmap = 'Greens', fmt='.3f',
-    #             xticklabels=np.arange(1,n_clusters+1), yticklabels=np.arange(1,n_clusters+1))
-    # plt.xlabel("End class", fontsize=14)
-    # plt.ylabel("Start class", fontsize=14)
-    # plt.title(f"Transition probability matrix", fontsize=14, pad=10)
-    # if save_plot:
-    #     plt.savefig(join(eval_folder, f'{protein_name}_{gen_mode}_transitions.png'))
-    # plt.show()
-    return count_matrix, cluster_centers, tic_evaluator, sampled_mol, dihedrals, pwds
+    return count_matrix, kmeans_cluster_centers, dihedrals, pwds
 
 
 def most_probable_path(transition_matrix, start_state, end_state):

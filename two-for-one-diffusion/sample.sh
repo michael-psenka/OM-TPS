@@ -10,14 +10,66 @@
 python sample.py \
     --model_path saved_models/chignolin \
     --gen_mode om_interpolate \
-    --num_samples_eval 8 \
-    --batch_size_gen 8 \
+    --num_samples_eval 1 \
+    --batch_size_gen 1 \
     --latent_time 20 \
-    --initial_guess_level 0 \
+    --initial_guess_level 250 \
     --no_encode_and_decode \
     --append_exp_name test \
     --path_length 200 \
     --steps 1000
+
+# python sample.py \
+#     --model_path saved_models/chignolin \
+#     --gen_mode langevin \
+#     --noise_level 20 \
+#     --parallel_sim 1 \
+#     --n_timesteps 60000 \
+#     --save_interval 500 \
+#     --kb consistent  \
+#     --dt 2e-3
+
+# python sample.py \
+#     --model_path saved_models/trp_cage \
+#     --gen_mode langevin \
+#     --noise_level 20 \
+#     --parallel_sim 1 \
+#     --n_timesteps 60000 \
+#     --save_interval 500 \
+#     --kb consistent  \
+#     --dt 2e-3
+
+# python sample.py \
+#     --model_path saved_models/bba \
+#     --gen_mode langevin \
+#     --noise_level 20 \
+#     --parallel_sim 1 \
+#     --n_timesteps 60000 \
+#     --save_interval 500 \
+#     --kb consistent  \
+#     --dt 2e-3
+
+
+# python sample.py \
+#     --model_path saved_models/villin \
+#     --gen_mode langevin \
+#     --noise_level 20 \
+#     --parallel_sim 1 \
+#     --n_timesteps 60000 \
+#     --save_interval 500 \
+#     --kb consistent  \
+#     --dt 2e-3
+
+
+# python sample.py \
+#     --model_path saved_models/protein_g \
+#     --gen_mode langevin \
+#     --noise_level 20 \
+#     --parallel_sim 1 \
+#     --n_timesteps 60000 \
+#     --save_interval 500 \
+#     --kb consistent  \
+#     --dt 2e-3
 
 # python sample.py \
 #     --model_path saved_models/chignolin \

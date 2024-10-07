@@ -13,7 +13,9 @@ from evaluate.evaluate_fastfolders import evaluate_fastfolders
 from evaluate.evaluators import (
     sample_from_model,
     sample_interpolations_from_model,
+    TicEvaluator,
 )
+from evaluate.msm_utils import discretize_trajectory
 from dynamics.langevin import LangevinDiffusion
 from utils import (
     SamplerWrapper,
@@ -295,17 +297,69 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
 
         # choose two endpoints as cluster centers
 
-        cluster_coords_path = Path(
+        cluster_endpoints_path = Path(
             os.path.join(
                 "evaluate",
                 "saved_references",
-                f"saved_cluster_rep_coords_{protein_name.upper()}.npy",
+                f"saved_cluster_endpoints_{protein_name.upper()}.npy",
             )
         )
-        cluster_coords = torch.tensor(np.load(cluster_coords_path)).to(device)
-        clusters = CLUSTER_ENDPOINTS[protein_name]
-        clusters = [c - 1 for c in clusters]  # 1-indexed to 0-indexed
-        endpoints = cluster_coords[clusters]
+        clusters = np.load(cluster_endpoints_path)
+
+        cluster_centers_path = Path(
+            os.path.join(
+                "evaluate",
+                "saved_references",
+                f"saved_cluster_centers_{protein_name.upper()}.npy",
+            )
+        )
+        cluster_coords = np.load(cluster_centers_path)
+
+        # If i.i.d samples exist, load them
+        if os.path.exists(iid_sample_path):
+            iid_samples = torch.load(iid_sample_path / "sample-iid.pt")
+        else:
+            # generate i.i.d samples
+            sampler = SamplerWrapper(model.ema_model).to(device).eval()
+            if torch.cuda.device_count() > 1 and device == "cuda":
+                sampler = torch.nn.DataParallel(sampler).to(device)
+                parallel_batches = torch.cuda.device_count()
+            else:
+                parallel_batches = 1
+            iid_samples = sample_from_model(
+                sampler,
+                samp_args.num_samples_eval // parallel_batches,
+                samp_args.batch_size_gen // parallel_batches,
+                verbose=True,
+            )
+
+        # Get TICA
+        tic_evaluator = TicEvaluator(
+            val_data=None,
+            mol_name=protein_name,
+            eval_folder=iid_sample_path,
+            data_folder="datasets",
+            folded_pdb_folder="datasets/folded_pdbs",
+            bins=101,
+            evalset="testset",
+        )
+
+        # assign cluster centers to the iid samples
+        cluster_assignments = discretize_trajectory(
+            iid_samples, tic_evaluator, cluster_coords
+        )
+
+        # Sample endpoints from the cluster centers
+        endpoint_1_samples = iid_samples[cluster_assignments == clusters[0]].to(device)
+        endpoint_2_samples = iid_samples[cluster_assignments == clusters[1]].to(device)
+
+        # Replicate the endpoints to have samp_args.num_samples_eval samples
+        endpoint_1_samples = endpoint_1_samples.repeat(
+            samp_args.num_samples_eval // len(endpoint_1_samples) + 1, 1, 1
+        )[: samp_args.num_samples_eval]
+        endpoint_2_samples = endpoint_2_samples.repeat(
+            samp_args.num_samples_eval // len(endpoint_2_samples) + 1, 1, 1
+        )[: samp_args.num_samples_eval]
 
         if "om" in samp_args.gen_mode:
             if samp_args.action == "hessian":
@@ -317,8 +371,6 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
             interpolator = (
                 OMInterpolatorWrapper(
                     model.ema_model,
-                    x1=endpoints[0],
-                    x2=endpoints[1],
                     path_length=samp_args.path_length,
                     encode_and_decode=not samp_args.no_encode_and_decode,
                     latent_time=samp_args.latent_time,
@@ -343,8 +395,6 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
             interpolator = (
                 InterpolatorWrapper(
                     model.ema_model,
-                    x1=endpoints[0],
-                    x2=endpoints[1],
                     path_length=samp_args.path_length,
                     latent_time=samp_args.latent_time,
                     interpolation_fn=(
@@ -365,7 +415,8 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
 
         output = sample_interpolations_from_model(
             interpolator,
-            num_paths=samp_args.num_samples_eval // parallel_batches,
+            endpoint_1_samples,
+            endpoint_2_samples,
             batch_size=samp_args.batch_size_gen // parallel_batches,
             verbose=True,
         )
@@ -443,21 +494,21 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
             friction=samp_args.friction,
             kb=samp_args.kb,
         )
-        sampled_mol = langevin_sampler.sample()
+        # sampled_mol = langevin_sampler.sample()
     else:
         raise Exception("Wrong argument 'gen_mode'")
 
     # Save generated samples
-    torch.save(sampled_mol, str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pt"))
+    # torch.save(sampled_mol, str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pt"))
 
-    # Save subset as pdb - convert from angstrom to nm
-    all_mol_traj = md.Trajectory(
-        sampled_mol[0:1000].numpy() / 10, topology=trainset.topology
-    )
-    all_mol_traj.save_pdb(str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb"))
+    # # Save subset as pdb - convert from angstrom to nm
+    # all_mol_traj = md.Trajectory(
+    #     sampled_mol[0:1000].numpy() / 10, topology=trainset.topology
+    # )
+    # all_mol_traj.save_pdb(str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb"))
 
-    # Also save as gsd
-    save_ovito_traj(sampled_mol, str(eval_folder) + f"/sample-{samp_args.gen_mode}.gsd")
+    # # Also save as gsd
+    # save_ovito_traj(sampled_mol, str(eval_folder) + f"/sample-{samp_args.gen_mode}.gsd")
 
     # Perform final evaluations (producing plots, GIFs, etc.)
     evaluate_fastfolders(

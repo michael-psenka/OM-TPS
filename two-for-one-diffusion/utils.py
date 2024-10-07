@@ -284,26 +284,21 @@ class InterpolatorWrapper(torch.nn.Module):
     The network becomes an interpolator, such that we can sample in parallel GPUs by passing SamplerModule into a
     """
 
-    def __init__(
-        self, model, x1, x2, path_length, latent_time, interpolation_fn, temperature
-    ):
+    def __init__(self, model, path_length, latent_time, interpolation_fn, temperature):
         super(InterpolatorWrapper, self).__init__()
         self.model = model
-        self.x1 = x1
-        self.x2 = x2
         self.path_length = path_length
         self.latent_time = latent_time
         self.interpolation_fn = interpolation_fn
         self.temperature = temperature
 
-    def forward(self, num_paths):
+    def forward(self, x1, x2):
         return self.model.interpolate(
-            x1=self.x1,
-            x2=self.x2,
+            x1=x1,
+            x2=x2,
             path_length=self.path_length,
             latent_time=self.latent_time,
             temperature=self.temperature,
-            num_paths=num_paths,
             interpolation_fn=self.interpolation_fn,
         )
 
@@ -316,8 +311,6 @@ class OMInterpolatorWrapper(torch.nn.Module):
     def __init__(
         self,
         model,
-        x1,
-        x2,
         path_length,
         latent_time,
         encode_and_decode=True,
@@ -333,8 +326,6 @@ class OMInterpolatorWrapper(torch.nn.Module):
     ):
         super(OMInterpolatorWrapper, self).__init__()
         self.model = model
-        self.x1 = x1
-        self.x2 = x2
         self.path_length = path_length
         self.latent_time = latent_time
         self.encode_and_decode = encode_and_decode
@@ -348,14 +339,13 @@ class OMInterpolatorWrapper(torch.nn.Module):
         self.truncated_gradient = truncated_gradient
         self.temperature = temperature
 
-    def forward(self, num_paths):
+    def forward(self, x1, x2):
         return self.model.om_interpolate(
-            x1=self.x1,
-            x2=self.x2,
+            x1=x1,
+            x2=x2,
             path_length=self.path_length,
             encode_and_decode=self.encode_and_decode,
             latent_time=self.latent_time,
-            num_paths=num_paths,
             mlff=self.mlff,
             action_cls=self.action_cls,
             initial_guess_fn=self.initial_guess_fn,
