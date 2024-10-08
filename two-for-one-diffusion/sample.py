@@ -8,7 +8,13 @@ import torch
 from models import get_model
 from models.ddpm import GaussianDiffusion
 from ema_pytorch import EMA
-from datasets.dataset_utils_empty import get_dataset
+from datasets.dataset_utils_empty import (
+    get_dataset,
+    Molecules,
+    AtomSelection,
+    DEShawDataset,
+    to_angstrom,
+)
 from evaluate.evaluate_fastfolders import evaluate_fastfolders
 from evaluate.evaluators import (
     sample_from_model,
@@ -320,23 +326,19 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
         )
         cluster_coords = np.load(cluster_centers_path)
 
-        # If i.i.d samples exist, load them
-        if os.path.exists(iid_sample_path):
-            iid_samples = torch.load(iid_sample_path / "sample-iid.pt")
-        else:
-            # generate i.i.d samples
-            sampler = SamplerWrapper(model.ema_model).to(device).eval()
-            if torch.cuda.device_count() > 1 and device == "cuda":
-                sampler = torch.nn.DataParallel(sampler).to(device)
-                parallel_batches = torch.cuda.device_count()
-            else:
-                parallel_batches = 1
-            iid_samples = sample_from_model(
-                sampler,
-                samp_args.num_samples_eval // parallel_batches,
-                samp_args.batch_size_gen // parallel_batches,
-                verbose=True,
-            )
+        # Load samples from the ground truth simulations to serve as endpoints for interpolation
+        dataset = DEShawDataset(
+            data_root="/data/sanjeevr/Reference_MD_Sims",
+            molecule=Molecules[protein_name.upper()],
+            simulation_id=0,
+            atom_selection=AtomSelection.A_CARBON,
+            return_bond_graph=False,
+            transform=to_angstrom,
+            align=False,
+        )
+
+        gt_traj = 10 * torch.tensor(dataset.traj.xyz)  # convert to angstroms
+        gt_traj -= gt_traj.mean(1, keepdims=True)  # center
 
         # Get TICA
         tic_evaluator = TicEvaluator(
@@ -350,12 +352,12 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
         )
         # assign cluster centers to the iid samples
         cluster_assignments = discretize_trajectory(
-            iid_samples, tic_evaluator, cluster_coords
+            gt_traj, tic_evaluator, cluster_coords
         )
 
         # Sample endpoints from the cluster centers
-        endpoint_1 = iid_samples[cluster_assignments == clusters[0]].to(device)
-        endpoint_2 = iid_samples[cluster_assignments == clusters[1]].to(device)
+        endpoint_1 = gt_traj[cluster_assignments == clusters[0]].to(device)
+        endpoint_2 = gt_traj[cluster_assignments == clusters[1]].to(device)
 
         # # Replicate the endpoints to have samp_args.num_samples_eval samples
         endpoint_1_samples = endpoint_1.repeat(
@@ -498,7 +500,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
             friction=samp_args.friction,
             kb=samp_args.kb,
         )
-        # sampled_mol = langevin_sampler.sample()
+        sampled_mol = langevin_sampler.sample()
     else:
         raise Exception("Wrong argument 'gen_mode'")
 
@@ -521,6 +523,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
         samp_args.original_append_exp_name,
         model=model.ema_model,
         num_paths=samp_args.num_samples_eval,
+        endpoints = clusters if "interpolate" in samp_args.gen_mode else None,
     )
 
     return sampled_mol

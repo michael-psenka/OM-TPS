@@ -134,16 +134,19 @@ def get_dataset(
         if data_folder is None:
             dataset = None
         else:
+
             dataset = DEShawDataset(
                 data_root=data_folder,
                 molecule=molecule,
                 simulation_id=0,
                 atom_selection=AtomSelection.A_CARBON,
-                download=True,
                 return_bond_graph=False,
                 transform=to_angstrom,
                 align=False,
             )
+            import pdb
+
+            pdb.set_trace()
         dataset = CGDataset(
             dataset, topology, molecule, mean0=mean0, shuffle=shuffle_before_splitting
         )
