@@ -11,6 +11,7 @@ from deeptime.clustering import MiniBatchKMeans
 from deeptime.markov import TransitionCountEstimator, pcca
 from sklearn.preprocessing import normalize
 import seaborn as sns
+from scipy.spatial.distance import jensenshannon
 from pathlib import Path
 import os
 import sys
@@ -27,7 +28,13 @@ from evaluate.evaluators import (
 )
 from actions import S2Action, TruncatedAction, SimpleAction
 from utils import center_zero
-from evaluate.msm_utils import find_min_flux_states
+from evaluate.msm_utils import (
+    find_min_flux_states,
+    discretize_trajectory,
+    sample_tp,
+    get_tp_likelihood,
+    compute_shannon_entropy,
+)
 
 from datasets.dataset_utils_empty import Molecules
 from logging_utils import get_interpolation_viz, visualize_gif, save_ovito_traj
@@ -127,14 +134,12 @@ def evaluate_fastfolders(
     start = CLUSTER_ENDPOINTS[protein_name][0]
     end = CLUSTER_ENDPOINTS[protein_name][1]
 
-    subsample = (
-        np.arange(0, 12000) + 12000 * sim if gen_mode == "langevin" else subsample
-    )
-
     # First, do dynamics analysis to get Markov State Model parameters
+    # TODO: eventually replace this with precomputed values on the reference simulation (instead of Langevin)
     (
         prob_matrix,
         kmeans_cluster_centers,
+        tic_evaluator,
         ref_dihedrals,
         ref_pwds,
     ) = dynamics_analysis(
@@ -142,7 +147,7 @@ def evaluate_fastfolders(
         "langevin",
         append_exp_name=None,
         num_clusters=20,
-        subsample=np.arange(0, 12000),
+        subsample=None,
     )
 
     # Then, find the most probable path between the start and end states
@@ -150,7 +155,70 @@ def evaluate_fastfolders(
     path = [i - 1 for i in path]  # Convert back to zero indexing
     path_centers = kmeans_cluster_centers[path]
 
-    # # Finally, visualize the model-produced interpolation along with the reference (most probable) path
+    # Load data
+    append_exp_name_str = "_" + append_exp_name if append_exp_name else ""
+    eval_folder = (
+        f"saved_models/{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}"
+    )
+    sample_path = Path(eval_folder, f"sample-{gen_mode}.pt")
+    pdb_file = (
+        f"datasets/folded_pdbs/{Molecules[protein_name.upper()].value}-0-c-alpha.pdb"
+    )
+    # Load sampled molecules
+    sampled_mol = torch.load(sample_path)
+    if subsample is not None:
+        sampled_mol = sampled_mol[subsample]
+    n_atoms = sampled_mol.shape[1]
+
+    # Load topology from pdb file
+    topology = md.load(pdb_file).topology
+
+    # Discretize the interpolation trajectory based on the reference cluster centers
+    cluster_assignments = discretize_trajectory(
+        sampled_mol, tic_evaluator, kmeans_cluster_centers
+    )
+
+    # Create MSM with 20 states
+    interpolation_prob_matrix = TransitionCountEstimator.count(
+        count_mode="sliding", dtrajs=[cluster_assignments.astype("int")], lagtime=1
+    )
+    interpolation_prob_matrix = normalize(interpolation_prob_matrix, axis=1, norm="l1")
+
+    # Sample transition paths from the constructed MSM
+    n_samples = 1000
+    traj_len = 10
+    sampled_traj = sample_tp(
+        interpolation_prob_matrix, start - 1, end - 1, traj_len, n_samples
+    )
+    ref_sampled_traj = sample_tp(prob_matrix, start - 1, end - 1, traj_len, n_samples)
+
+    # Compute entropy of the sampled trajectories (proxy for diversity)
+    entropy = compute_shannon_entropy(sampled_traj)
+    ref_entropy = compute_shannon_entropy(ref_sampled_traj)
+
+    # Compute JSD between the state distributions of the reference and generated paths
+    sampled_state_dist = np.array(
+        [np.count_nonzero(sampled_traj == i) for i in range(20)]
+    )
+    sampled_state_dist = sampled_state_dist / sampled_state_dist.sum()
+    ref_state_dist = np.array(
+        [np.count_nonzero(ref_sampled_traj == i) for i in range(20)]
+    )
+    ref_state_dist = ref_state_dist / ref_state_dist.sum()
+    jsd = jensenshannon(ref_state_dist, sampled_state_dist)
+
+    # Compute the likelihood of the sampled trajectories under the reference MSM
+    path_probabilities = get_tp_likelihood(sampled_traj, prob_matrix).prod(-1)
+
+    # Percentage of valid (non-zero probability) paths
+    fraction_valid_paths = (
+        path_probabilities[path_probabilities > 0].shape[0]
+        / path_probabilities.shape[0]
+    )
+
+    # JSD between the reference and generated state distributions
+
+    # Finally, visualize the model-produced interpolation along with the reference (most probable) path
     free_energies, fraction_unphysical = get_tic_free_energy_plots(
         protein_name,
         gen_mode,
@@ -171,7 +239,13 @@ def evaluate_fastfolders(
     metrics = {
         "Max Free Energy (kBT) Mean: ": max_free_energies.mean(),
         "Max Free Energy (kBT) Std: ": max_free_energies.std(),
-        "Fraction of Unphysical Paths": fraction_unphysical,
+        "Fraction of Physical Paths": 1 - fraction_unphysical,
+        "Path Probability Mean": path_probabilities.mean(),
+        "Path Probability Std": path_probabilities.std(),
+        "Fraction of Valid Paths": fraction_valid_paths,
+        "Jensen-Shannon Divergence of State Distributions": jsd,
+        "Transition Path Entropy (Diversity)": entropy,
+        "Reference Transition Path Entropy (Diversity)": ref_entropy
     }
     # TODO: other metrics to add:
     # 1. Probablity of paths under the reference MSM (mean and std)
@@ -473,164 +547,6 @@ def get_tic_free_energy_plots(
     return free_energies, fraction_unphysical
 
 
-def force_norm_analysis(
-    protein_name, gen_mode, append_exp_name, subsample=None, ref_path=None
-):
-    """
-    Analyze the force norm of a set of samples generated by the model.
-    """
-    # Load data
-    append_exp_name_str = "_" + append_exp_name if append_exp_name else ""
-    eval_folder = (
-        f"saved_models/{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}"
-    )
-    sample_path = Path(eval_folder, f"sample-{gen_mode}.pt")
-    pdb_file = (
-        f"datasets/folded_pdbs/{Molecules[protein_name.upper()].value}-0-c-alpha.pdb"
-    )
-    # Load sampled molecules
-    sampled_mol = torch.load(sample_path)
-    if subsample is not None:
-        sampled_mol = sampled_mol[subsample]
-    n_atoms = sampled_mol.shape[1]
-
-    # Load topology from pdb file
-    topology = md.load(pdb_file).topology
-
-    # Initialize evaluator
-    tic_evaluator = TicEvaluator(
-        val_data=None,
-        mol_name=protein_name,
-        eval_folder=eval_folder,
-        data_folder="datasets",
-        folded_pdb_folder="datasets/folded_pdbs",
-        bins=101,
-        evalset="testset",
-    )  # The evalset is the set we'll compare to in the next evaluation steps
-
-    # Get samples TIC free energy landscape
-    sample_tic_features = tic_evaluator.get_tic_features(
-        sampled_mol, tic_evaluator.folded
-    )
-    transformed_samples = tic_evaluator.tica(sample_tic_features)
-
-    # Find the bins of the samples
-    bins_x = np.digitize(transformed_samples[:, 0], tic_evaluator.bin_edges_x)
-    bins_y = np.digitize(transformed_samples[:, 1], tic_evaluator.bin_edges_y)
-    # clip the bins to the maximum bin index
-    bins_x = np.clip(bins_x, 0, tic_evaluator.bins - 1)
-    bins_y = np.clip(bins_y, 0, tic_evaluator.bins - 1)
-
-    bins = torch.tensor(tic_evaluator.bins * bins_x + bins_y).cuda()
-
-    # Load the calculated force norms
-    force_norms = f"saved_models/{protein_name}/main_eval_output_langevin/diffusion_force_norms.pt"
-    force_norms = torch.load(force_norms)
-
-    # Force norm is a list of tensors, each tensor is the force norm all samples
-    tic_paths = []  # To keep track of the TIC image paths for creating a GIF
-    gif_folder = "temp_gif_images"
-    os.makedirs(gif_folder, exist_ok=True)
-    for i, force_norm in enumerate(force_norms):
-        avg_force_norms_by_bin = scatter_mean(force_norm, bins, dim=0)
-        # replace zero values with NaN
-        max_force = float("nan")
-        avg_force_norms_by_bin[avg_force_norms_by_bin == 0] = 1.1 * max_force
-        ones = torch.ones(
-            (tic_evaluator.bins**2 - avg_force_norms_by_bin.shape[0])
-        ).cuda()
-        avg_force_norms_by_bin = torch.cat(
-            [avg_force_norms_by_bin, 1.1 * max_force * ones]
-        )
-        avg_force_norms_by_bin = avg_force_norms_by_bin.reshape(
-            tic_evaluator.bins, tic_evaluator.bins
-        )
-
-        # zscore the force norm (filtering out nans)
-        no_nans = ~torch.isnan(avg_force_norms_by_bin)
-        avg_force_norms_by_bin = (
-            avg_force_norms_by_bin - avg_force_norms_by_bin[no_nans].mean()
-        ) / avg_force_norms_by_bin[no_nans].std()
-
-        # make tic plot of force norm
-        file_name = join(gif_folder, f"force_norm_{i}.png")
-        tic_evaluator._plot_tic(
-            avg_force_norms_by_bin.cpu().numpy(),
-            file_name=file_name,
-            title=f"Force Norm of Diffusion Vector Field at t={5*i}",
-            save_plot=True,
-            ref_path=ref_path,
-        )
-        tic_paths.append(file_name)
-
-    # Create a GIF from the saved TICA images
-    tica_gif_path = join(tic_evaluator.plots_folder, "force_norm.gif")
-    images = [Image.open(tic_path) for tic_path in tic_paths]
-    images[0].save(
-        tica_gif_path,
-        save_all=True,
-        append_images=images[1:],
-        optimize=False,
-        duration=100,  # Duration for each frame in milliseconds
-        loop=0,  # Loop forever
-    )
-
-    # Remove the temporary image files
-    for image_path in tic_paths:
-        os.remove(image_path)
-
-    return force_norm
-
-
-def ground_truth_path_analysis(
-    xyz_samples, tica_path_centers, model, tic_evaluator, latent_time=0
-):
-    # set up action function
-    force_func = lambda x: model.force_func(center_zero(x), latent_time)
-    laplace = lambda x: model.laplacian_func(x, latent_time)
-    action_func = TruncatedAction(
-        force_func=force_func,
-        laplace_func=laplace,
-        dt=0.1,
-        gamma=10,
-        D=100,
-    )  # (D is only used for HessianAction)
-
-    # find sum of distances between cluster centers in vectorized form
-    tic_path_centers = torch.tensor(tica_path_centers).cuda()
-
-    dists = torch.norm(tic_path_centers[1:] - tic_path_centers[:-1], dim=1)
-
-    # assign number of points to each segment based on the relative distances
-    props = dists / dists.sum()
-    segment_points = (props * 200).int().cpu().numpy()
-
-    # create path by linearly interpolating between the cluster centers
-    path = np.array([tica_path_centers[0]])
-    for i in range(1, len(tica_path_centers)):
-
-        path = np.concatenate(
-            [
-                path,
-                np.linspace(
-                    tica_path_centers[i - 1],
-                    tica_path_centers[i],
-                    segment_points[i - 1],
-                )[1:],
-            ]
-        )
-
-    # decode to xyz space
-
-    xyz_path = tic_evaluator.tic_to_xyz(path, xyz_samples)
-    # Kabsch align the path to the previous frame
-    for i in range(xyz_path.shape[0]):
-        xyz_path[i] = torch.tensor(kabsch_rotate(xyz_path[i], xyz_path[i - 1]))
-    path_term, force_term = action_func(xyz_path.cuda())
-
-    return path_term, force_term, xyz_path
-
-
 def dynamics_analysis(
     protein_name, gen_mode, append_exp_name, num_clusters=None, subsample=None
 ):
@@ -734,6 +650,7 @@ def dynamics_analysis(
     # pcca_msm = pcca(count_matrix, 10)
 
     kmeans_cluster_centers = kmeans._model.cluster_centers
+
     np.save(
         f"./evaluate/saved_references/saved_cluster_centers_{protein_name.upper()}.npy",
         kmeans_cluster_centers,
@@ -756,7 +673,7 @@ def dynamics_analysis(
     #     ]
     # )
 
-    return count_matrix, kmeans_cluster_centers, dihedrals, pwds
+    return count_matrix, kmeans_cluster_centers, tic_evaluator, dihedrals, pwds
 
 
 def most_probable_path(transition_matrix, start_state, end_state):

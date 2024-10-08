@@ -1,10 +1,11 @@
 import numpy as np
 import torch
+from collections import Counter
 
 
 def sample_tp(trans, start_state, end_state, traj_len, n_samples):
     """
-    Sample a discrete trajectory from a transition matrix.
+    Sample discrete trajectories from a Markov state model transition matrix.
     Adapted from MDGen (https://github.com/bjing2016/mdgen/blob/master/mdgen/analysis.py)
     """
     s_1 = start_state
@@ -26,7 +27,7 @@ def sample_tp(trans, start_state, end_state, traj_len, n_samples):
 
 def get_tp_likelihood(tp, trans):
     """
-    Compute the likelihood of a discrete trajectory given a reference transition matrix.
+    Compute the likelihood of a discrete trajectory given a reference MSM transition matrix.
     Adapted from MDGen (https://github.com/bjing2016/mdgen/blob/master/mdgen/analysis.py)
     """
     N = tp.shape[1]
@@ -122,3 +123,16 @@ def compute_flux(T, pi):
     # Element-wise multiplication (Hadamard product)
     F = T * P_i
     return F
+
+
+def compute_shannon_entropy(paths):
+    # Count the frequency of each unique path
+    path_counts = Counter(map(tuple, paths))  # Treat each path as a tuple
+    total_paths = len(paths)
+
+    # Compute the probability of each path
+    probabilities = np.array([count / total_paths for count in path_counts.values()])
+
+    # Compute the Shannon entropy
+    entropy = -np.sum(probabilities * np.log(probabilities))
+    return entropy

@@ -1,5 +1,11 @@
 {
-    "Max Free Energy (kBT) Mean: ": 6.946437982442121,
-    "Max Free Energy (kBT) Std: ": 2.8789258791851355,
-    "Fraction of Unphysical Paths": 0.0
+    "Max Free Energy (kBT) Mean: ": 10.0,
+    "Max Free Energy (kBT) Std: ": 0.0,
+    "Fraction of Physical Paths": 1.0,
+    "Path Probability Mean": 4.4130190286807256e-06,
+    "Path Probability Std": 2.3530784374428292e-06,
+    "Fraction of Valid Paths": 1.0,
+    "Jensen-Shannon Divergence of State Distributions": 0.2651934900345335,
+    "Transition Path Entropy (Diversity)": 4.7149496996471765,
+    "Reference Transition Path Entropy (Diversity)": 6.904982690259894
 }

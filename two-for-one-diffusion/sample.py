@@ -296,6 +296,20 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
     elif "interpolate" in samp_args.gen_mode:
 
         # choose two endpoints as cluster centers
+        """OLD CODE (works)"""
+        # cluster_coords_path = Path(
+        #     os.path.join(
+        #         "evaluate",
+        #         "saved_references",
+        #         f"saved_cluster_rep_coords_{protein_name.upper()}.npy",
+        #     )
+        # )
+        # cluster_coords = torch.tensor(np.load(cluster_coords_path)).to(device)
+        # clusters = CLUSTER_ENDPOINTS[protein_name]
+        # clusters = [c - 1 for c in clusters]  # 1-indexed to 0-indexed
+        # endpoint_1, endpoint_2 = cluster_coords[clusters]
+        # endpoint_1 = endpoint_1.unsqueeze(0)
+        # endpoint_2 = endpoint_2.unsqueeze(0)
 
         cluster_endpoints_path = Path(
             os.path.join(
@@ -304,7 +318,12 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                 f"saved_cluster_endpoints_{protein_name.upper()}.npy",
             )
         )
-        clusters = np.load(cluster_endpoints_path)
+
+        # The min flux states are not always the best cluster centers for interpolation
+        # Maybe they'll be better when we calculate on the ground truth sims
+        # clusters = np.load(cluster_endpoints_path)
+        clusters = CLUSTER_ENDPOINTS[protein_name]
+        clusters = [c - 1 for c in clusters]  # 1-indexed to 0-indexed
 
         cluster_centers_path = Path(
             os.path.join(
@@ -343,22 +362,21 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
             bins=101,
             evalset="testset",
         )
-
         # assign cluster centers to the iid samples
         cluster_assignments = discretize_trajectory(
             iid_samples, tic_evaluator, cluster_coords
         )
 
         # Sample endpoints from the cluster centers
-        endpoint_1_samples = iid_samples[cluster_assignments == clusters[0]].to(device)
-        endpoint_2_samples = iid_samples[cluster_assignments == clusters[1]].to(device)
+        endpoint_1 = iid_samples[cluster_assignments == clusters[0]].to(device)
+        endpoint_2 = iid_samples[cluster_assignments == clusters[1]].to(device)
 
-        # Replicate the endpoints to have samp_args.num_samples_eval samples
-        endpoint_1_samples = endpoint_1_samples.repeat(
-            samp_args.num_samples_eval // len(endpoint_1_samples) + 1, 1, 1
+        # # Replicate the endpoints to have samp_args.num_samples_eval samples
+        endpoint_1_samples = endpoint_1.repeat(
+            samp_args.num_samples_eval // len(endpoint_1) + 1, 1, 1
         )[: samp_args.num_samples_eval]
-        endpoint_2_samples = endpoint_2_samples.repeat(
-            samp_args.num_samples_eval // len(endpoint_2_samples) + 1, 1, 1
+        endpoint_2_samples = endpoint_2.repeat(
+            samp_args.num_samples_eval // len(endpoint_2) + 1, 1, 1
         )[: samp_args.num_samples_eval]
 
         if "om" in samp_args.gen_mode:
@@ -499,16 +517,16 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
         raise Exception("Wrong argument 'gen_mode'")
 
     # Save generated samples
-    # torch.save(sampled_mol, str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pt"))
+    torch.save(sampled_mol, str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pt"))
 
-    # # Save subset as pdb - convert from angstrom to nm
-    # all_mol_traj = md.Trajectory(
-    #     sampled_mol[0:1000].numpy() / 10, topology=trainset.topology
-    # )
-    # all_mol_traj.save_pdb(str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb"))
+    # Save subset as pdb - convert from angstrom to nm
+    all_mol_traj = md.Trajectory(
+        sampled_mol[0:1000].numpy() / 10, topology=trainset.topology
+    )
+    all_mol_traj.save_pdb(str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb"))
 
-    # # Also save as gsd
-    # save_ovito_traj(sampled_mol, str(eval_folder) + f"/sample-{samp_args.gen_mode}.gsd")
+    # Also save as gsd
+    save_ovito_traj(sampled_mol, str(eval_folder) + f"/sample-{samp_args.gen_mode}.gsd")
 
     # Perform final evaluations (producing plots, GIFs, etc.)
     evaluate_fastfolders(

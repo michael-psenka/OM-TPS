@@ -1,6 +1,7 @@
 *.gif
 *.traj
 *.npy
+*.json
 log
 *.pt
 mnist_data/

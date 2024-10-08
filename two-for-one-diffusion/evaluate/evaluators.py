@@ -635,8 +635,8 @@ class TicEvaluator:
                 ax1.scatter(
                     bin_x_endpoint,
                     bin_y_endpoint,
-                    marker="X",
-                    c="blue" if i < len(endpoints) // 2 else "red",
+                    marker="X" if i % 2 == 0 else "o",
+                    c="blue" if i % 2 == 0 else "red",
                     s=50,
                     linewidth=0,
                     zorder=3,
