@@ -296,20 +296,6 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
     elif "interpolate" in samp_args.gen_mode:
 
         # choose two endpoints as cluster centers
-        """OLD CODE (works)"""
-        # cluster_coords_path = Path(
-        #     os.path.join(
-        #         "evaluate",
-        #         "saved_references",
-        #         f"saved_cluster_rep_coords_{protein_name.upper()}.npy",
-        #     )
-        # )
-        # cluster_coords = torch.tensor(np.load(cluster_coords_path)).to(device)
-        # clusters = CLUSTER_ENDPOINTS[protein_name]
-        # clusters = [c - 1 for c in clusters]  # 1-indexed to 0-indexed
-        # endpoint_1, endpoint_2 = cluster_coords[clusters]
-        # endpoint_1 = endpoint_1.unsqueeze(0)
-        # endpoint_2 = endpoint_2.unsqueeze(0)
 
         cluster_endpoints_path = Path(
             os.path.join(

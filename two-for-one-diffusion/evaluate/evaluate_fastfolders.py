@@ -245,7 +245,7 @@ def evaluate_fastfolders(
         "Fraction of Valid Paths": fraction_valid_paths,
         "Jensen-Shannon Divergence of State Distributions": jsd,
         "Transition Path Entropy (Diversity)": entropy,
-        "Reference Transition Path Entropy (Diversity)": ref_entropy
+        "Reference Transition Path Entropy (Diversity)": ref_entropy,
     }
     # TODO: other metrics to add:
     # 1. Probablity of paths under the reference MSM (mean and std)

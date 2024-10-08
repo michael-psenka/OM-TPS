@@ -85,6 +85,9 @@ class GraphTransformer(nn.Module):
     ):
         # alphas: Optional tensor of shape [Batch_size,]
         # Center at 0 to be translation invariant
+        import pdb
+
+        pdb.set_trace()
         x = center_zero(x)
         x = x.requires_grad_(requires_grad=True)
         with torch.enable_grad() if self.conservative else nullcontext():
