@@ -3,6 +3,7 @@
 
 import os
 import math
+import wandb
 import numpy as np
 import torch
 from torch import nn
@@ -637,6 +638,15 @@ class GaussianDiffusion(nn.Module):
                 pbar.set_description(
                     f"OM Action: {action.item()}, Path Contribution: {round(first_term.item() / action.item() * 100, 3)}%, Force Contribution: {round(second_term.item() / action.item() * 100, 3)}%"
                 )
+
+                if self.log:
+                    wandb.log(
+                        {
+                            "OM Action": action.item(),
+                            "Path Norm": first_term.item(),
+                            "Force Norm": second_term.item(),
+                        }
+                    )
 
         all_denoised_paths = []
         # decode the optimized paths (keeping every 20 for future visualization)

@@ -20,7 +20,7 @@ python sample.py \
     --no_encode_and_decode \
     --append_exp_name test_initial_latent_time=250 \
     --path_length 200 \
-    --steps 2000
+    --steps 100
 
 # python sample.py \
 #     --model_path saved_models/chignolin \
@@ -72,7 +72,7 @@ python sample.py \
 #     --no_encode_and_decode \
 #     --append_exp_name test_initial_latent_time=250 \
 #     --path_length 200 \
-#     --steps 1000
+#     --steps 2000
 
 # python sample.py \
 #     --model_path saved_models/trp_cage \
@@ -125,7 +125,7 @@ python sample.py \
 #     --no_encode_and_decode \
 #     --append_exp_name test_initial_latent_time=250 \
 #     --path_length 200 \
-#     --steps 40
+#     --steps 2000
 
 # python sample.py \
 #     --model_path saved_models/bba \
@@ -180,7 +180,7 @@ python sample.py \
 #     --no_encode_and_decode \
 #     --append_exp_name test_initial_latent_time=250 \
 #     --path_length 200 \
-#     --steps 40
+#     --steps 2000
 
 # python sample.py \
 #     --model_path saved_models/villin \
@@ -233,7 +233,7 @@ python sample.py \
 #     --no_encode_and_decode \
 #     --append_exp_name test_initial_latent_time=250 \
 #     --path_length 200 \
-#     --steps 40
+#     --steps 2000
 
 # python sample.py \
 #     --model_path saved_models/protein_g \

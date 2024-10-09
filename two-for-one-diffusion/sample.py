@@ -1,4 +1,7 @@
 import os
+import wandb
+
+wandb.require("core")
 import argparse
 import pickle
 from os.path import join
@@ -29,6 +32,7 @@ from utils import (
     OMInterpolatorWrapper,
     filter_by_rmsd,
     slerp,
+    validate_git_status,
 )
 from logging_utils import save_ovito_traj
 from actions import SimpleAction, TruncatedAction, S2Action
@@ -41,6 +45,9 @@ import matplotlib.pyplot as plt
 
 
 parser = argparse.ArgumentParser(description="coarse-graining-evaluator")
+
+parser.add_argument("--disable_logging", action="store_true", help="Don't log to wandb")
+
 parser.add_argument(
     "--model_path",
     type=str,
@@ -217,6 +224,15 @@ def main(samp_args):
         join(samp_args.model_path, "main_eval_output" + samp_args.append_exp_name)
     )
 
+    if not samp_args.disable_logging:
+        validate_git_status()
+        wandb.login()
+        wandb.init(
+            project="fastfolders",
+            name=samp_args.model_path.split("/")[-1] + samp_args.append_exp_name,
+            config=samp_args,
+        )
+
     args.data_folder = samp_args.data_folder
     eval_folder.mkdir(exist_ok=True, parents=False)
     # writer = SummaryWriter(str(eval_folder))
@@ -382,6 +398,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                     anneal=samp_args.anneal,
                     truncated_gradient=samp_args.truncated_gradient,
                     temperature=samp_args.interpolation_temp,
+                    log=not samp_args.disable_logging,
                 )
                 .to(device)
                 .eval()
@@ -398,6 +415,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                         else slerp
                     ),
                     temperature=interpolation_temp,
+                    log=not samp_args.disable_logging,
                 )
                 .to(device)
                 .eval()
@@ -513,6 +531,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
         model=model.ema_model,
         num_paths=samp_args.num_samples_eval,
         endpoints=clusters if "interpolate" in samp_args.gen_mode else None,
+        log=not samp_args.disable_logging,
     )
 
     return sampled_mol

@@ -4,6 +4,7 @@ from inspect import isfunction
 import numpy as np
 import mdtraj as md
 import random
+from git import Repo
 from actions import SimpleAction, TruncatedAction
 from rmsd import kabsch_rmsd
 
@@ -14,6 +15,18 @@ NUM_RESIDUES_TO_PROTEIN = {
     35: "villin",
     56: "protein_g",
 }
+
+
+def validate_git_status():
+    """
+    Check if the git repository is clean to run experiments.
+    """
+    repo = Repo(".", search_parent_directories=True)
+    repo_is_dirty = repo.is_dirty()
+
+    assert (
+        not repo_is_dirty
+    ), "Git repository is dirty! Please commit your changes before running wandb online experiments. Set the --disable_logging flag to test locally."
 
 
 def exists(x):
@@ -284,9 +297,12 @@ class InterpolatorWrapper(torch.nn.Module):
     The network becomes an interpolator, such that we can sample in parallel GPUs by passing SamplerModule into a
     """
 
-    def __init__(self, model, path_length, latent_time, interpolation_fn, temperature):
+    def __init__(
+        self, model, path_length, latent_time, interpolation_fn, temperature, log
+    ):
         super(InterpolatorWrapper, self).__init__()
         self.model = model
+        self.model.log = log
         self.path_length = path_length
         self.latent_time = latent_time
         self.interpolation_fn = interpolation_fn
@@ -323,9 +339,11 @@ class OMInterpolatorWrapper(torch.nn.Module):
         anneal=False,
         truncated_gradient=False,
         temperature=1.0,
+        log=False,
     ):
         super(OMInterpolatorWrapper, self).__init__()
         self.model = model
+        self.model.log = log
         self.path_length = path_length
         self.latent_time = latent_time
         self.encode_and_decode = encode_and_decode
