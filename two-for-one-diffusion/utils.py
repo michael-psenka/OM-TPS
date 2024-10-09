@@ -17,7 +17,7 @@ NUM_RESIDUES_TO_PROTEIN = {
 }
 
 
-def validate_git_status(excluded_files=["sample.sh"]):
+def validate_git_status(excluded_files=["two-for-one-diffusion/sample.sh"]):
     """
     Check if the git repository is clean to run experiments, excluding the file 'sample.sh' in the root directory.
     """
@@ -27,6 +27,7 @@ def validate_git_status(excluded_files=["sample.sh"]):
     dirty_files = [item.a_path for item in repo.index.diff(None)]
     
     # Remove 'sample.sh' from the list if it exists
+    import pdb; pdb.set_trace()
     dirty_files = [file for file in dirty_files if file not in excluded_files]
     
     assert (
