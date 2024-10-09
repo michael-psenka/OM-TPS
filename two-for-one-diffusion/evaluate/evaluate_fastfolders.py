@@ -54,13 +54,14 @@ from utils import center_zero
 from logging_utils import get_interpolation_viz, visualize_gif, save_ovito_traj
 
 
-# default cluster endpoints for testing interpolation (obtained by visual inspection of what are hard transition paths to capture)
+# default cluster endpoints for testing interpolation
+# (obtained by visual inspection of what are hard transition paths to capture)
 CLUSTER_ENDPOINTS = {
-    "chignolin": [5, 17],
-    "trp_cage": [14, 13],
-    "bba": [18, 3],
-    "villin": [13, 6],
-    "protein_g": [17, 2],
+    "chignolin": [11, 13],
+    "trp_cage": [2, 13],
+    "bba": [9, 17],
+    "villin": [0, 17],
+    "protein_g": [11, 14],
 }
 
 
@@ -149,7 +150,8 @@ def evaluate_fastfolders(
             gt_traj=gt_traj,
         )
     if endpoints is None:
-        cluster_endpoints = np.load(cluster_endpoints_path)
+        # cluster_endpoints = np.load(cluster_endpoints_path)
+        cluster_endpoints = CLUSTER_ENDPOINTS[protein_name]
         start, end = cluster_endpoints[0], cluster_endpoints[1]
 
     # Get TIC evaluator
@@ -463,6 +465,9 @@ def get_tic_free_energy_plots(
 
         tic_paths.append(file_name)
 
+        import pdb
+
+        pdb.set_trace()
         # Calculate and plot the free energy profile along the path
         free_energy_profile = -np.log(gt_probs + np.exp(-10))
         free_energies.append(free_energy_profile)

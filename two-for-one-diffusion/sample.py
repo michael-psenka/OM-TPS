@@ -15,7 +15,7 @@ from datasets.dataset_utils_empty import (
     DEShawDataset,
     to_angstrom,
 )
-from evaluate.evaluate_fastfolders import evaluate_fastfolders
+from evaluate.evaluate_fastfolders import evaluate_fastfolders, CLUSTER_ENDPOINTS
 from evaluate.evaluators import (
     sample_from_model,
     sample_interpolations_from_model,
@@ -38,15 +38,6 @@ import mdtraj as md
 from torch.utils.tensorboard import SummaryWriter
 import time
 import matplotlib.pyplot as plt
-
-# default cluster endpoints for testing interpolation (obtained by visual inspection of what are hard transition paths to capture)
-CLUSTER_ENDPOINTS = {
-    "chignolin": [9, 17],
-    "trp_cage": [14, 13],
-    "bba": [18, 3],
-    "villin": [13, 6],
-    "protein_g": [17, 2],
-}
 
 
 parser = argparse.ArgumentParser(description="coarse-graining-evaluator")
@@ -302,7 +293,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
     elif "interpolate" in samp_args.gen_mode:
 
         # choose two endpoints as cluster centers (calculated from min flux paths)
-        # TODO: add option to use pre-defined cluster centers (min flux endpoints aren't always reasonable)
+
         cluster_endpoints_path = Path(
             os.path.join(
                 "evaluate",
@@ -311,7 +302,9 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
             )
         )
 
-        clusters = np.load(cluster_endpoints_path)
+        # clusters = np.load(cluster_endpoints_path)
+        # use pre-defined cluster centers (min flux endpoints aren't always reasonable)
+        clusters = CLUSTER_ENDPOINTS[protein_name]
 
         cluster_centers_path = Path(
             os.path.join(
