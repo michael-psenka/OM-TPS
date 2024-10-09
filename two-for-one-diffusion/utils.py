@@ -17,15 +17,20 @@ NUM_RESIDUES_TO_PROTEIN = {
 }
 
 
-def validate_git_status():
+def validate_git_status(excluded_files=["sample.sh"]):
     """
-    Check if the git repository is clean to run experiments.
+    Check if the git repository is clean to run experiments, excluding the file 'sample.sh' in the root directory.
     """
     repo = Repo(".", search_parent_directories=True)
-    repo_is_dirty = repo.is_dirty()
-
+    
+    # Get the status of the repo excluding 'sample.sh'
+    dirty_files = [item.a_path for item in repo.index.diff(None)]
+    
+    # Remove 'sample.sh' from the list if it exists
+    dirty_files = [file for file in dirty_files if file not in excluded_files]
+    
     assert (
-        not repo_is_dirty
+        not dirty_files
     ), "Git repository is dirty! Please commit your changes before running wandb online experiments. Set the --disable_logging flag to test locally."
 
 
