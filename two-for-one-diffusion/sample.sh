@@ -9,7 +9,6 @@
 #     tar -xvf "$file" -C "$(dirname "$file")";
 # done
 
-
 python sample.py \
     --model_path saved_models/chignolin \
     --gen_mode om_interpolate \
