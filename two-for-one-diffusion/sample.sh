@@ -20,7 +20,7 @@ python sample.py \
     --no_encode_and_decode \
     --append_exp_name test_initial_latent_time=250 \
     --path_length 200 \
-    --steps 40
+    --steps 2000
 
 # python sample.py \
 #     --model_path saved_models/chignolin \

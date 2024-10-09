@@ -223,7 +223,7 @@ def evaluate_fastfolders(
     )
 
     # Visualize the model-produced interpolation along with the reference paths
-    free_energies, fraction_unphysical = get_tic_free_energy_plots(
+    free_energies, transition_rates, fraction_unphysical = get_tic_free_energy_plots(
         protein_name,
         gen_mode,
         append_exp_name,
@@ -243,7 +243,9 @@ def evaluate_fastfolders(
     metrics = {
         "Max Free Energy (kBT) Mean: ": max_free_energies.mean(),
         "Max Free Energy (kBT) Std: ": max_free_energies.std(),
-        "Fraction of Physical Paths": 1 - fraction_unphysical,
+        "Fraction of Physical Paths: ": 1 - fraction_unphysical,
+        "Transition Rate Mean: ": transition_rates.mean(),
+        "Transition Rate Std: ": transition_rates.std(),
         "Path Probability Mean": path_probabilities.mean(),
         "Path Probability Std": path_probabilities.std(),
         "Fraction of Valid Paths": fraction_valid_paths,
@@ -292,6 +294,12 @@ def get_tic_free_energy_plots(
     # Load topology from pdb file
     topology = md.load(pdb_file).topology
     # print(f"Atoms: {[a for a in topology.atoms]}")
+
+    start, end = CLUSTER_ENDPOINTS[protein_name]
+    committor_probs_file = (
+        f"evaluate/saved_references/{protein_name}_committor_probs_{start}_{end}.npy"
+    )
+    bin_committor_probs = np.load(committor_probs_file)
 
     # store endpoints if interpolation is used
     if "interpolate" in gen_mode:
@@ -343,6 +351,9 @@ def get_tic_free_energy_plots(
     pwd_hist_paths = (
         []
     )  # To keep track of the pairwise distance histograms for creating a GIF
+    transition_rate_paths = (
+        []
+    )  # To keep track of the transition rate box plots for creating a GIF
 
     for i, path in tqdm(enumerate(loop)):
         # Get samples TIC free energy landscape
@@ -396,13 +407,6 @@ def get_tic_free_energy_plots(
         plt.savefig(file_name)
         plt.close()
         pwd_hist_paths.append(file_name)
-
-        if i == len(loop) - 1:
-
-            pwds = pwds.reshape(num_paths, -1, pwds.shape[-1])
-            pwd_mins = np.min(pwds, axis=(1, 2))
-            path_is_unphysical = np.where(pwd_mins < 0.5)[0]
-            fraction_unphysical = path_is_unphysical.sum() / num_paths
 
         # Find the bins of the samples
         bins_x = np.digitize(transformed_samples[:, 0], tic_evaluator.bin_edges_x)
@@ -465,9 +469,29 @@ def get_tic_free_energy_plots(
 
         tic_paths.append(file_name)
 
-        import pdb
+        bin_idx = bins_x * tic_evaluator.bins + bins_y
+        committor_probs = bin_committor_probs[bin_idx].reshape(num_paths, -1)
+        # Gradient of committor probs via central difference
+        grad_committor = np.gradient(committor_probs, axis=1)
 
-        pdb.set_trace()
+        # Compute transition rates
+        transition_rates = np.sum(
+            grad_committor * gt_probs.reshape(num_paths, -1), axis=1
+        ) / np.sum(gt_probs.reshape(num_paths, -1), axis=1)
+
+        # Box plot of transition rates
+        plt.figure()
+        plt.boxplot(transition_rates)
+        plt.ylim(1e-6, 1e-1)
+        plt.yscale("log")
+        plt.title(f"Step {i}: Transition rates")
+        plt.ylabel("Transition rate / (kBT / gamma)")
+        plt.show()
+        file_name = join(gif_folder, f"transition_rates_{i}.png")
+        plt.savefig(file_name)
+        plt.close()
+        transition_rate_paths.append(file_name)
+
         # Calculate and plot the free energy profile along the path
         free_energy_profile = -np.log(gt_probs + np.exp(-10))
         free_energies.append(free_energy_profile)
@@ -486,6 +510,13 @@ def get_tic_free_energy_plots(
         plt.savefig(file_name)
         plt.close()
         free_energy_paths.append(file_name)
+
+        if i == len(loop) - 1:
+            # save final metrics
+            pwds = pwds.reshape(num_paths, -1, pwds.shape[-1])
+            pwd_mins = np.min(pwds, axis=(1, 2))
+            path_is_unphysical = np.where(pwd_mins < 0.5)[0]
+            fraction_unphysical = path_is_unphysical.sum() / num_paths
 
     # Create a GIF from the saved TICA images
     tica_gif_path = join(tic_evaluator.plots_folder, "tica_samples.gif")
@@ -508,6 +539,23 @@ def get_tic_free_energy_plots(
     # Save as GIF
     images[0].save(
         free_energy_gif_path,
+        save_all=True,
+        append_images=images[1:],
+        optimize=False,
+        duration=100,  # Duration for each frame in milliseconds
+        loop=0,  # Loop forever
+    )
+
+    # Repeat for the transition rate box plots
+    transition_rate_gif_path = join(tic_evaluator.plots_folder, "transition_rates.gif")
+    images = [
+        Image.open(transition_rate_path)
+        for transition_rate_path in transition_rate_paths
+    ]
+
+    # Save as GIF
+    images[0].save(
+        transition_rate_gif_path,
         save_all=True,
         append_images=images[1:],
         optimize=False,
@@ -543,11 +591,15 @@ def get_tic_free_energy_plots(
 
     # Remove the temporary image files
     for image_path in (
-        tic_paths + free_energy_paths + dihedral_hist_paths + pwd_hist_paths
+        tic_paths
+        + free_energy_paths
+        + dihedral_hist_paths
+        + pwd_hist_paths
+        + transition_rate_paths
     ):
         os.remove(image_path)
 
-    return free_energies, fraction_unphysical
+    return free_energies, transition_rates, fraction_unphysical
 
 
 def dynamics_analysis(
