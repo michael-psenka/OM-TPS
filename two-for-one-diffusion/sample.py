@@ -228,7 +228,7 @@ def main(samp_args):
 
     args.data_folder = samp_args.data_folder
     eval_folder.mkdir(exist_ok=True, parents=False)
-    writer = SummaryWriter(str(eval_folder))
+    # writer = SummaryWriter(str(eval_folder))
 
     # Load dataset from args
     trainset, _, _ = get_dataset(
@@ -272,9 +272,9 @@ def main(samp_args):
 
     generate_samples(model, trainset, samp_args.noise_level, args, device, eval_folder)
 
-    writer.flush()
-    writer.close()
-    time.sleep(2)
+    # writer.flush()
+    # writer.close()
+    # time.sleep(2)
 
 
 def generate_samples(model, trainset, noise_level, args, device, eval_folder):
@@ -302,6 +302,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
     elif "interpolate" in samp_args.gen_mode:
 
         # choose two endpoints as cluster centers (calculated from min flux paths)
+        # TODO: add option to use pre-defined cluster centers (min flux endpoints aren't always reasonable)
         cluster_endpoints_path = Path(
             os.path.join(
                 "evaluate",

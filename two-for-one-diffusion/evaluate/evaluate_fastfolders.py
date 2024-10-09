@@ -98,8 +98,6 @@ def evaluate_fastfolders(
                 f"saved_cluster_endpoints_{protein_name.upper()}.npy",
             )
         )
-        cluster_endpoints = np.load(cluster_endpoints_path)
-        start, end = cluster_endpoints[0], cluster_endpoints[1]
 
     # TODO: only load the reference simulation data if we don't have the needed reference values already
     ref_dihedral_path = Path(
@@ -150,6 +148,9 @@ def evaluate_fastfolders(
             subsample=None,
             gt_traj=gt_traj,
         )
+    if endpoints is None:
+        cluster_endpoints = np.load(cluster_endpoints_path)
+        start, end = cluster_endpoints[0], cluster_endpoints[1]
 
     # Get TIC evaluator
     tic_evaluator = TicEvaluator(
@@ -180,22 +181,20 @@ def evaluate_fastfolders(
     # Load topology from pdb file
     topology = md.load(pdb_file).topology
 
+    n_samples = 1000
+    traj_len = 10
+
     # Discretize the interpolation trajectory based on the reference cluster centers
     cluster_assignments = discretize_trajectory(
         sampled_mol, tic_evaluator, kmeans_cluster_centers
     )
+    cluster_assignments = cluster_assignments.reshape(num_paths, -1)
+    sampled_traj = cluster_assignments[:, :: (cluster_assignments.shape[1] // traj_len)]
 
-    # Create MSM with 20 states
-    interpolation_prob_matrix = TransitionCountEstimator.count(
-        count_mode="sliding", dtrajs=[cluster_assignments.astype("int")], lagtime=1
-    )
-    interpolation_prob_matrix = normalize(interpolation_prob_matrix, axis=1, norm="l1")
-
-    # Sample transition paths from the constructed MSM
-    n_samples = 1000
-    traj_len = 10
-    sampled_traj = sample_tp(interpolation_prob_matrix, start, end, traj_len, n_samples)
+    # Sample transition paths from the reference MSM
     ref_sampled_traj = sample_tp(gt_prob_matrix, start, end, traj_len, n_samples)
+
+    # TODO: construct MSMs from shorter subsets of the reference traj to compare with the model-generated paths
 
     # Compute entropy of the sampled trajectories (proxy for diversity)
     entropy = compute_shannon_entropy(sampled_traj)
@@ -221,11 +220,7 @@ def evaluate_fastfolders(
         / path_probabilities.shape[0]
     )
 
-    # Find the most probable path between the start and end states
-    path = most_probable_path(gt_prob_matrix, start, end)
-    path_centers = kmeans_cluster_centers[path]
-
-    # Finally, visualize the model-produced interpolation along with the reference (most probable) path
+    # Visualize the model-produced interpolation along with the reference paths
     free_energies, fraction_unphysical = get_tic_free_energy_plots(
         protein_name,
         gen_mode,
@@ -254,13 +249,9 @@ def evaluate_fastfolders(
         "Transition Path Entropy (Diversity)": entropy,
         "Reference Transition Path Entropy (Diversity)": ref_entropy,
     }
-    # TODO: other metrics to add:
-    # 1. Probablity of paths under the reference MSM (mean and std)
-    # 2. Percentage of valid (non-zero probability) paths
-    # 3. JS divergence of state distributions between the reference and generated paths (mean and std)
-    # 4. Diversity of the generated paths (average pairwise RMSD)
+
     with open(join(eval_folder, "final_metrics.json"), "w") as f:
-        json.dump(metrics, f, indent=4)  # Add indent for better readability
+        json.dump(metrics, f, indent=4)
 
 
 def get_tic_free_energy_plots(

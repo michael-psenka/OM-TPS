@@ -52,16 +52,14 @@ def discretize_trajectory(xyz, tic_evaluator, cluster_centers):
     """
     Trajectory discretization based on nearest cluster centers.
     Args:
-        xyz (np.ndarray): Coordinates (in Angstroms) of shape (N_frames, N_residues, 3).
+        xyz (torch.tensor): Coordinates (in Angstroms) of shape (N_frames, N_residues, 3).
         tic_evaluator (TicEvaluator): TicEvaluator object.
-        cluster_centers (np.ndarray): TICA cluster centers of shape (N_clusters, 2).
+        cluster_centers (torch.tensor): TICA cluster centers of shape (N_clusters, 2).
     Returns:
         assignments (np.ndarray): Cluster assignments of shape (N_frames,).
     """
     # Compute the TIC features for the trajectory
-    sample_tic_features = tic_evaluator.get_tic_features(
-        torch.tensor(xyz), tic_evaluator.folded
-    )
+    sample_tic_features = tic_evaluator.get_tic_features(xyz, tic_evaluator.folded)
     transformed_samples = tic_evaluator.tica(sample_tic_features)
 
     # Compute the distance between each point in the trajectory and each cluster center

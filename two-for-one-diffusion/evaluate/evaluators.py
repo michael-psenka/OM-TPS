@@ -636,7 +636,7 @@ class TicEvaluator:
                     bin_x_endpoint,
                     bin_y_endpoint,
                     marker="X",
-                    c="green" if i % 2 == 0 else "red",
+                    c="blue" if i % 2 == 0 else "red",
                     s=50,
                     linewidth=0,
                     zorder=3,
