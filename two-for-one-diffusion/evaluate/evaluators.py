@@ -641,10 +641,10 @@ class TicEvaluator:
                     linewidth=0,
                     zorder=3,
                 )
-
+        colors = ["red", "green", "blue", "purple", "orange", "cyan", "magenta"]
         if ref_paths is not None:
             # plot a path connecting each of the points in ref_path
-            for ref_path in ref_paths:
+            for p, ref_path in enumerate(ref_paths):
                 for i in range(len(ref_path) - 1):
                     start = ref_path[i]
                     end = ref_path[i + 1]
@@ -655,7 +655,7 @@ class TicEvaluator:
                     ax1.plot(
                         [start_x, end_x],
                         [start_y, end_y],
-                        color="blue",
+                        color=colors[p % len(colors)],
                         linewidth=1,
                         zorder=2,
                     )

@@ -301,8 +301,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
     # Generate interpolated samples
     elif "interpolate" in samp_args.gen_mode:
 
-        # choose two endpoints as cluster centers
-
+        # choose two endpoints as cluster centers (calculated from min flux paths)
         cluster_endpoints_path = Path(
             os.path.join(
                 "evaluate",
@@ -311,11 +310,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
             )
         )
 
-        # The min flux states are not always the best cluster centers for interpolation
-        # Maybe they'll be better when we calculate on the ground truth sims
-        # clusters = np.load(cluster_endpoints_path)
-        clusters = CLUSTER_ENDPOINTS[protein_name]
-        clusters = [c - 1 for c in clusters]  # 1-indexed to 0-indexed
+        clusters = np.load(cluster_endpoints_path)
 
         cluster_centers_path = Path(
             os.path.join(
@@ -523,7 +518,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
         samp_args.original_append_exp_name,
         model=model.ema_model,
         num_paths=samp_args.num_samples_eval,
-        endpoints = clusters if "interpolate" in samp_args.gen_mode else None,
+        endpoints=clusters if "interpolate" in samp_args.gen_mode else None,
     )
 
     return sampled_mol

@@ -10,69 +10,17 @@
 # done
 
 
-python sample.py \
-    --model_path saved_models/chignolin \
-    --gen_mode om_interpolate \
-    --num_samples_eval 8 \
-    --batch_size_gen 8 \
-    --latent_time 20 \
-    --initial_guess_level 250 \
-    --no_encode_and_decode \
-    --append_exp_name test \
-    --path_length 200 \
-    --steps 1000
-
 # python sample.py \
-#     --model_path saved_models/trp_cage \
-#     --gen_mode langevin \
-#     --noise_level 15 \
-#     --parallel_sim 1 \
-#     --n_timesteps 60000 \
-#     --save_interval 500 \
-#     --kb consistent  \
-#     --dt 2e-3
-
-# python sample.py \
-#     --model_path saved_models/trp_cage \
-#     --gen_mode langevin \
-#     --noise_level 15 \
-#     --parallel_sim 1 \
-#     --n_timesteps 60000 \
-#     --save_interval 500 \
-#     --kb consistent  \
-#     --dt 2e-3
-
-# python sample.py \
-#     --model_path saved_models/bba \
-#     --gen_mode langevin \
-#     --noise_level 20 \
-#     --parallel_sim 1 \
-#     --n_timesteps 60000 \
-#     --save_interval 500 \
-#     --kb consistent  \
-#     --dt 2e-3
-
-
-# python sample.py \
-#     --model_path saved_models/villin \
-#     --gen_mode langevin \
-#     --noise_level 20 \
-#     --parallel_sim 1 \
-#     --n_timesteps 60000 \
-#     --save_interval 500 \
-#     --kb consistent  \
-#     --dt 2e-3
-
-
-# python sample.py \
-#     --model_path saved_models/protein_g \
-#     --gen_mode langevin \
-#     --noise_level 20 \
-#     --parallel_sim 1 \
-#     --n_timesteps 60000 \
-#     --save_interval 500 \
-#     --kb consistent  \
-#     --dt 2e-3
+#     --model_path saved_models/chignolin \
+#     --gen_mode om_interpolate \
+#     --num_samples_eval 8 \
+#     --batch_size_gen 8 \
+#     --latent_time 20 \
+#     --initial_guess_level 250 \
+#     --no_encode_and_decode \
+#     --append_exp_name test_initial_latent_time=250 \
+#     --path_length 200 \
+#     --steps 2000
 
 # python sample.py \
 #     --model_path saved_models/chignolin \
@@ -124,7 +72,7 @@ python sample.py \
 #     --no_encode_and_decode \
 #     --append_exp_name test_initial_latent_time=250 \
 #     --path_length 200 \
-#     --steps 2000
+#     --steps 1000
 
 # python sample.py \
 #     --model_path saved_models/trp_cage \

@@ -63,6 +63,7 @@ CLUSTER_ENDPOINTS = {
     "protein_g": [17, 2],
 }
 
+
 def evaluate_fastfolders(
     protein_name,
     gen_mode,
@@ -110,8 +111,10 @@ def evaluate_fastfolders(
     )
     if ref_dihedral_path.exists():
         ref_dihedrals = np.load(ref_dihedral_path)
-        gt_prob_matrix = np.load(f"./evaluate/saved_references/saved_transition_matrix_{protein_name.upper()}.npy")
-        
+        gt_prob_matrix = np.load(
+            f"./evaluate/saved_references/saved_transition_matrix_{protein_name.upper()}.npy"
+        )
+
         kmeans_cluster_centers = np.load(
             f"./evaluate/saved_references/saved_cluster_centers_{protein_name.upper()}.npy"
         )
@@ -150,14 +153,14 @@ def evaluate_fastfolders(
 
     # Get TIC evaluator
     tic_evaluator = TicEvaluator(
-            val_data=None,
-            mol_name=protein_name,
-            eval_folder=eval_folder,
-            data_folder="datasets",
-            folded_pdb_folder="datasets/folded_pdbs",
-            bins=101,
-            evalset="testset",
-        )
+        val_data=None,
+        mol_name=protein_name,
+        eval_folder=eval_folder,
+        data_folder="datasets",
+        folded_pdb_folder="datasets/folded_pdbs",
+        bins=101,
+        evalset="testset",
+    )
 
     # Load data
     append_exp_name_str = "_" + append_exp_name if append_exp_name else ""
@@ -686,7 +689,6 @@ def dynamics_analysis(
             f"./evaluate/saved_references/saved_pwds_{protein_name.upper()}.npy",
             pwds,
         )
-
 
     # kmeans_cluster_assignments = np.argmin(np.linalg.norm(transformed_samples[:, None] - kmeans_cluster_centers, axis=-1), axis=-1)
 
