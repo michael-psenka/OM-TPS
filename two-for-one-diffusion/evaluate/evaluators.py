@@ -990,15 +990,15 @@ def sample_interpolations_from_model(
     for i, (x1, x2) in enumerate(zip(endpoint_1_split, endpoint_2_split)):
         output = interpolator(x1, x2)
         all_path_list.append(output["final_path"])
-        if i == 0:
-            if "all_paths" in output.keys():
-                path_optimization_list.append(output["all_paths"])
-            if "actions" in output.keys():
-                all_actions_list.append(output["actions"])
-            if "path_terms" in output.keys():
-                all_path_terms_list.append(output["path_terms"])
-            if "force_terms" in output.keys():
-                all_force_terms_list.append(output["force_terms"])
+        
+        if "all_paths" in output.keys():
+            path_optimization_list.append(output["all_paths"])
+        if "actions" in output.keys():
+            all_actions_list.append(output["actions"])
+        if "path_terms" in output.keys():
+            all_path_terms_list.append(output["path_terms"])
+        if "force_terms" in output.keys():
+            all_force_terms_list.append(output["force_terms"])
 
         if verbose:
             print(f"Batch {i+1} from {len(endpoint_1_split)} generated")
@@ -1008,7 +1008,7 @@ def sample_interpolations_from_model(
     output = {"sampled_mol": all_path}
 
     if len(path_optimization_list) > 0:
-        all_paths = torch.cat(path_optimization_list, dim=0).cpu()
+        all_paths = torch.cat(path_optimization_list, dim=1).cpu()
         all_actions = torch.cat(all_actions_list, dim=0).cpu()
         all_path_terms = torch.cat(all_path_terms_list, dim=0).cpu()
         all_force_terms = torch.cat(all_force_terms_list, dim=0).cpu()

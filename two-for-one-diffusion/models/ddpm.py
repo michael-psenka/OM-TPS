@@ -565,6 +565,9 @@ class GaussianDiffusion(nn.Module):
         with torch.enable_grad():
             noised_xs.requires_grad = True
             # Optimization of path using OM action
+            dt = 0.01 if mlff else 0.1 # MLFFs tend to have higher force norms, so we need a smaller dt to upweight the path term
+            gamma = 10
+            changed = False
             for i in pbar:
                 if anneal:
                     # diff_time = max(
@@ -605,10 +608,8 @@ class GaussianDiffusion(nn.Module):
                 action_func = action_cls(
                     force_func=force_func,
                     laplace_func=laplace,
-                    dt=(
-                        0.01 if mlff else 0.1
-                    ),  # MLFFs tend to have higher force norms, so we need a smaller dt to upweight the path term
-                    gamma=10,
+                    dt=dt,
+                    gamma=gamma,
                     D=100,
                 )  # (D is only used for HessianAction)
 
@@ -641,8 +642,18 @@ class GaussianDiffusion(nn.Module):
                 path_contribution = first_term.item() / action.item()
                 force_contribution = second_term.item() / action.item()
                 pbar.set_description(
-                    f"OM Action: {action.item()}, Path Contribution: {round(force_contribution*100, 3)}%, Force Contribution: {round(force_contribution * 100, 3)}%"
+                    f"OM Action: {action.item()}, Path Contribution: {round(path_contribution*100, 3)}%, Force Contribution: {round(force_contribution * 100, 3)}%"
                 )
+
+                if path_contribution > 0.99 and i > 50 and not changed:
+                    print("Path contribution is too high, decreasing dt to upweight the path loss")
+                    dt /= 10 # decrease the time step to upweight the path term
+                    changed = True
+                elif force_contribution > 0.99 and i > 50 and not changed:
+                    print("Force contribution is too high, increasing dt to upweight the force loss")
+                    dt *= 10 # increase the time step to upweight the force term
+                    changed = True
+
 
                 if self.log:
                     wandb.log(
