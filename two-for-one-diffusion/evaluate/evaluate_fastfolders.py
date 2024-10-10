@@ -91,6 +91,20 @@ def evaluate_fastfolders(
         f"saved_models/{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}"
     )
 
+    # Load the reference dataset
+    dataset = DEShawDataset(
+        data_root="/data/sanjeevr/Reference_MD_Sims",
+        molecule=Molecules[protein_name.upper()],
+        simulation_id=0,
+        atom_selection=AtomSelection.A_CARBON,
+        return_bond_graph=False,
+        transform=to_angstrom,
+        align=False,
+    )
+
+    gt_traj = 10 * dataset.traj.xyz  # convert to angstroms
+    gt_traj -= gt_traj.mean(1, keepdims=True)  # center
+
     # Define starting and ending states for interpolation
     if endpoints is not None:
         start, end = endpoints
@@ -124,19 +138,7 @@ def evaluate_fastfolders(
         )
 
     else:
-        # Load the reference simulation data and compute the necessary values
-        dataset = DEShawDataset(
-            data_root="/data/sanjeevr/Reference_MD_Sims",
-            molecule=Molecules[protein_name.upper()],
-            simulation_id=0,
-            atom_selection=AtomSelection.A_CARBON,
-            return_bond_graph=False,
-            transform=to_angstrom,
-            align=False,
-        )
-
-        gt_traj = 10 * dataset.traj.xyz  # convert to angstroms
-        gt_traj -= gt_traj.mean(1, keepdims=True)  # center
+        # Compute the necessary values from the reference simulation data
 
         (
             gt_prob_matrix,
@@ -201,8 +203,6 @@ def evaluate_fastfolders(
 
     # Sample transition paths from the reference MSM
     ref_sampled_traj = sample_tp(gt_prob_matrix, start, end, traj_len, n_ref_samples)
-
-    # TODO: construct MSMs from shorter subsets of the reference traj to compare with the model-generated paths
 
     # Compute entropy of the sampled trajectories (proxy for diversity)
     entropy = compute_shannon_entropy(sampled_traj)
@@ -604,6 +604,9 @@ def get_tic_free_energy_plots(
     if log:
         wandb.log(
             {
+                "Reference TICA": wandb.Image(
+                    join(tic_evaluator.plots_folder, "TICA_reference.png")
+                ),
                 "TICA Samples": wandb.Image(tica_gif_path),
                 "Free Energy Profiles": wandb.Image(free_energy_gif_path),
                 "Transition Rates": wandb.Image(transition_rate_gif_path),
