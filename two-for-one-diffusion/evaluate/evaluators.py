@@ -990,7 +990,7 @@ def sample_interpolations_from_model(
     for i, (x1, x2) in enumerate(zip(endpoint_1_split, endpoint_2_split)):
         output = interpolator(x1, x2)
         all_path_list.append(output["final_path"])
-        
+
         if "all_paths" in output.keys():
             path_optimization_list.append(output["all_paths"])
         if "actions" in output.keys():

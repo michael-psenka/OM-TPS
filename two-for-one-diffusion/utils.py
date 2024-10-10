@@ -340,7 +340,10 @@ class OMInterpolatorWrapper(torch.nn.Module):
         initial_guess_level=0,
         om_steps=100,
         lr=2e-1,
+        dt=0.1,
+        gamma=10,
         anneal=False,
+        add_noise=False,
         truncated_gradient=False,
         temperature=1.0,
         log=False,
@@ -357,7 +360,10 @@ class OMInterpolatorWrapper(torch.nn.Module):
         self.initial_guess_level = initial_guess_level
         self.om_steps = om_steps
         self.lr = lr
+        self.dt = dt
+        self.gamma = gamma
         self.anneal = anneal
+        self.add_noise = add_noise
         self.truncated_gradient = truncated_gradient
         self.temperature = temperature
 
@@ -374,7 +380,10 @@ class OMInterpolatorWrapper(torch.nn.Module):
             initial_guess_level=self.initial_guess_level,
             om_steps=self.om_steps,
             lr=self.lr,
+            dt=self.dt,
+            gamma=self.gamma,
             anneal=self.anneal,
+            add_noise=self.add_noise,
             truncated_gradient=self.truncated_gradient,
             temperature=self.temperature,
         )

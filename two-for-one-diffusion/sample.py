@@ -161,9 +161,8 @@ parser.add_argument(
 parser.add_argument(
     "--lr", type=float, help="learning rate for OM optimization", default=2e-1
 )
-
-# TODO: incorporate these into the argparse
 parser.add_argument("--om_dt", type=float, help="dt for OM optimization", default=0.1)
+
 parser.add_argument(
     "--om_gamma", type=float, help="gamma for OM optimization", default=10
 )
@@ -172,7 +171,7 @@ parser.add_argument(
 parser.add_argument(
     "--interpolation_temp",
     type=float,
-    help="temperature for initial path generation",
+    help="temperature for sampling during OM optimization",
     default=1.0,
 )
 
@@ -187,6 +186,12 @@ parser.add_argument(
     "--no_encode_and_decode",
     action="store_true",
     help="Don't encode the molecule into latent space before OM optimization, and also don't decode it after",
+)
+
+parser.add_argument(
+    "--add_noise",
+    action="store_true",
+    help="Add noise at every step of the OM optimization (to promote diversity)",
 )
 
 parser.add_argument(
@@ -402,7 +407,10 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                     action_cls=action_cls,
                     om_steps=samp_args.steps,
                     lr=samp_args.lr,
+                    dt=samp_args.om_dt,
+                    gamma=samp_args.om_gamma,
                     anneal=samp_args.anneal,
+                    add_noise=samp_args.add_noise,
                     truncated_gradient=samp_args.truncated_gradient,
                     temperature=samp_args.interpolation_temp,
                     log=not samp_args.disable_logging,

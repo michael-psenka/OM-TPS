@@ -279,6 +279,12 @@ class GaussianDiffusion(nn.Module):
         )
         return model_mean, posterior_variance, posterior_log_variance
 
+    def add_noise_to_path(self, path, t, temperature=1.0):
+        """
+        Add noise to path according to learned variance.
+        """
+        pass
+
     @torch.no_grad()
     def p_sample(self, x, t, temperature=1.0):
         """
@@ -444,12 +450,32 @@ class GaussianDiffusion(nn.Module):
         initial_guess_level=0,
         om_steps=100,
         lr=2e-1,
+        dt=0.1,
+        gamma=10,
         anneal=False,
+        add_noise=False,
         truncated_gradient=False,
         temperature=1.0,
     ):
         """
         Encode the two points into latent space, linearly or spherically interpolate, optimize OM action, and decode.
+        Args:
+            x1: torch.Tensor, shape of [n_paths, num_atoms x 3]
+            x2: torch.Tensor, shape of [n_paths, num_atoms x 3]
+            path_length: int, length of the path to interpolate
+            latent_time: float, time at which to interpolate
+            encode_and_decode: bool, whether to encode and decode the path
+            mlff: bool, whether to use MLFF model for force calculation
+            action_cls: class, action class to use for optimization
+            initial_guess_fn: function, function to use for initial guess
+            initial_guess_level: int, level of denoising to use for initial guess
+            om_steps: int, number of optimization steps
+            lr: float, learning rate for optimization
+            dt: float, time step for optimization
+            gamma: float, gamma for action
+            anneal: bool, whether to anneal the time during optimization
+            truncated_gradient: bool, whether to use truncated gradient method
+            temperature: float, temperature for sampling
         """
         self.model.training = (
             True  # needed to track gradients through conservative force calculation
@@ -562,11 +588,11 @@ class GaussianDiffusion(nn.Module):
             .to(self.device)
             .long()
         )
+
+        # Optimization of path using OM action
         with torch.enable_grad():
             noised_xs.requires_grad = True
-            # Optimization of path using OM action
-            dt = 0.01 if mlff else 0.1 # MLFFs tend to have higher force norms, so we need a smaller dt to upweight the path term
-            gamma = 10
+
             changed = False
             for i in pbar:
                 if anneal:
@@ -615,7 +641,6 @@ class GaussianDiffusion(nn.Module):
 
                 # TODO: vmap over batch dimension
                 # (currently not possible because of calling requires_grad on x in GraphTransformer)
-
                 terms = [action_func(x, force) for x, force in zip(noised_xs, forces)]
                 first_term = torch.cat([term[0].unsqueeze(0) for term in terms]).mean()
                 second_term = torch.cat([term[1].unsqueeze(0) for term in terms]).mean()
@@ -630,13 +655,31 @@ class GaussianDiffusion(nn.Module):
                 optimizer.zero_grad()
                 (grads,) = torch.autograd.grad(action, noised_xs)
 
+                if add_noise:
+                    # add noise to gradients, since adding directly to path yields optimization problems with Adam
+                    with torch.no_grad():
+                        _t = (
+                            torch.tensor([max(1000 - i - 1, 100)])
+                            .repeat(noised_xs.shape[0] * noised_xs.shape[1])
+                            .to(self.device)
+                        )
+                        _, _, model_log_variance = self.p_mean_variance(
+                            center_zero(noised_xs.reshape(-1, self.num_atoms, 3)), _t
+                        )
+                        noise = torch.randn_like(
+                            noised_xs.reshape(-1, self.num_atoms, 3)
+                        )
+                        noise = center_zero(noise)
+                        path_noise = (
+                            (0.5 * model_log_variance).exp() * noise * temperature
+                        )
+
+                    grads = grads + path_noise.reshape(grads.shape) / lr
+
                 with torch.no_grad():
                     grads[:, 0], grads[:, -1] = 0, 0
                     noised_xs.grad = grads
                     optimizer.step()
-
-                # import pdb; pdb.set_trace()
-                # TODO: add noise to the path using self.p_sample (to promote diversity in the paths)s
 
                 all_noised_xs.append(noised_xs.clone().detach())
                 path_contribution = first_term.item() / action.item()
@@ -646,14 +689,17 @@ class GaussianDiffusion(nn.Module):
                 )
 
                 if path_contribution > 0.99 and i > 50 and not changed:
-                    print("Path contribution is too high, decreasing dt to upweight the path loss")
-                    dt /= 10 # decrease the time step to upweight the path term
+                    print(
+                        "Path contribution is too high, decreasing dt to upweight the path loss"
+                    )
+                    dt /= 10  # decrease the time step to upweight the path term
                     changed = True
                 elif force_contribution > 0.99 and i > 50 and not changed:
-                    print("Force contribution is too high, increasing dt to upweight the force loss")
-                    dt *= 10 # increase the time step to upweight the force term
+                    print(
+                        "Force contribution is too high, increasing dt to upweight the force loss"
+                    )
+                    dt *= 10  # increase the time step to upweight the force term
                     changed = True
-
 
                 if self.log:
                     wandb.log(
