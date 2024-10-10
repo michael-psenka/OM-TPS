@@ -634,7 +634,7 @@ class GaussianDiffusion(nn.Module):
                     noised_xs.grad = grads
                     optimizer.step()
 
-                import pdb; pdb.set_trace()
+                # import pdb; pdb.set_trace()
                 # TODO: add noise to the path using self.p_sample (to promote diversity in the paths)s
 
                 all_noised_xs.append(noised_xs.clone().detach())
