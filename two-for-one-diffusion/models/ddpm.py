@@ -634,6 +634,9 @@ class GaussianDiffusion(nn.Module):
                     noised_xs.grad = grads
                     optimizer.step()
 
+                import pdb; pdb.set_trace()
+                # TODO: add noise to the path using self.p_sample (to promote diversity in the paths)s
+
                 all_noised_xs.append(noised_xs.clone().detach())
                 pbar.set_description(
                     f"OM Action: {action.item()}, Path Contribution: {round(first_term.item() / action.item() * 100, 3)}%, Force Contribution: {round(second_term.item() / action.item() * 100, 3)}%"
