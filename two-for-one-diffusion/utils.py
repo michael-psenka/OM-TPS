@@ -22,12 +22,12 @@ def validate_git_status(excluded_files=["two-for-one-diffusion/sample.sh"]):
     Check if the git repository is clean to run experiments.
     """
     repo = Repo(".", search_parent_directories=True)
-    
+
     # Get the status of the repo
     dirty_files = [item.a_path for item in repo.index.diff(None)]
-    
+
     dirty_files = [file for file in dirty_files if file not in excluded_files]
-    
+
     assert (
         not dirty_files
     ), "Git repository is dirty! Please commit your changes before running wandb online experiments. Set the --disable_logging flag to test locally."

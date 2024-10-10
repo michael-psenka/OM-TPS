@@ -32,14 +32,15 @@ def get_tp_likelihood(tp, trans):
     """
     N = tp.shape[1]
     n_samples = tp.shape[0]
-    s_N = tp[0, -1]
+    s_N = tp[
+        0, -1
+    ]  # final state (this assumes that all trajectories end in the same state)
     trans_probs = []
     for i in range(N - 1):
         t = i + 1
         s_t = tp[:, i]
         numerator = np.linalg.matrix_power(trans, N - t - 1)[:, s_N] * trans[s_t, :]
         probs = numerator / np.linalg.matrix_power(trans, N - t)[s_t, s_N][:, None]
-
         s_tp1 = tp[:, i + 1]
         trans_prob = probs[np.arange(n_samples), s_tp1]
         trans_probs.append(trans_prob)
@@ -123,10 +124,27 @@ def compute_flux(T, pi):
     return F
 
 
+def remove_consecutive_repeats(path):
+    """Helper function to remove consecutive repeats from a path."""
+    if len(path) == 0:
+        return path
+    # Keep only the elements that are different from the previous one
+    new_path = [path[0]]  # Start with the first element
+    for i in range(1, len(path)):
+        if path[i] != path[i - 1]:
+            new_path.append(path[i])
+    return new_path
+
+
 def compute_shannon_entropy(paths):
+    # Remove consecutive repeats from each path
+    cleaned_paths = [remove_consecutive_repeats(path) for path in paths]
+
     # Count the frequency of each unique path
-    path_counts = Counter(map(tuple, paths))  # Treat each path as a tuple
-    total_paths = len(paths)
+    path_counts = Counter(
+        map(tuple, cleaned_paths)
+    )  # Treat each cleaned path as a tuple
+    total_paths = len(cleaned_paths)
 
     # Compute the probability of each path
     probabilities = np.array([count / total_paths for count in path_counts.values()])

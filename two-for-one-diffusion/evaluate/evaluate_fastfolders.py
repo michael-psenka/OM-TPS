@@ -16,6 +16,7 @@ from scipy.spatial.distance import jensenshannon
 from pathlib import Path
 import os
 import sys
+import math
 from rmsd import kabsch_rotate
 from IPython.display import Image as IPImage, display
 from PIL import Image
@@ -184,7 +185,7 @@ def evaluate_fastfolders(
     # Load topology from pdb file
     topology = md.load(pdb_file).topology
 
-    n_samples = 1000
+    n_ref_samples = 1000
     traj_len = 10
 
     # Discretize the interpolation trajectory based on the reference cluster centers
@@ -192,10 +193,14 @@ def evaluate_fastfolders(
         sampled_mol, tic_evaluator, kmeans_cluster_centers
     )
     cluster_assignments = cluster_assignments.reshape(num_paths, -1)
-    sampled_traj = cluster_assignments[:, :: (cluster_assignments.shape[1] // traj_len)]
+    sampled_traj = cluster_assignments[
+        :, :: math.ceil(cluster_assignments.shape[1] / (traj_len - 1))
+    ]
+    # add the last state to the end of the trajectory
+    sampled_traj = np.concatenate([sampled_traj, cluster_assignments[:, -1:]], axis=1)
 
     # Sample transition paths from the reference MSM
-    ref_sampled_traj = sample_tp(gt_prob_matrix, start, end, traj_len, n_samples)
+    ref_sampled_traj = sample_tp(gt_prob_matrix, start, end, traj_len, n_ref_samples)
 
     # TODO: construct MSMs from shorter subsets of the reference traj to compare with the model-generated paths
 
@@ -223,7 +228,7 @@ def evaluate_fastfolders(
         / path_probabilities.shape[0]
     )
 
-    # Visualize the model-produced interpolation along with the reference paths
+    # Visualize the model-produced interpolation along with a subset of reference paths
     free_energies, transition_rates, fraction_unphysical = get_tic_free_energy_plots(
         protein_name,
         gen_mode,
@@ -521,8 +526,8 @@ def get_tic_free_energy_plots(
             # save final metrics
             pwds = pwds.reshape(num_paths, -1, pwds.shape[-1])
             pwd_mins = np.min(pwds, axis=(1, 2))
-            path_is_unphysical = np.where(pwd_mins < 0.5)[0]
-            fraction_unphysical = path_is_unphysical.sum() / num_paths
+            path_is_unphysical = pwd_mins < 0.5
+            fraction_unphysical = path_is_unphysical.sum() / path_is_unphysical.shape[0]
 
     # Create a GIF from the saved TICA images
     tica_gif_path = join(tic_evaluator.plots_folder, "tica_samples.gif")

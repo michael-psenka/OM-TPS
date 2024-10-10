@@ -638,8 +638,10 @@ class GaussianDiffusion(nn.Module):
                 # TODO: add noise to the path using self.p_sample (to promote diversity in the paths)s
 
                 all_noised_xs.append(noised_xs.clone().detach())
+                path_contribution = first_term.item() / action.item()
+                force_contribution = second_term.item() / action.item()
                 pbar.set_description(
-                    f"OM Action: {action.item()}, Path Contribution: {round(first_term.item() / action.item() * 100, 3)}%, Force Contribution: {round(second_term.item() / action.item() * 100, 3)}%"
+                    f"OM Action: {action.item()}, Path Contribution: {round(force_contribution*100, 3)}%, Force Contribution: {round(force_contribution * 100, 3)}%"
                 )
 
                 if self.log:
@@ -648,6 +650,8 @@ class GaussianDiffusion(nn.Module):
                             "OM Action": action.item(),
                             "Path Norm": first_term.item(),
                             "Force Norm": second_term.item(),
+                            "Path Contribution": path_contribution,
+                            "Force Contribution": force_contribution,
                         }
                     )
 

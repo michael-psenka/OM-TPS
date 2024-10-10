@@ -162,6 +162,13 @@ parser.add_argument(
     "--lr", type=float, help="learning rate for OM optimization", default=2e-1
 )
 
+# TODO: incorporate these into the argparse
+parser.add_argument("--om_dt", type=float, help="dt for OM optimization", default=0.1)
+parser.add_argument(
+    "--om_gamma", type=float, help="gamma for OM optimization", default=10
+)
+
+
 parser.add_argument(
     "--interpolation_temp",
     type=float,
@@ -225,7 +232,7 @@ def main(samp_args):
     )
 
     if not samp_args.disable_logging:
-        validate_git_status()
+        # validate_git_status()
         wandb.login()
         wandb.init(
             project="fastfolders",
