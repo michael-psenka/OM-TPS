@@ -659,7 +659,7 @@ class GaussianDiffusion(nn.Module):
                     # add noise to gradients, since adding directly to path yields optimization problems with Adam
                     with torch.no_grad():
                         _t = (
-                            torch.tensor([max(1000 - i - 1, 100)])
+                            torch.tensor([max(1000 - i - 1, diff_time)])
                             .repeat(noised_xs.shape[0] * noised_xs.shape[1])
                             .to(self.device)
                         )

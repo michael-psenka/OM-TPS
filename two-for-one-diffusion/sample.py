@@ -368,7 +368,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
             evalset="testset",
         )
         # assign cluster centers to the iid samples
-        cluster_assignments = discretize_trajectory(
+        cluster_assignments, _ = discretize_trajectory(
             gt_traj, tic_evaluator, cluster_coords
         )
 

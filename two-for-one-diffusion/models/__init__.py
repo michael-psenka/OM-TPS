@@ -1,4 +1,5 @@
 from models.graph_transformer import GraphTransformer
+from models.committor import CommittorNN
 
 
 def get_model(args, trainset, device):

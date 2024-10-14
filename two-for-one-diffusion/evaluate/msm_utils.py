@@ -49,7 +49,7 @@ def get_tp_likelihood(tp, trans):
     return probs
 
 
-def discretize_trajectory(xyz, tic_evaluator, cluster_centers):
+def discretize_trajectory(xyz, tic_evaluator, cluster_centers, transform=True):
     """
     Trajectory discretization based on nearest cluster centers.
     Args:
@@ -60,8 +60,11 @@ def discretize_trajectory(xyz, tic_evaluator, cluster_centers):
         assignments (np.ndarray): Cluster assignments of shape (N_frames,).
     """
     # Compute the TIC features for the trajectory
-    sample_tic_features = tic_evaluator.get_tic_features(xyz, tic_evaluator.folded)
-    transformed_samples = tic_evaluator.tica(sample_tic_features)
+    if transform:
+        sample_tic_features = tic_evaluator.get_tic_features(xyz, tic_evaluator.folded)
+        transformed_samples = tic_evaluator.tica(sample_tic_features)
+    else:
+        transformed_samples = xyz
 
     # Compute the distance between each point in the trajectory and each cluster center
     distances = np.linalg.norm(
@@ -71,7 +74,7 @@ def discretize_trajectory(xyz, tic_evaluator, cluster_centers):
     # Assign each point in the trajectory to the nearest cluster center
     assignments = np.argmin(distances, axis=1)
 
-    return assignments
+    return assignments, transformed_samples
 
 
 def compute_stationary_distribution(P):
