@@ -388,8 +388,6 @@ class GaussianDiffusion(nn.Module):
             # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
             x2[i] = torch.tensor(kabsch_rotate(x2[i].cpu(), x1[i].cpu())).to(x2.device)
 
-        x1 = x1.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
-        x2 = x2.unsqueeze(0).repeat(num_paths, 1, 1).to(self.device)
         x1 = center_zero(x1)
         x2 = center_zero(x2)
         assert_center_zero(x1)

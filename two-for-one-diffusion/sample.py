@@ -8,7 +8,7 @@ from os.path import join
 from pathlib import Path
 import numpy as np
 import torch
-from models import get_model
+from models import get_model, CommittorNN
 from models.ddpm import GaussianDiffusion
 from ema_pytorch import EMA
 from datasets.dataset_utils_empty import (
@@ -429,7 +429,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                         if samp_args.initial_guess_method == "linear"
                         else slerp
                     ),
-                    temperature=interpolation_temp,
+                    temperature=samp_args.interpolation_temp,
                     log=not samp_args.disable_logging,
                 )
                 .to(device)
