@@ -542,6 +542,7 @@ class TicEvaluator:
         title,
         file_name,
         endpoints=None,
+        gen_paths=None,
         ref_paths=None,
         path=None,
         cmap="OrRd",
@@ -641,7 +642,7 @@ class TicEvaluator:
                     linewidth=0,
                     zorder=3,
                 )
-        colors = ["red", "green", "blue", "purple", "orange", "cyan", "magenta"]
+
         if ref_paths is not None:
             # plot a path connecting each of the points in ref_path
             for p, ref_path in enumerate(ref_paths):
@@ -655,7 +656,25 @@ class TicEvaluator:
                     ax1.plot(
                         [start_x, end_x],
                         [start_y, end_y],
-                        color=colors[p % len(colors)],
+                        color="blue",
+                        linewidth=1,
+                        zorder=2,
+                    )
+
+        if gen_paths is not None:
+            # plot a path connecting each of the points in gen_path
+            for p, gen_path in enumerate(gen_paths):
+                for i in range(len(gen_path) - 1):
+                    start = gen_path[i]
+                    end = gen_path[i + 1]
+                    start_x = np.argmin(abs(self.bin_mids_x - start[0]))
+                    start_y = np.argmin(abs(self.bin_mids_y - start[1]))
+                    end_x = np.argmin(abs(self.bin_mids_x - end[0]))
+                    end_y = np.argmin(abs(self.bin_mids_y - end[1]))
+                    ax1.plot(
+                        [start_x, end_x],
+                        [start_y, end_y],
+                        color="red",
                         linewidth=1,
                         zorder=2,
                     )

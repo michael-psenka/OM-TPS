@@ -89,6 +89,10 @@ def evaluate_fastfolders(
     # Set the random seed for reproducibility of k-means clustering
     np.random.seed(0)
 
+    # Adjust number of paths for iid and langevin generation
+    if "interpolate" not in gen_mode:
+        num_paths = 1
+
     append_exp_name_str = "_" + append_exp_name if append_exp_name else ""
     eval_folder = (
         f"saved_models/{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}"
@@ -142,7 +146,7 @@ def evaluate_fastfolders(
 
     else:
         # Compute the necessary values from the reference simulation data
-
+        print("Computing reference values...")
         (
             gt_prob_matrix,
             kmeans_cluster_centers,
@@ -210,7 +214,24 @@ def evaluate_fastfolders(
 
     if gen_mode == "iid":
         sampled_traj = cluster_assignments  # don't need to subsample
-    else:
+    elif gen_mode == "langevin":
+        # Fit a MSM to the generated samples, using the reference cluster centers
+        (
+            prob_matrix,
+            _,
+            _,
+            _,
+        ) = dynamics_analysis(
+            protein_name,
+            "langevin",
+            append_exp_name=None,
+            num_clusters=20,
+            subsample=subsample,
+            gt_cluster_assignments=cluster_assignments,
+            lagtime=200,  # every 200 ps to match the reference frequency
+        )
+        sampled_traj = sample_tp(prob_matrix, start, end, traj_len, n_ref_samples)
+    else:  # interpolate or om_interpolate
         cluster_assignments = cluster_assignments.reshape(num_paths, -1)
         sampled_traj = cluster_assignments[
             :, :: math.ceil(cluster_assignments.shape[1] / (traj_len - 1))
@@ -282,12 +303,17 @@ def evaluate_fastfolders(
             / path_probabilities.shape[0]
         )
 
-    # Visualize the model-produced interpolation along with a subset of 20 reference paths
+    # Visualize the model-produced interpolation along with a subset of 20 reference/generated paths
     free_energies, transition_rates, fraction_unphysical = get_tic_free_energy_plots(
         protein_name,
         gen_mode,
         append_exp_name,
         subsample,
+        gen_paths=(
+            kmeans_cluster_centers[sampled_traj[:20]]
+            if "langevin" in gen_mode
+            else None
+        ),
         ref_paths=kmeans_cluster_centers[ref_sampled_traj[:20]],
         gif=True,
         window_size=window_size,
@@ -340,6 +366,7 @@ def get_tic_free_energy_plots(
     gen_mode,
     append_exp_name,
     subsample=0,
+    gen_paths=None,
     ref_paths=None,
     window_size=7,
     gif=False,
@@ -414,6 +441,7 @@ def get_tic_free_energy_plots(
     ref_fig = tic_evaluator._plot_tic(
         tic_evaluator.gt_prob,
         endpoints=endpoints if "interpolate" in gen_mode else None,
+        gen_paths=gen_paths,
         ref_paths=ref_paths,
         file_name=join(tic_evaluator.plots_folder, "TICA_reference.png"),
         title="Reference testset",
@@ -546,7 +574,7 @@ def get_tic_free_energy_plots(
         tic_evaluator._plot_tic(
             prob_samp,
             endpoints=endpoints if "interpolate" in gen_mode else None,
-            path=transformed_samples if gen_mode == "langevin" else None,
+            gen_paths=gen_paths,
             ref_paths=ref_paths,
             file_name=file_name,
             title="Samples",
@@ -727,6 +755,8 @@ def dynamics_analysis(
     num_clusters=None,
     subsample=None,
     gt_traj=None,
+    gt_cluster_assignments=None,
+    lagtime=1,
 ):
     """
     Analyze the dynamics of a set of samples.
@@ -790,31 +820,24 @@ def dynamics_analysis(
     sample_tic_features = np.hstack((dihedrals, pwds))
     transformed_samples = tic_evaluator.tica(sample_tic_features)
 
-    # Plot each TIC dimension as a function of time
-    plt.figure()
-    plt.plot(transformed_samples[:, 0], label="TIC 0")
-    plt.plot(transformed_samples[:, 1], label="TIC 1")
-    plt.xlabel("Time")
-    plt.ylabel("TIC Value")
-    plt.title("TIC Values Over Time")
-    plt.legend()
-    plt.savefig(join(eval_folder, f"tic_vs_time.png"))
+    if gt_cluster_assignments is None:
+        # K-means clustering
+        kmeans = MiniBatchKMeans(
+            n_clusters=num_clusters,
+            max_iter=0,
+            batch_size=64,
+            init_strategy="kmeans++",
+            n_jobs=16,
+            tolerance=1e-7,
+        )
 
-    # K-means clustering
-    kmeans = MiniBatchKMeans(
-        n_clusters=num_clusters,
-        max_iter=0,
-        batch_size=64,
-        init_strategy="kmeans++",
-        n_jobs=16,
-        tolerance=1e-7,
-    )
-
-    assignments = kmeans.fit_transform(transformed_samples)
+        assignments = kmeans.fit_transform(transformed_samples)
+    else:
+        assignments = gt_cluster_assignments
 
     # Create MSM with 20 states
     count_matrix = TransitionCountEstimator.count(
-        count_mode="sliding", dtrajs=[assignments.astype("int")], lagtime=1
+        count_mode="sliding", dtrajs=[assignments.astype("int")], lagtime=lagtime
     )
     count_matrix = normalize(count_matrix, axis=1, norm="l1")
 
@@ -837,14 +860,18 @@ def dynamics_analysis(
     # # Coarse-grain the MSM to 10 states
     # pcca_msm = pcca(count_matrix, 10)
 
-    kmeans_cluster_centers = kmeans._model.cluster_centers
+    if gt_cluster_assignments is not None:
+        kmeans_cluster_centers = None
+    else:
+        kmeans_cluster_centers = kmeans._model.cluster_centers
 
     if gt_traj is not None:
         # Save the cluster centers for the reference simulation
-        np.save(
-            f"./evaluate/saved_references/saved_cluster_centers_{protein_name.upper()}.npy",
-            kmeans_cluster_centers,
-        )
+        if kmeans_cluster_centers is not None:
+            np.save(
+                f"./evaluate/saved_references/saved_cluster_centers_{protein_name.upper()}.npy",
+                kmeans_cluster_centers,
+            )
 
         # Save the dihedrals and pairwise distances for the reference simulation
         np.save(
@@ -887,8 +914,16 @@ if __name__ == "__main__":
         help="First n samples to evaluate (0 means all samples)",
     )
 
+    parser.add_argument(
+        "--disable_logging", action="store_true", help="Don't log to wandb"
+    )
+
     args = parser.parse_args()
 
     evaluate_fastfolders(
-        args.protein_name, args.gen_mode, args.append_exp_name, args.subsample
+        args.protein_name,
+        args.gen_mode,
+        args.append_exp_name,
+        args.subsample,
+        log=not args.disable_logging,
     )
