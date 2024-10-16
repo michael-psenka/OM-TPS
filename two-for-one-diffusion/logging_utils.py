@@ -11,18 +11,18 @@ from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from IPython.display import Image as IPyImage, display
 
 
-def save_ovito_traj(positions, filename):
+def save_ovito_traj(positions, filename, alpha_carbon_lim=100000):
     """
     Save the given positions to a GSD file using Ovito.
     """
     t = gsd.hoomd.open(name=filename, mode="w")
     cell = 1.5 * torch.eye(3) * positions.cpu().abs().max()
     for i, pos in tqdm(enumerate(positions)):
-        t.append(create_frame(i, pos, cell))
+        t.append(create_frame(i, pos, cell, alpha_carbon_lim))
     t.close()
 
 
-def create_frame(step, position, cell):
+def create_frame(step, position, cell, alpha_carbon_lim):
     """
     Create an Ovito frame from the given positions.
     """
@@ -42,8 +42,8 @@ def create_frame(step, position, cell):
     s.configuration.box = [cell[0][0], cell[1][1], cell[2][2], 0, 0, 0]
 
     # Bonds for visualization
-    senders = np.arange(position.shape[0] - 1)
-    receivers = np.arange(1, position.shape[0])
+    senders = np.arange(min(position.shape[0], alpha_carbon_lim) - 1)
+    receivers = np.arange(1, min(position.shape[0], alpha_carbon_lim))
     bonds = np.stack([senders, receivers], axis=1)
 
     s.bonds.N = bonds.shape[0]

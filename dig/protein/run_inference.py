@@ -2,8 +2,9 @@
 import os
 import pickle
 import time
+import sys
 
-import click
+import argparse
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -12,7 +13,10 @@ from model import geometry, so3
 from model.main_model import MainModel as model_fn
 from scipy.spatial.transform import Rotation as R
 from tqdm import tqdm
+import mdtraj as md
 
+# Add parent directory to sys.path
+from logging_utils import save_ovito_traj
 
 def xyz2pdb(seq, CA, N, C):
     one_to_three = {
@@ -89,6 +93,7 @@ def load_model(step):
 
 def _inference_fn(
     model,
+    num_samples,
     single_repr,
     pair_repr,
     tr_init, # option to provide initial translation
@@ -120,16 +125,17 @@ def _inference_fn(
         return T_sigma, IR_sigma
 
     # get random initial structure (top level latent)
-    def init_conformer(feature):
+    def init_conformer(feature, num_samples):
         L = feature.shape[0]
-        random_tr = torch.zeros(L, 3).normal_(mean=0, std=tr_sigma_max)
+        random_tr = torch.zeros(num_samples,L, 3).normal_(mean=0, std=tr_sigma_max)
         torch.normal(mean=0, std=tr_sigma_max, size=(1, 3))
-        random_rot = torch.from_numpy(R.random(num=L).as_matrix()).float()
+        random_rot = torch.from_numpy(R.random(num=num_samples*L).as_matrix()).float()
+        random_rot = random_rot.reshape(num_samples, L, 3, 3)
         return random_tr, random_rot
 
     if tr_init is None or rot_mat_init is None:
         # get initial structure
-        tr, rot_mat = init_conformer(single_repr)
+        tr, rot_mat = init_conformer(single_repr, num_samples)
         tr_init, rot_mat_init = tr.clone(), rot_mat.clone()
     else:
         tr, rot_mat = tr_init.clone(), rot_mat_init.clone()
@@ -167,17 +173,18 @@ def _inference_fn(
 
         # predict score update from diffusion model
         with torch.no_grad():
+            
             tr_score, rot_score = model.forward_step(
-                (tr[None], rot_mat[None]),
-                torch.zeros((1, tr.shape[0]), dtype=bool, device=tr.device),
+                (tr, rot_mat),
+                torch.zeros((num_samples, tr.shape[1]), dtype=bool, device=tr.device),
                 torch.tensor([t_idx]).to(device),
-                single_repr[None],
-                pair_repr[None],
+                single_repr,
+                pair_repr,
             )
-            tr_score, rot_score = tr_score[0], rot_score[0]
+            
             tr_score /= tr_sigma
             rot_score *= so3.score_norm(torch.tensor([rot_sigma]))[0]
-        # tr_score: (L, 3), rot_score: (L, 3)
+        # tr_score: (N, L, 3), rot_score: (N, L, 3)
 
         tr_g = tr_sigma * torch.sqrt(
             torch.tensor(2 * np.log(tr_sigma_max / tr_sigma_min))
@@ -199,7 +206,7 @@ def _inference_fn(
 
         # update conformer
         tr_mean = tr + tr_perturb_nr
-        rot_mat_mean = torch.bmm(rot_mat_perturb_nr, rot_mat)
+        rot_mat_mean = torch.matmul(rot_mat_perturb_nr, rot_mat)
 
         if save_full_state:
             tr_list.append(tr_mean.clone().cpu())
@@ -208,9 +215,9 @@ def _inference_fn(
         tr = tr + tr_perturb
         rot_mat = torch.matmul(rot_mat_perturb, rot_mat)
 
-    x = torch.norm(tr_mean[1:] - tr_mean[:-1], dim=-1)
+    x = torch.norm(tr_mean[:, 1:] - tr_mean[:, :-1], dim=-1)
     print(
-        f"CA-CA distance: {x.mean():.3f} +- {x.std():.3f} max: {x.max():.3f} min: {x.min():.3f}, len: {tr.shape[0]}, time: {time.time() - start_time:.3f}"
+        f"CA-CA distance: {x.mean():.3f} +- {x.std():.3f} max: {x.max():.3f} min: {x.min():.3f}, len: {tr.shape[1]}, time: {time.time() - start_time:.3f}"
     )
 
     if not save_full_state:
@@ -245,33 +252,35 @@ def write_to_npz(tr, rot_mat, file):
     np.savez(file, **data)
 
 
-@click.command()
-@click.option(
-    "-c", "--checkpoint", help="Step to evaluate (e.g. 100000)", required=True
-)
-@click.option("-i", "--pkl", required=True)
-@click.option("-s", "--fasta", required=True)
-@click.option("-o", "--output", required=True)
-@click.option("-n", "--num-samples", default=1)
-@click.option("-p", "--output-prefix", default="")
-@click.option("--init-state", required=False)
-@click.option("--save-full-state/--no-save-full-state", default=False)
-@click.option("--use-tqdm/--no-use-tqdm", default=False)
-@click.option("--use-gpu/--no-use-gpu", default=False)
 def inference(
     checkpoint,
+    pdb_id,
     pkl,
     fasta,
-    output,
     output_prefix,
     num_samples,
+    batch_size,
     init_state,
-    save_full_state,
     use_tqdm,
     use_gpu,
 ):
+
+    #make output directory
+    output_prefix = os.path.join(output_prefix, pdb_id)
+    os.makedirs(output_prefix, exist_ok=True)
+
+    pkl = f"{pkl}/{pdb_id}.pkl"
+    fasta = f"{fasta}/{pdb_id}.fasta"
+
+    output = pdb_id
+
     model = load_model(checkpoint)
     model = model.eval()
+
+    num_batches = num_samples // batch_size
+
+    save_full_state = True
+
 
     if pkl.endswith(".list"):
         pkl_list = open(pkl, "r").readlines()
@@ -287,88 +296,152 @@ def inference(
         output_list = [output]
 
     for pkl, fasta, output in zip(pkl_list, fasta_list, output_list):
-        try:
-            pkl_data = pickle.load(open(pkl, "rb"))
-            if "representations" in pkl_data:
-                pkl_data = pkl_data["representations"]
-            single_repr = torch.from_numpy(pkl_data["single"]).float()
-            pair_repr = torch.from_numpy(pkl_data["pair"]).float()
-            seq = open(fasta, "r").readlines()[1].strip()
-            assert len(seq) == single_repr.shape[0]
+        
+        pkl_data = pickle.load(open(pkl, "rb"))
+        if "representations" in pkl_data:
+            pkl_data = pkl_data["representations"]
+        single_repr = torch.from_numpy(pkl_data["single"]).float()
+        pair_repr = torch.from_numpy(pkl_data["pair"]).float()
+        seq = open(fasta, "r").readlines()[1].strip()
+        assert len(seq) == single_repr.shape[0]
 
-            if use_gpu and torch.cuda.is_available():
-                model = model.cuda()
-                single_repr = single_repr.cuda()
-                pair_repr = pair_repr.cuda()
+        if use_gpu and torch.cuda.is_available():
+            model = model.cuda()
+            single_repr = single_repr.cuda()
+            pair_repr = pair_repr.cuda()
 
-            if init_state is not None:
-                init_data = np.load(init_state)
-                tr_init = torch.from_numpy(init_data["tr"]).float()
-                rot_mat_init = torch.from_numpy(init_data["rot_mat"]).float()
-            else:
-                tr_init = None
-                rot_mat_init = None
+        if init_state is not None:
+            init_data = np.load(init_state)
+            tr_init = torch.from_numpy(init_data["tr"]).float()
+            rot_mat_init = torch.from_numpy(init_data["rot_mat"]).float()
+        else:
+            tr_init = None
+            rot_mat_init = None
 
-            for i in range(num_samples):
-                ofilename = output_prefix + f"{output}_{i}.pdb"
-                ofilename_init = output_prefix + f"{output}_{i}_init_state.npz"
-                ofilename_final = output_prefix + f"{output}_{i}_final_state.npz"
+        all_tr = []
+        all_rot_mat = []
+        for i in range(num_batches):
+        
+            # generate samples
+            _, _, tr, rot_mat = _inference_fn(
+                model,
+                batch_size,
+                single_repr,
+                pair_repr,
+                tr_init,
+                rot_mat_init,
+                save_full_state=False,
+                use_tqdm=use_tqdm,
+            )
 
-                if os.path.exists(ofilename) and os.path.exists(ofilename_init):
-                    print(
-                        f"Skipping {i + 1}/{num_samples} samples, {ofilename} already exists"
-                    )
-                    continue
+            all_tr.append(tr)
+            all_rot_mat.append(rot_mat)
+            
+            print(f"Finished {i + 1}/{num_batches} batches")
 
-                if not save_full_state:
-                    tr_init_ret, rot_mat_init_ret, tr, rot_mat = _inference_fn(
-                        model,
-                        single_repr,
-                        pair_repr,
-                        tr_init,
-                        rot_mat_init,
-                        save_full_state,
-                        use_tqdm,
-                    )
-                else:
-                    tr_list, rot_mat_list = _inference_fn(
-                        model,
-                        single_repr,
-                        pair_repr,
-                        tr_init,
-                        rot_mat_init,
-                        save_full_state,
-                        use_tqdm,
-                    )
-                    tr_init_ret, rot_mat_init_ret, tr, rot_mat = (
-                        tr_list[0],
-                        rot_mat_list[0],
-                        tr_list[-1],
-                        rot_mat_list[-1],
-                    )
-                print(
-                    f"Finished {i + 1}/{num_samples} samples, writing to {ofilename} and {ofilename_init}"
-                )
+        all_tr = torch.cat(all_tr, dim=0)
+        all_rot_mat = torch.cat(all_rot_mat, dim=0)
 
-                if not save_full_state:
-                    write_to_pdb(seq, tr, rot_mat, ofilename)
-                else:
-                    with open(ofilename, "w") as fp:
-                        for idx, tr_rot_mat in enumerate(zip(tr_list, rot_mat_list)):
-                            tr, rot_mat = tr_rot_mat
-                            CA, N, C = convert_to_CANC(tr, rot_mat)
-                            lines = xyz2pdb(seq, CA, N, C)
-                            prefix = f"MODEL        {idx}\n"
-                            fp.write(prefix)
-                            fp.write("\n".join(lines))
-                            fp.write("\nENDMDL\n")
+        pdb_file = output_prefix + f"{output}.pdb"
+        
+        
 
-                write_to_npz(tr_init_ret, rot_mat_init_ret, ofilename_init)
-                write_to_npz(tr, rot_mat, ofilename_final)
-        except Exception as e:
-            print(f"Error processing {pkl}, {fasta}, {output}")
-            print(str(e))
+        all_CA = []
+        all_N = []
+        all_C = []
+        with open(pdb_file, "w") as fp:
+            for idx, tr_rot_mat in enumerate(zip(all_tr, all_rot_mat)):
+                tr, rot_mat = tr_rot_mat
+                CA, N, C = convert_to_CANC(tr, rot_mat)
+                all_CA.append(CA)
+                all_N.append(N)
+                all_C.append(C)
+                lines = xyz2pdb(seq, CA, N, C)
+                prefix = f"MODEL        {idx}\n"
+                fp.write(prefix)
+                fp.write("\n".join(lines))
+                fp.write("\nENDMDL\n")
+        
+        all_CA = torch.stack(all_CA, dim=0)
+        all_N = torch.stack(all_N, dim=0)
+        all_C = torch.stack(all_C, dim=0)
 
-
+        sampled_mol_file = output_prefix + f"sample-iid-all.pt"
+        sampled_mol = torch.cat([all_CA, all_N, all_C], dim=1)
+        torch.save(sampled_mol, sampled_mol_file)
+        sampled_CA_file = output_prefix + f"sample-iid.npy"
+        torch.save(all_CA, sampled_CA_file)
+        gsd_file = output_prefix + f"{output}.gsd"
+        save_ovito_traj(sampled_mol, gsd_file, alpha_carbon_lim=all_CA.shape[1])
+        
 if __name__ == "__main__":
-    inference()
+    parser = argparse.ArgumentParser(description="Evaluate a checkpoint and process data.")
+    
+    parser.add_argument(
+        "-c", "--checkpoint", 
+        help="Checkpoint path", 
+        default="/data/sanjeevr/dig_data/checkpoint-520k.pth"
+    )
+
+    parser.add_argument(
+        "--pdb-id", 
+        default="6lu7", 
+        help="pdb ID"
+    )
+
+    parser.add_argument(
+        "-i", "--pkl", 
+        default="/data/sanjeevr/dig_data/", 
+        help="Path to the dataset pickle file"
+    )
+    parser.add_argument(
+        "-s", "--fasta", 
+        default="/data/sanjeevr/dig_data/", 
+        help="Path to the dataset fasta file"
+    )
+    parser.add_argument(
+        "-n", "--num-samples", 
+        type=int, 
+        default=50, 
+        help="Number of samples to generate"
+    )
+
+    parser.add_argument(
+        "-b", "--batch-size", 
+        type=int, 
+        default=50, 
+        help="Number of samples to generate"
+    )
+    parser.add_argument(
+        "-p", "--output-prefix", 
+        default="./output/", 
+        help="Prefix for the output directory"
+    )
+    parser.add_argument(
+        "--init-state", 
+        required=False, 
+        help="Path to the initial state"
+    )
+ 
+    parser.add_argument(
+        "--use-tqdm", 
+        action="store_true", 
+        help="Enable tqdm progress bar"
+    )
+    parser.add_argument(
+        "--use-gpu", 
+        action="store_true", 
+        help="Enable GPU usage"
+    )
+    
+    args = parser.parse_args()
+    inference(args.checkpoint,
+                args.pdb_id,
+                args.pkl,
+                args.fasta,
+                args.output_prefix,
+                args.num_samples,
+                args.batch_size,
+                args.init_state,
+                args.use_tqdm,
+                args.use_gpu)
