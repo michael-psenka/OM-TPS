@@ -1,5 +1,6 @@
 import argparse
 import json
+import warnings
 from datetime import datetime
 import torch
 import wandb
@@ -89,6 +90,11 @@ def evaluate_fastfolders(
     # Set the random seed for reproducibility of k-means clustering
     np.random.seed(0)
 
+    original_subsample = subsample
+
+    if "interpolate" in gen_mode:
+        assert subsample == 0, "Subsampling is not supported for interpolation"
+
     # Adjust number of paths for iid and langevin generation
     if "interpolate" not in gen_mode:
         num_paths = 1
@@ -175,16 +181,23 @@ def evaluate_fastfolders(
     )
 
     # Load data
-    append_exp_name_str = "_" + append_exp_name if append_exp_name else ""
-    eval_folder = (
-        f"saved_models/{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}"
-    )
-    sample_path = Path(eval_folder, f"sample-{gen_mode}.pt")
+    if gen_mode == "gt":
+        eval_folder = f"saved_models/{protein_name}/main_eval_output_gt"
+        os.makedirs(eval_folder, exist_ok=True)
+        sampled_mol = torch.tensor(gt_traj)
+        subsample = int(subsample / 200)  # convert from picoseconds to frames
+    else:
+        append_exp_name_str = "_" + append_exp_name if append_exp_name else ""
+        eval_folder = f"saved_models/{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}"
+        sample_path = Path(eval_folder, f"sample-{gen_mode}.pt")
+
+        # Load sampled molecules
+        sampled_mol = torch.load(sample_path)
+
     pdb_file = (
         f"datasets/folded_pdbs/{Molecules[protein_name.upper()].value}-0-c-alpha.pdb"
     )
-    # Load sampled molecules
-    sampled_mol = torch.load(sample_path)
+
     if subsample != 0:
         if gen_mode == "langevin":
             # 100 parallel langevin sims were generated
@@ -222,7 +235,7 @@ def evaluate_fastfolders(
 
     if gen_mode == "iid":
         sampled_traj = cluster_assignments  # don't need to subsample
-    elif gen_mode == "langevin":
+    elif gen_mode == "langevin" or gen_mode == "gt":
         # Fit a MSM to the generated samples, using the reference cluster centers
         (
             prob_matrix,
@@ -234,9 +247,27 @@ def evaluate_fastfolders(
             sampled_mol,
             num_clusters=20,
             gt_cluster_assignments=cluster_assignments,
-            lagtime=200,  # every 200 ps to match the reference frequency
+            lagtime=(
+                200 if gen_mode == "langevin" else 1
+            ),  # langevin sims were saved every 1 ps, reference was saved every 200 ps
         )
-        sampled_traj = sample_tp(prob_matrix, start, end, traj_len, n_ref_samples)
+
+        if (
+            prob_matrix.shape[0] < 20
+            or (prob_matrix[end] == 0).all()
+            or (prob_matrix[start] == 0).all()
+        ):
+            no_transition = True
+            warnings.warn("No transition between start and end states found.")
+        else:
+            try:
+                sampled_traj = sample_tp(
+                    prob_matrix, start, end, traj_len, n_ref_samples
+                )
+                no_transition = False
+            except ValueError:  # no transition found
+                no_transition = True
+                warnings.warn("No transition between start and end states found.")
     else:  # interpolate or om_interpolate
         cluster_assignments = cluster_assignments.reshape(num_paths, -1)
         sampled_traj = cluster_assignments[
@@ -249,65 +280,77 @@ def evaluate_fastfolders(
 
     # Sample transition paths from the reference MSM
     ref_sampled_traj = sample_tp(gt_prob_matrix, start, end, traj_len, n_ref_samples)
-
-    # Compute entropy of the sampled trajectories (proxy for diversity)
-    entropy = None
-    if "interpolate" in gen_mode:
-        entropy = compute_shannon_entropy(sampled_traj)
     ref_entropy = compute_shannon_entropy(ref_sampled_traj)
+    entropy = None
 
-    # Compute JSD between the state distributions of the reference and generated paths
-    sampled_state_dist = np.array(
-        [np.count_nonzero(sampled_traj == i) for i in range(20)]
-    )
-    sampled_state_dist = sampled_state_dist / sampled_state_dist.sum()
-    ref_state_dist = np.array(
-        [np.count_nonzero(ref_sampled_traj == i) for i in range(20)]
-    )
-    ref_state_dist = ref_state_dist / ref_state_dist.sum()
-    jsd = jensenshannon(ref_state_dist, sampled_state_dist)
+    if no_transition:
+        jsd = 1
+        transition_jsd = 1
+        path_probabilities = np.zeros(sampled_mol.shape[0])
+        fraction_valid_paths = 0
 
-    # Compute the JSD restricted to the transition ensemble of the reference and generated paths (defined as committor probs between 0.45 and 0.55)
-    bins_x = np.digitize(transformed_samples[:, 0], tic_evaluator.bin_edges_x)
-    bins_y = np.digitize(transformed_samples[:, 1], tic_evaluator.bin_edges_y)
-    bins_x = np.clip(bins_x, 0, tic_evaluator.bins - 1)
-    bins_y = np.clip(bins_y, 0, tic_evaluator.bins - 1)
-    bin_idx = bins_x * tic_evaluator.bins + bins_y
+    else:
+        # Compute entropy of the sampled trajectories (proxy for diversity)
+        if "interpolate" in gen_mode:
+            entropy = compute_shannon_entropy(sampled_traj)
 
-    transition_ensemble_mask = np.logical_and(
-        bin_committor_probs[bin_idx] > 0.45, bin_committor_probs[bin_idx] < 0.55
-    )
-    transition_ensemble = transformed_samples[transition_ensemble_mask]
-    transition_ensemble, _ = discretize_trajectory(
-        transition_ensemble, tic_evaluator, kmeans_cluster_centers, transform=False
-    )
-    transition_state_dist = np.array(
-        [np.count_nonzero(transition_ensemble == i) for i in range(20)]
-    )
-    transition_state_dist = transition_state_dist / transition_state_dist.sum()
-    gt_transition_ensemble, _ = discretize_trajectory(
-        gt_transition_ensemble, tic_evaluator, kmeans_cluster_centers, transform=False
-    )
-    ref_transition_state_dist = np.array(
-        [np.count_nonzero(gt_transition_ensemble == i) for i in range(20)]
-    )
-
-    ref_transition_state_dist = (
-        ref_transition_state_dist / ref_transition_state_dist.sum()
-    )
-    transition_jsd = jensenshannon(ref_transition_state_dist, transition_state_dist)
-
-    # Compute the likelihood of the sampled trajectories under the reference MSM
-    path_probabilities = None
-    fraction_valid_paths = None
-    if gen_mode != "iid":
-        path_probabilities = get_tp_likelihood(sampled_traj, gt_prob_matrix).prod(-1)
-
-        # Percentage of valid (non-zero probability) paths
-        fraction_valid_paths = (
-            path_probabilities[path_probabilities > 0].shape[0]
-            / path_probabilities.shape[0]
+        # Compute JSD between the state distributions of the reference and generated paths
+        sampled_state_dist = np.array(
+            [np.count_nonzero(sampled_traj == i) for i in range(20)]
         )
+        sampled_state_dist = sampled_state_dist / sampled_state_dist.sum()
+        ref_state_dist = np.array(
+            [np.count_nonzero(ref_sampled_traj == i) for i in range(20)]
+        )
+        ref_state_dist = ref_state_dist / ref_state_dist.sum()
+        jsd = jensenshannon(ref_state_dist, sampled_state_dist)
+
+        # Compute the JSD restricted to the transition ensemble of the reference and generated paths (defined as committor probs between 0.45 and 0.55)
+        bins_x = np.digitize(transformed_samples[:, 0], tic_evaluator.bin_edges_x)
+        bins_y = np.digitize(transformed_samples[:, 1], tic_evaluator.bin_edges_y)
+        bins_x = np.clip(bins_x, 0, tic_evaluator.bins - 1)
+        bins_y = np.clip(bins_y, 0, tic_evaluator.bins - 1)
+        bin_idx = bins_x * tic_evaluator.bins + bins_y
+
+        transition_ensemble_mask = np.logical_and(
+            bin_committor_probs[bin_idx] > 0.45, bin_committor_probs[bin_idx] < 0.55
+        )
+        transition_ensemble = transformed_samples[transition_ensemble_mask]
+        transition_ensemble, _ = discretize_trajectory(
+            transition_ensemble, tic_evaluator, kmeans_cluster_centers, transform=False
+        )
+        transition_state_dist = np.array(
+            [np.count_nonzero(transition_ensemble == i) for i in range(20)]
+        )
+        transition_state_dist = transition_state_dist / transition_state_dist.sum()
+        gt_transition_ensemble, _ = discretize_trajectory(
+            gt_transition_ensemble,
+            tic_evaluator,
+            kmeans_cluster_centers,
+            transform=False,
+        )
+        ref_transition_state_dist = np.array(
+            [np.count_nonzero(gt_transition_ensemble == i) for i in range(20)]
+        )
+
+        ref_transition_state_dist = (
+            ref_transition_state_dist / ref_transition_state_dist.sum()
+        )
+        transition_jsd = jensenshannon(ref_transition_state_dist, transition_state_dist)
+
+        # Compute the likelihood of the sampled trajectories under the reference MSM
+        path_probabilities = None
+        fraction_valid_paths = None
+        if gen_mode != "iid":
+            path_probabilities = get_tp_likelihood(sampled_traj, gt_prob_matrix).prod(
+                -1
+            )
+
+            # Percentage of valid (non-zero probability) paths
+            fraction_valid_paths = (
+                path_probabilities[path_probabilities > 0].shape[0]
+                / path_probabilities.shape[0]
+            )
 
     # Visualize the model-produced interpolation along with a subset of 20 reference/generated paths
     free_energies, transition_rates, fraction_unphysical = get_tic_free_energy_plots(
@@ -317,7 +360,7 @@ def evaluate_fastfolders(
         sampled_mol,
         gen_paths=(
             kmeans_cluster_centers[sampled_traj[:20]]
-            if "langevin" in gen_mode
+            if ("langevin" in gen_mode or "gt" in gen_mode) and not no_transition
             else None
         ),
         ref_paths=kmeans_cluster_centers[ref_sampled_traj[:20]],
@@ -357,7 +400,11 @@ def evaluate_fastfolders(
         "Reference Transition Path Entropy (Diversity)": ref_entropy,
     }
 
-    subsample_append = f"_subsample_{subsample}" if subsample != 0 else ""
+    subsample_append = (
+        f"_subsample_{int(original_subsample/1000)}" if original_subsample != 0 else ""
+    )
+    if original_subsample != 0 and gen_mode != "iid":
+        subsample_append += f"ns"
     final_metrics_file = "final_metrics" + subsample_append + ".json"
 
     with open(join(eval_folder, final_metrics_file), "w") as f:
@@ -780,7 +827,6 @@ def dynamics_analysis(
     topology = md.load(pdb_file).topology
 
     # Since we need to do K-means clustering in TIC-space, we will transform the samples first
-    # (this code is the same as in the "TIC analysis" section)
 
     # Initialize TIC evaluator
     tic_evaluator = TicEvaluator(
@@ -816,7 +862,7 @@ def dynamics_analysis(
     else:
         assignments = gt_cluster_assignments
 
-    # Create MSM with 20 states
+    # Create MSM with k-means cluster assignments
     count_matrix = TransitionCountEstimator.count(
         count_mode="sliding", dtrajs=[assignments.astype("int")], lagtime=lagtime
     )
@@ -885,7 +931,7 @@ if __name__ == "__main__":
         "--subsample",
         type=int,
         default=0,
-        help="First n samples to evaluate (0 means all samples)",
+        help="First n samples to evaluate (0 means all samples). For langevin and gt modes, this is the number of picoseconds to keep per sim",
     )
 
     parser.add_argument(
@@ -897,10 +943,15 @@ if __name__ == "__main__":
     if not args.disable_logging:
         # validate_git_status()
         append = "_" + args.append_exp_name if args.append_exp_name else ""
+        subsample_append = (
+            f"_subsample_{int(args.subsample / 1000)}" if args.subsample != 0 else ""
+        )
+        if args.subsample != 0 and args.gen_mode != "iid":
+            subsample_append += f"ns"
         wandb.login()
         wandb.init(
             project="fastfolders",
-            name=args.protein_name + "_" + args.gen_mode + append,
+            name=args.protein_name + "_" + args.gen_mode + append + subsample_append,
             config=args,
         )
 
