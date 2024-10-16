@@ -19,6 +19,11 @@ for protein in "${proteins[@]}"; do
             --subsample="$time"
     done
 
+    # No subsample
+    python evaluate/evaluate_fastfolders.py \
+            --protein_name "$protein" \
+            --gen_mode gt
+
     # Model simulations
     for time in "${ns_times_short[@]}"; do
         python evaluate/evaluate_fastfolders.py \
@@ -26,8 +31,13 @@ for protein in "${proteins[@]}"; do
             --gen_mode langevin \
             --subsample="$time"
     done
+
+    # No subsample
+    python evaluate/evaluate_fastfolders.py \
+            --protein_name "$protein" \
+            --gen_mode langevin
     
-    # Model I.i.d. sampling
+    # Model i.i.d. sampling
     for n in "${subsample_n[@]}"; do
         python evaluate/evaluate_fastfolders.py \
             --protein_name "$protein" \

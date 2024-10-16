@@ -4,6 +4,8 @@ import warnings
 from datetime import datetime
 import torch
 import wandb
+
+wandb.require("core")
 from torch_scatter import scatter_mean
 import numpy as np
 import mdtraj as md
