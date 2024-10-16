@@ -181,11 +181,13 @@ def evaluate_fastfolders(
     )
 
     # Load data
+    if gen_mode == "langevin":
+        subsample = int(subsample * 1000)  # convert from nanoseconds to frames
     if gen_mode == "gt":
         eval_folder = f"saved_models/{protein_name}/main_eval_output_gt"
         os.makedirs(eval_folder, exist_ok=True)
         sampled_mol = torch.tensor(gt_traj)
-        subsample = int(subsample / 200)  # convert from picoseconds to frames
+        subsample = int(subsample * 5)  # convert from nanoseconds to frames
     else:
         append_exp_name_str = "_" + append_exp_name if append_exp_name else ""
         eval_folder = f"saved_models/{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}"
@@ -233,6 +235,8 @@ def evaluate_fastfolders(
         sampled_mol, tic_evaluator, kmeans_cluster_centers
     )
 
+    no_transition = False
+
     if gen_mode == "iid":
         sampled_traj = cluster_assignments  # don't need to subsample
     elif gen_mode == "langevin" or gen_mode == "gt":
@@ -264,7 +268,6 @@ def evaluate_fastfolders(
                 sampled_traj = sample_tp(
                     prob_matrix, start, end, traj_len, n_ref_samples
                 )
-                no_transition = False
             except ValueError:  # no transition found
                 no_transition = True
                 warnings.warn("No transition between start and end states found.")
@@ -401,7 +404,7 @@ def evaluate_fastfolders(
     }
 
     subsample_append = (
-        f"_subsample_{int(original_subsample/1000)}" if original_subsample != 0 else ""
+        f"_subsample_{int(original_subsample)}" if original_subsample != 0 else ""
     )
     if original_subsample != 0 and gen_mode != "iid":
         subsample_append += f"ns"
@@ -931,7 +934,7 @@ if __name__ == "__main__":
         "--subsample",
         type=int,
         default=0,
-        help="First n samples to evaluate (0 means all samples). For langevin and gt modes, this is the number of picoseconds to keep per sim",
+        help="First n samples to evaluate (0 means all samples). For langevin and gt modes, this is the number of nanoseconds to keep per sim",
     )
 
     parser.add_argument(
@@ -944,7 +947,7 @@ if __name__ == "__main__":
         # validate_git_status()
         append = "_" + args.append_exp_name if args.append_exp_name else ""
         subsample_append = (
-            f"_subsample_{int(args.subsample / 1000)}" if args.subsample != 0 else ""
+            f"_subsample_{int(args.subsample)}" if args.subsample != 0 else ""
         )
         if args.subsample != 0 and args.gen_mode != "iid":
             subsample_append += f"ns"
