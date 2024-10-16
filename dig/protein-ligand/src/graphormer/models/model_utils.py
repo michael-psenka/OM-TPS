@@ -25,7 +25,7 @@ def make_masks(batched_data):
         batched_data["pro_mask"] = p_mask
 
 
-def get_center_pos(batched_data, type='protein', crystal=False):
+def get_center_pos(batched_data, type="protein", crystal=False):
     """
     2022-11-02: Switch to get the center of the protein
     """
@@ -34,7 +34,9 @@ def get_center_pos(batched_data, type='protein', crystal=False):
         # make_masks(batched_data)
         pro_mask = batched_data["pro_mask"]
         c = (
-            torch.sum(batched_data["crystal_pos"] * pro_mask[:, :, None], axis=1).unsqueeze(1)
+            torch.sum(
+                batched_data["crystal_pos"] * pro_mask[:, :, None], axis=1
+            ).unsqueeze(1)
             / batched_data["pnode"][:, None, None]
         )
         return c
@@ -42,12 +44,12 @@ def get_center_pos(batched_data, type='protein', crystal=False):
     make_masks(batched_data)
     lig_mask = batched_data["lig_mask"]
     pro_mask = batched_data["pro_mask"]
-    if type == 'protein':
+    if type == "protein":
         c = (
             torch.sum(batched_data["pos"] * pro_mask[:, :, None], axis=1).unsqueeze(1)
             / batched_data["pnode"][:, None, None]
         )
-    elif type == 'ligand':
+    elif type == "ligand":
         c = (
             torch.sum(batched_data["pos"] * lig_mask[:, :, None], axis=1).unsqueeze(1)
             / batched_data["lnode"][:, None, None]
@@ -57,6 +59,7 @@ def get_center_pos(batched_data, type='protein', crystal=False):
 
 def tensor_merge(cond, input, other):
     return cond * input + (~cond) * other
+
 
 def tensor_merge_truncated(cond, input, other, max_len):
     ret = (~cond) * other

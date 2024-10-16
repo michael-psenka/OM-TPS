@@ -50,7 +50,7 @@ class MultiheadAttention(nn.Module):
         assert (
             self.head_dim * num_heads == self.embed_dim
         ), "embed_dim must be divisible by num_heads"
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
 
         self.self_attention = self_attention
 
@@ -148,7 +148,9 @@ class MultiheadAttention(nn.Module):
         q *= self.scaling
 
         if outcell_index is not None:
-            outcell_index = outcell_index.transpose(1, 0).unsqueeze(-1).expand(-1, -1, embed_dim)
+            outcell_index = (
+                outcell_index.transpose(1, 0).unsqueeze(-1).expand(-1, -1, embed_dim)
+            )
             expand_k = torch.gather(k, dim=0, index=outcell_index + 1)
             expand_v = torch.gather(v, dim=0, index=outcell_index + 1)
 

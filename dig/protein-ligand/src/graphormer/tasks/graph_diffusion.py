@@ -56,7 +56,9 @@ class GraphDiffusionConfig(FairseqDataclass):
 
     reweighting_file: str = field(
         default="",
-        metadata={"help": "using reweighting file to reweight the loss according to RMSD_to_crystal"},
+        metadata={
+            "help": "using reweighting file to reweight the loss according to RMSD_to_crystal"
+        },
     )
 
     train_subset: str = field(
@@ -69,9 +71,10 @@ class GraphDiffusionConfig(FairseqDataclass):
     )
     need_all_poses: bool = field(
         default=False,
-        metadata={"help": "for kde and flowode, they need to use all poses for a system"},
+        metadata={
+            "help": "for kde and flowode, they need to use all poses for a system"
+        },
     )
-
 
 
 @register_task("graph_diffusion", dataclass=GraphDiffusionConfig)
@@ -79,7 +82,9 @@ class GraphDiffusionTask(FairseqTask):
     def __init__(self, cfg):
         super().__init__(cfg)
 
-        self.dm = build_md_kde_dm(cfg.data_path, cfg.reweighting_file, cfg.need_all_poses)
+        self.dm = build_md_kde_dm(
+            cfg.data_path, cfg.reweighting_file, cfg.need_all_poses
+        )
 
     @classmethod
     def setup_task(cls, cfg, **kwargs):
@@ -104,7 +109,7 @@ class GraphDiffusionTask(FairseqTask):
 
         logger.info("Loaded {0} with #samples: {1}".format(split, len(dataset)))
 
-        if  split in self.cfg.train_subset:
+        if split in self.cfg.train_subset:
             dataset = EpochShuffleDataset(dataset, self.cfg.seed)
 
         self.datasets[split] = dataset

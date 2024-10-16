@@ -73,7 +73,9 @@ class MainModel(BaseModel):
     def forward_step(self, input_pose, mask, step, single_repr, pair_repr):
         x1d = self.x1d_proj(single_repr) + self.step_emb(step)[:, None]
         x2d = self.x2d_proj(pair_repr)
-        T, IR = input_pose # T corresponds to alpha carbon coordinates, and IR corresponds to orientation of the residue?
+        T, IR = (
+            input_pose  # T corresponds to alpha carbon coordinates, and IR corresponds to orientation of the residue?
+        )
 
         pos = torch.arange(T.shape[1], device=x1d.device)
         pos = pos.unsqueeze(1) - pos.unsqueeze(0)

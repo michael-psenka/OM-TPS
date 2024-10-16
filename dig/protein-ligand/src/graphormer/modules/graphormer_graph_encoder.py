@@ -198,7 +198,6 @@ class GraphormerGraphEncoder(nn.Module):
         # B x T x 1, T = N + 1
         padding_mask = self.make_padding_mask(batched_data)
 
-
         # node features B x T x 9 -> B x T x C
         x = self.graph_node_feature(batched_data)
         # extra layers -> keep the same shape

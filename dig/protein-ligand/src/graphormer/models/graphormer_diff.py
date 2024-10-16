@@ -37,6 +37,7 @@ from .model_utils import (
 
 from .diffusion.schedulers.legacy_scheduler import get_beta_schedule
 
+
 class SinusoidalPositionEmbeddings(nn.Module):
     def __init__(
         self,
@@ -115,7 +116,9 @@ class GraphormerGraphEncoder(GraphormerGraphEncoderBase):
 
         # add edge feature
         x[:, 1:, :] += batched_data["_edge_features"] * self.dist_feature_node_scale / 2
-        x[:, 1:, :] += batched_data["_edge_features_crystal"] * self.dist_feature_node_scale / 2 # need to mask ligand part
+        x[:, 1:, :] += (
+            batched_data["_edge_features_crystal"] * self.dist_feature_node_scale / 2
+        )  # need to mask ligand part
 
         # add tag embedding
         atoms = batched_data["x"][:, :, 0]
@@ -134,7 +137,9 @@ class GraphormerGraphEncoder(GraphormerGraphEncoderBase):
         bias = super().forward_extra_bias_layers(batched_data, attn_bias)
         bias[:, :, 1:, 1:] = bias[:, :, 1:, 1:] + batched_data["_attn_bias_3d"]
 
-        bias[:, :, 1:, 1:] = bias[:, :, 1:, 1:] + batched_data["_attn_bias_3d_crystal"] # need to mask ligand part
+        bias[:, :, 1:, 1:] = (
+            bias[:, :, 1:, 1:] + batched_data["_attn_bias_3d_crystal"]
+        )  # need to mask ligand part
         bias /= 3
         batched_data["_attn_bias_3d_crystal"] = None
         batched_data["_bias"] = bias
@@ -216,27 +221,37 @@ class GraphormerDiffModelConfig(FairseqDataclass):
         },
     )
     no_diffusion: bool = field(
-        default=False, metadata={"help": "disable diffusion and training on bare graphormer"},
+        default=False,
+        metadata={"help": "disable diffusion and training on bare graphormer"},
     )
     ligand_only: bool = field(
-        default=False, metadata={"help": "using water-ligand dataset"},
+        default=False,
+        metadata={"help": "using water-ligand dataset"},
     )
     protein_only: bool = field(
-        default=False, metadata={"help": "using protein only dataset"},
+        default=False,
+        metadata={"help": "using protein only dataset"},
     )
     ligand_center: bool = field(
-        default=False, metadata={"help": "using ligand center instead of protein center"},
+        default=False,
+        metadata={"help": "using ligand center instead of protein center"},
     )
     pairwise_loss: bool = field(
-        default=False, metadata={"help": "reweighting loss using atom numbers per protein-ligand pair"},
+        default=False,
+        metadata={
+            "help": "reweighting loss using atom numbers per protein-ligand pair"
+        },
     )
     test_mode: bool = field(
-        default=False, metadata={"help": "switch to test mode to generate conformers"},
+        default=False,
+        metadata={"help": "switch to test mode to generate conformers"},
     )
     num_epsilon_estimator: int = field(
-        default=8, metadata={"help": "number of epsilons to sampled for trace estimation in flow ode"},
+        default=8,
+        metadata={
+            "help": "number of epsilons to sampled for trace estimation in flow ode"
+        },
     )
-
 
 
 @register_model("graphormer_diff", dataclass=GraphormerDiffModelConfig)
@@ -322,7 +337,9 @@ class GraphormerDiffModel(FairseqEncoderModel):
         # (G, T, D)
         batched_data["_edge_features"] = graph_3d["edge_features"]
         batched_data["_attn_bias_3d_crystal"] = graph_3d_crystal["attn_bias_3d_crystal"]
-        batched_data["_edge_features_crystal"] = graph_3d_crystal["edge_features_crystal"]
+        batched_data["_edge_features_crystal"] = graph_3d_crystal[
+            "edge_features_crystal"
+        ]
 
         encoder_out = self.encoder(batched_data, **kwargs)
 
@@ -381,7 +398,7 @@ class GraphormerDiffModel(FairseqEncoderModel):
         # centering
         if pos_center is None:
             if self.ligand_only or self.ligand_center:
-                pos_center = get_center_pos(batched_data,'ligand')
+                pos_center = get_center_pos(batched_data, "ligand")
             else:
                 pos_center = get_center_pos(batched_data)
 
@@ -393,18 +410,22 @@ class GraphormerDiffModel(FairseqEncoderModel):
             if self.no_diffusion:
                 pos_noise = torch.zeros(size=orig_pos.size(), device=device)
             else:
-                pos_noise = torch.zeros(size=orig_pos.size(), device=device).normal_(0,self.prior_distribution_std)
+                pos_noise = torch.zeros(size=orig_pos.size(), device=device).normal_(
+                    0, self.prior_distribution_std
+                )
 
             pos = pos_noise
 
             # protein pos and noisy ligand pos
             batched_data["pos"] = pos
 
-            crystal_pos_center = get_center_pos(batched_data,crystal=True)
+            crystal_pos_center = get_center_pos(batched_data, crystal=True)
             batched_data["crystal_pos"] -= crystal_pos_center
             batched_data_crystal_pos_saver = batched_data["crystal_pos"]
             # replace batched_data["crystal_pos"] lnode part with batched_data["pos"] lnode part
-            batched_data["crystal_pos"] = tensor_merge(lig_mask[:, :, None], batched_data["pos"], batched_data["crystal_pos"])
+            batched_data["crystal_pos"] = tensor_merge(
+                lig_mask[:, :, None], batched_data["pos"], batched_data["crystal_pos"]
+            )
 
             if not self.no_diffusion:
                 if self.diffusion_sampling == "ddpm":
@@ -423,19 +444,29 @@ class GraphormerDiffModel(FairseqEncoderModel):
                         )
 
                         # forward
-                        batched_data["ts"] = torch.ones(n_graphs, device=device).fill_(t)
+                        batched_data["ts"] = torch.ones(n_graphs, device=device).fill_(
+                            t
+                        )
                         force = self(batched_data, **kwargs).detach()
 
-                        epsilon = torch.zeros_like(batched_data["pos"]).normal_(0,self.prior_distribution_std)
+                        epsilon = torch.zeros_like(batched_data["pos"]).normal_(
+                            0, self.prior_distribution_std
+                        )
 
                         lig_pos = (
                             batched_data["pos"]
-                            - (1 - alpha_t) / (1 - hat_alpha_t).sqrt() * force * self.prior_distribution_std
+                            - (1 - alpha_t)
+                            / (1 - hat_alpha_t).sqrt()
+                            * force
+                            * self.prior_distribution_std
                         ) / alpha_t.sqrt() + sigma_t * epsilon
 
-
                         batched_data["pos"] = lig_pos
-                        batched_data["crystal_pos"] = tensor_merge(lig_mask[:, :, None], batched_data["pos"], batched_data["crystal_pos"])
+                        batched_data["crystal_pos"] = tensor_merge(
+                            lig_mask[:, :, None],
+                            batched_data["pos"],
+                            batched_data["crystal_pos"],
+                        )
                         batched_data["pos"] = batched_data["pos"].detach()
                 elif self.diffusion_sampling == "ddim":
                     sampled_steps, _ = torch.sort(
@@ -449,7 +480,9 @@ class GraphormerDiffModel(FairseqEncoderModel):
                     sampled_steps = torch.cat(
                         [
                             sampled_steps,
-                            torch.tensor([self.num_timesteps - 1], device=device).long(),
+                            torch.tensor(
+                                [self.num_timesteps - 1], device=device
+                            ).long(),
                         ]
                     )
                     for i in range(sampled_steps.shape[0] - 1, 0, -1):
@@ -461,17 +494,26 @@ class GraphormerDiffModel(FairseqEncoderModel):
                         beta_t = 1.0 - alpha_t
                         sigma_t = (
                             self.ddim_eta
-                            * ((1.0 - hat_alpha_t_1) / (1.0 - hat_alpha_t) * beta_t).sqrt()
+                            * (
+                                (1.0 - hat_alpha_t_1) / (1.0 - hat_alpha_t) * beta_t
+                            ).sqrt()
                         )
 
                         # forward
-                        batched_data["ts"] = torch.zeros(n_graphs, device=device).fill_(t)
+                        batched_data["ts"] = torch.zeros(n_graphs, device=device).fill_(
+                            t
+                        )
                         force = self(batched_data, **kwargs)
                         lig_pos = batched_data["pos"]
                         x_0_pred = (
-                            lig_pos - (1.0 - hat_alpha_t).sqrt() * force * self.prior_distribution_std
+                            lig_pos
+                            - (1.0 - hat_alpha_t).sqrt()
+                            * force
+                            * self.prior_distribution_std
                         ) / hat_alpha_t.sqrt()
-                        epsilon = torch.zeros_like(lig_pos).normal_(0,self.prior_distribution_std)
+                        epsilon = torch.zeros_like(lig_pos).normal_(
+                            0, self.prior_distribution_std
+                        )
                         lig_pos = (
                             hat_alpha_t_1.sqrt() * x_0_pred
                             + (1.0 - hat_alpha_t_1 - sigma_t**2).sqrt()
@@ -481,7 +523,11 @@ class GraphormerDiffModel(FairseqEncoderModel):
                         )
 
                         batched_data["pos"] = lig_pos
-                        batched_data["crystal_pos"] = tensor_merge(lig_mask[:, :, None], batched_data["pos"], batched_data["crystal_pos"])
+                        batched_data["crystal_pos"] = tensor_merge(
+                            lig_mask[:, :, None],
+                            batched_data["pos"],
+                            batched_data["crystal_pos"],
+                        )
                         batched_data["pos"] = batched_data["pos"].detach()
 
                     # forward for last step
@@ -493,7 +539,10 @@ class GraphormerDiffModel(FairseqEncoderModel):
                     force = self(batched_data, **kwargs)
                     lig_pos = batched_data["pos"]
                     x_0_pred = (
-                        lig_pos - (1.0 - hat_alpha_t).sqrt() * force * self.prior_distribution_std
+                        lig_pos
+                        - (1.0 - hat_alpha_t).sqrt()
+                        * force
+                        * self.prior_distribution_std
                     ) / hat_alpha_t.sqrt()
 
                     batched_data["pos"] = x_0_pred
@@ -503,9 +552,13 @@ class GraphormerDiffModel(FairseqEncoderModel):
                         f"Unknown sampling strategy {self.args.sampling}. Support only ddim and ddpm."
                     )
             else:
-                batched_data["ts"] = torch.zeros(n_graphs, device=device, dtype=torch.long)
+                batched_data["ts"] = torch.zeros(
+                    n_graphs, device=device, dtype=torch.long
+                )
                 lig_pos = self.forward(batched_data, **kwargs).detach()
-                batched_data["pos"] = tensor_merge(lig_mask[:, :, None], lig_pos, batched_data["pos"])
+                batched_data["pos"] = tensor_merge(
+                    lig_mask[:, :, None], lig_pos, batched_data["pos"]
+                )
 
             pred_pos = batched_data["pos"]
 
@@ -513,10 +566,10 @@ class GraphormerDiffModel(FairseqEncoderModel):
 
         pred_pos = torch.stack(pred_pos_list, dim=0).mean(dim=0)
 
-
         if self.ligand_only or self.protein_only:
-            pred_pos, orig_pos = self.rigid_transform_Kabsch_3D_torch4batch(pred_pos, \
-                orig_pos.float(), lig_mask, pro_mask)
+            pred_pos, orig_pos = self.rigid_transform_Kabsch_3D_torch4batch(
+                pred_pos, orig_pos.float(), lig_mask, pro_mask
+            )
 
         loss = (pred_pos - orig_pos) ** 2
         loss = torch.sum(loss, dim=-1, keepdim=True)
@@ -524,32 +577,57 @@ class GraphormerDiffModel(FairseqEncoderModel):
         loss_crystal = (pred_pos - batched_data_crystal_pos_saver) ** 2
         loss_crystal = torch.sum(loss_crystal, dim=-1, keepdim=True)
         loss_lig = loss_crystal.masked_fill((~lig_mask)[:, :, None], 0.0)
-        rmsd_lig = torch.sqrt(torch.sum(loss_lig, dim=-2) / batched_data["lnode"][:, None])
+        rmsd_lig = torch.sqrt(
+            torch.sum(loss_lig, dim=-2) / batched_data["lnode"][:, None]
+        )
         loss_pro = loss_crystal.masked_fill((~pro_mask)[:, :, None], 0.0)
-        rmsd_pro = torch.sqrt(torch.sum(loss_pro, dim=-2) / batched_data["pnode"][:, None])
+        rmsd_pro = torch.sqrt(
+            torch.sum(loss_pro, dim=-2) / batched_data["pnode"][:, None]
+        )
         loss = loss.masked_fill((~(pro_mask | lig_mask))[:, :, None], 0.0)
-        rmsd = torch.sqrt(torch.sum(loss, dim=-2) / (batched_data["lnode"]+batched_data["pnode"])[:, None])
+        rmsd = torch.sqrt(
+            torch.sum(loss, dim=-2)
+            / (batched_data["lnode"] + batched_data["pnode"])[:, None]
+        )
 
         if self.args.test_mode:
             if not hasattr(self, "fileid"):
                 self.fileid = 0
-            if not os.path.exists('./position_pt'):
-                os.mkdir('./position_pt')
-            #save torch tensor
+            if not os.path.exists("./position_pt"):
+                os.mkdir("./position_pt")
+            # save torch tensor
             if self.ligand_only:
-                torch.save(pred_pos+pos_center, './position_pt/pred_pos'+'_'+str(self.fileid)+'.pt')
-                torch.save(orig_pos+pos_center, './position_pt/orig_pos'+'_'+str(self.fileid)+'.pt')
+                torch.save(
+                    pred_pos + pos_center,
+                    "./position_pt/pred_pos" + "_" + str(self.fileid) + ".pt",
+                )
+                torch.save(
+                    orig_pos + pos_center,
+                    "./position_pt/orig_pos" + "_" + str(self.fileid) + ".pt",
+                )
             else:
-                torch.save(pred_pos+pos_center, './position_pt/pred_pos'+'_'+str(self.fileid)+'.pt')
-                torch.save(orig_pos+pos_center, './position_pt/orig_pos'+'_'+str(self.fileid)+'.pt')
-                torch.save(batched_data["lnode"], './position_pt/lnode'+'_'+str(self.fileid)+'.pt')
-                torch.save(batched_data["pnode"], './position_pt/pnode'+'_'+str(self.fileid)+'.pt')
-                torch.save(rmsd, './position_pt/rmsd'+'_'+str(self.fileid)+'.pt')
+                torch.save(
+                    pred_pos + pos_center,
+                    "./position_pt/pred_pos" + "_" + str(self.fileid) + ".pt",
+                )
+                torch.save(
+                    orig_pos + pos_center,
+                    "./position_pt/orig_pos" + "_" + str(self.fileid) + ".pt",
+                )
+                torch.save(
+                    batched_data["lnode"],
+                    "./position_pt/lnode" + "_" + str(self.fileid) + ".pt",
+                )
+                torch.save(
+                    batched_data["pnode"],
+                    "./position_pt/pnode" + "_" + str(self.fileid) + ".pt",
+                )
+                torch.save(rmsd, "./position_pt/rmsd" + "_" + str(self.fileid) + ".pt")
             self.fileid += 1
 
         return {
-            "orig_pos": orig_pos+pos_center,
-            "pred_pos": pred_pos+pos_center,
+            "orig_pos": orig_pos + pos_center,
+            "pred_pos": pred_pos + pos_center,
             "persample_loss": loss,
             "persample_rmsd_lig": rmsd_lig,
             "persample_rmsd_pro": rmsd_pro,
@@ -587,9 +665,11 @@ class GraphormerDiffModel(FairseqEncoderModel):
             # special reflection case
             if torch.linalg.det(R) < 0:
                 # print("det(R) < R, reflection detected!, correcting for it ...")
-                SS = torch.diag(torch.tensor([1.,1.,-1.], device=A.device))
+                SS = torch.diag(torch.tensor([1.0, 1.0, -1.0], device=A.device))
                 R = (Vt.T @ SS) @ U.T
-            assert math.fabs(torch.linalg.det(R) - 1) < 3e-3  # note I had to change this error bound to be higher
+            assert (
+                math.fabs(torch.linalg.det(R) - 1) < 3e-3
+            )  # note I had to change this error bound to be higher
             t = -R @ centroid_A + centroid_B
             return R, t
 
@@ -605,11 +685,11 @@ class GraphormerDiffModel(FairseqEncoderModel):
                 continue
             pred_i = pred_i @ R.T + t.T
 
-            '''
+            """
             There is a bug in model that we'll get mirrored sample results
             Here we try to fix it by comparing the rmsd between predicted results and mirrored predicted results
             Not very neat, but it works
-            '''
+            """
             R_m, t_m = rigid_transform_Kabsch_3D_torch(-pred_i.T, orig_i.T)
             pred_mi = -pred_i @ R_m.T + t_m.T
             # calc rmsd between pred_i and orig_i
@@ -617,8 +697,7 @@ class GraphormerDiffModel(FairseqEncoderModel):
             rmsd2 = torch.sqrt(torch.sum((pred_mi - orig_i) ** 2, dim=1).mean())
             # copy pred_i back to pred
             pred[i][valid_atoms] = pred_i if rmsd1 < rmsd2 else pred_mi
-        return pred,orig
-
+        return pred, orig
 
 
 @register_model_architecture("graphormer_diff", "graphormer_diff_base")

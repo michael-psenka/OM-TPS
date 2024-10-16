@@ -18,6 +18,7 @@ import mdtraj as md
 # Add parent directory to sys.path
 from logging_utils import save_ovito_traj
 
+
 def xyz2pdb(seq, CA, N, C):
     one_to_three = {
         "A": "ALA",
@@ -96,8 +97,8 @@ def _inference_fn(
     num_samples,
     single_repr,
     pair_repr,
-    tr_init, # option to provide initial translation
-    rot_mat_init, # option to provide initial rotation
+    tr_init,  # option to provide initial translation
+    rot_mat_init,  # option to provide initial rotation
     save_full_state=False,
     use_tqdm=True,
 ):
@@ -127,9 +128,9 @@ def _inference_fn(
     # get random initial structure (top level latent)
     def init_conformer(feature, num_samples):
         L = feature.shape[0]
-        random_tr = torch.zeros(num_samples,L, 3).normal_(mean=0, std=tr_sigma_max)
+        random_tr = torch.zeros(num_samples, L, 3).normal_(mean=0, std=tr_sigma_max)
         torch.normal(mean=0, std=tr_sigma_max, size=(1, 3))
-        random_rot = torch.from_numpy(R.random(num=num_samples*L).as_matrix()).float()
+        random_rot = torch.from_numpy(R.random(num=num_samples * L).as_matrix()).float()
         random_rot = random_rot.reshape(num_samples, L, 3, 3)
         return random_tr, random_rot
 
@@ -173,7 +174,7 @@ def _inference_fn(
 
         # predict score update from diffusion model
         with torch.no_grad():
-            
+
             tr_score, rot_score = model.forward_step(
                 (tr, rot_mat),
                 torch.zeros((num_samples, tr.shape[1]), dtype=bool, device=tr.device),
@@ -181,7 +182,7 @@ def _inference_fn(
                 single_repr,
                 pair_repr,
             )
-            
+
             tr_score /= tr_sigma
             rot_score *= so3.score_norm(torch.tensor([rot_sigma]))[0]
         # tr_score: (N, L, 3), rot_score: (N, L, 3)
@@ -265,7 +266,7 @@ def inference(
     use_gpu,
 ):
 
-    #make output directory
+    # make output directory
     output_prefix = os.path.join(output_prefix, pdb_id)
     os.makedirs(output_prefix, exist_ok=True)
 
@@ -281,7 +282,6 @@ def inference(
 
     save_full_state = True
 
-
     if pkl.endswith(".list"):
         pkl_list = open(pkl, "r").readlines()
         fasta_list = open(fasta, "r").readlines()
@@ -296,7 +296,7 @@ def inference(
         output_list = [output]
 
     for pkl, fasta, output in zip(pkl_list, fasta_list, output_list):
-        
+
         pkl_data = pickle.load(open(pkl, "rb"))
         if "representations" in pkl_data:
             pkl_data = pkl_data["representations"]
@@ -321,7 +321,7 @@ def inference(
         all_tr = []
         all_rot_mat = []
         for i in range(num_batches):
-        
+
             # generate samples
             _, _, tr, rot_mat = _inference_fn(
                 model,
@@ -336,15 +336,13 @@ def inference(
 
             all_tr.append(tr)
             all_rot_mat.append(rot_mat)
-            
+
             print(f"Finished {i + 1}/{num_batches} batches")
 
         all_tr = torch.cat(all_tr, dim=0)
         all_rot_mat = torch.cat(all_rot_mat, dim=0)
 
         pdb_file = output_prefix + f"{output}.pdb"
-        
-        
 
         all_CA = []
         all_N = []
@@ -361,7 +359,7 @@ def inference(
                 fp.write(prefix)
                 fp.write("\n".join(lines))
                 fp.write("\nENDMDL\n")
-        
+
         all_CA = torch.stack(all_CA, dim=0)
         all_N = torch.stack(all_N, dim=0)
         all_C = torch.stack(all_C, dim=0)
@@ -373,75 +371,70 @@ def inference(
         torch.save(all_CA, sampled_CA_file)
         gsd_file = output_prefix + f"{output}.gsd"
         save_ovito_traj(sampled_mol, gsd_file, alpha_carbon_lim=all_CA.shape[1])
-        
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evaluate a checkpoint and process data.")
-    
-    parser.add_argument(
-        "-c", "--checkpoint", 
-        help="Checkpoint path", 
-        default="/data/sanjeevr/dig_data/checkpoint-520k.pth"
+    parser = argparse.ArgumentParser(
+        description="Evaluate a checkpoint and process data."
     )
 
     parser.add_argument(
-        "--pdb-id", 
-        default="6lu7", 
-        help="pdb ID"
+        "-c",
+        "--checkpoint",
+        help="Checkpoint path",
+        default="/data/sanjeevr/dig_data/checkpoint-520k.pth",
+    )
+
+    parser.add_argument("--pdb-id", default="6lu7", help="pdb ID")
+
+    parser.add_argument(
+        "-i",
+        "--pkl",
+        default="/data/sanjeevr/dig_data/",
+        help="Path to the dataset pickle file",
+    )
+    parser.add_argument(
+        "-s",
+        "--fasta",
+        default="/data/sanjeevr/dig_data/",
+        help="Path to the dataset fasta file",
+    )
+    parser.add_argument(
+        "-n",
+        "--num-samples",
+        type=int,
+        default=50,
+        help="Number of samples to generate",
     )
 
     parser.add_argument(
-        "-i", "--pkl", 
-        default="/data/sanjeevr/dig_data/", 
-        help="Path to the dataset pickle file"
+        "-b", "--batch-size", type=int, default=50, help="Number of samples to generate"
     )
     parser.add_argument(
-        "-s", "--fasta", 
-        default="/data/sanjeevr/dig_data/", 
-        help="Path to the dataset fasta file"
+        "-p",
+        "--output-prefix",
+        default="./output/",
+        help="Prefix for the output directory",
     )
     parser.add_argument(
-        "-n", "--num-samples", 
-        type=int, 
-        default=50, 
-        help="Number of samples to generate"
+        "--init-state", required=False, help="Path to the initial state"
     )
 
     parser.add_argument(
-        "-b", "--batch-size", 
-        type=int, 
-        default=50, 
-        help="Number of samples to generate"
+        "--use-tqdm", action="store_true", help="Enable tqdm progress bar"
     )
-    parser.add_argument(
-        "-p", "--output-prefix", 
-        default="./output/", 
-        help="Prefix for the output directory"
-    )
-    parser.add_argument(
-        "--init-state", 
-        required=False, 
-        help="Path to the initial state"
-    )
- 
-    parser.add_argument(
-        "--use-tqdm", 
-        action="store_true", 
-        help="Enable tqdm progress bar"
-    )
-    parser.add_argument(
-        "--use-gpu", 
-        action="store_true", 
-        help="Enable GPU usage"
-    )
-    
+    parser.add_argument("--use-gpu", action="store_true", help="Enable GPU usage")
+
     args = parser.parse_args()
-    inference(args.checkpoint,
-                args.pdb_id,
-                args.pkl,
-                args.fasta,
-                args.output_prefix,
-                args.num_samples,
-                args.batch_size,
-                args.init_state,
-                args.use_tqdm,
-                args.use_gpu)
+    inference(
+        args.checkpoint,
+        args.pdb_id,
+        args.pkl,
+        args.fasta,
+        args.output_prefix,
+        args.num_samples,
+        args.batch_size,
+        args.init_state,
+        args.use_tqdm,
+        args.use_gpu,
+    )

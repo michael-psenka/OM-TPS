@@ -14,6 +14,7 @@ from torch_scatter import scatter
 
 import math
 
+
 @torch.jit.script
 def gaussian(x, mean, std):
     pi = 3.14159
@@ -115,8 +116,11 @@ class Graph3DBias(nn.Module):
         )
         if dist_feature_extractor == "gbf" and dist_feature_extractor == "rbf":
             raise ValueError("dist_feature_extractor can only be gbf or rbf")
-        self.dist_feature_extractor = GaussianLayer(self.num_diffusion_timesteps, self.num_kernel, num_edge_types) if dist_feature_extractor == "gbf" \
-                                      else RBF(self.num_diffusion_timesteps, self.num_kernel, num_edge_types)
+        self.dist_feature_extractor = (
+            GaussianLayer(self.num_diffusion_timesteps, self.num_kernel, num_edge_types)
+            if dist_feature_extractor == "gbf"
+            else RBF(self.num_diffusion_timesteps, self.num_kernel, num_edge_types)
+        )
         self.feature_proj = NonLinear(self.num_kernel, rpe_heads)
 
         if self.num_kernel != self.embed_dim:
@@ -138,13 +142,9 @@ class Graph3DBias(nn.Module):
         )
         padding_mask = atoms.eq(0)  # (G, T)
 
-        pos = pos.masked_fill(
-            padding_mask.unsqueeze(-1).to(torch.bool), np.inf
-        )
+        pos = pos.masked_fill(padding_mask.unsqueeze(-1).to(torch.bool), np.inf)
 
-        pos = pos.masked_fill(
-            padding_mask.unsqueeze(-1).to(torch.bool), 0.0
-        )
+        pos = pos.masked_fill(padding_mask.unsqueeze(-1).to(torch.bool), 0.0)
 
         delta_pos = pos.unsqueeze(1) - pos.unsqueeze(2)
         dist = delta_pos.norm(dim=-1).view(-1, n_node, n_node)
@@ -192,7 +192,9 @@ class NodeTaskHead(nn.Module):
         self.v_proj: Callable[[Tensor], Tensor] = nn.Linear(embed_dim, embed_dim)
         self.num_heads = num_heads
         self.scaling = (embed_dim // num_heads) ** -0.5
-        self.force_proj: Callable[[Tensor], Tensor] = nn.Linear(embed_dim, 1, bias=False)
+        self.force_proj: Callable[[Tensor], Tensor] = nn.Linear(
+            embed_dim, 1, bias=False
+        )
 
     def forward(
         self,
@@ -210,7 +212,11 @@ class NodeTaskHead(nn.Module):
         v = self.v_proj(query).view(bsz, n_node, self.num_heads, -1).transpose(1, 2)
 
         if outcell_index is not None:
-            outcell_index = outcell_index.unsqueeze(1).unsqueeze(-1).repeat(1, self.num_heads, 1, embed_dim // self.num_heads)
+            outcell_index = (
+                outcell_index.unsqueeze(1)
+                .unsqueeze(-1)
+                .repeat(1, self.num_heads, 1, embed_dim // self.num_heads)
+            )
             expand_k = torch.gather(k, index=outcell_index, dim=2)
             expand_v = torch.gather(v, index=outcell_index, dim=2)
             k = torch.cat([k, expand_k], dim=2)
@@ -262,10 +268,12 @@ class EquivariantVectorOutput(nn.Module):
             x, v = layer(x, v)
         return v.squeeze(-1)
 
+
 class EquivariantLayerNorm(nn.Module):
     r"""Rotationally-equivariant Vector Layer Normalization
     Expects inputs with shape (N, n, d), where N is batch size, n is vector dimension, d is width/number of vectors.
     """
+
     __constants__ = ["normalized_shape", "elementwise_linear"]
     normalized_shape: Tuple[int, ...]
     eps: float
@@ -290,7 +298,9 @@ class EquivariantLayerNorm(nn.Module):
                 torch.empty(self.normalized_shape, **factory_kwargs)
             )
         else:
-            self.register_parameter("weight", None) # Without bias term to preserve equivariance!
+            self.register_parameter(
+                "weight", None
+            )  # Without bias term to preserve equivariance!
 
         self.reset_parameters()
 
@@ -309,9 +319,7 @@ class EquivariantLayerNorm(nn.Module):
         Based on https://github.com/pytorch/pytorch/issues/25481
         """
         _, s, v = matrix.svd()
-        good = (
-            s > s.max(-1, True).values * s.size(-1) * torch.finfo(s.dtype).eps
-        )
+        good = s > s.max(-1, True).values * s.size(-1) * torch.finfo(s.dtype).eps
         components = good.sum(-1)
         common = components.max()
         unbalanced = common != components.min()
@@ -322,12 +330,10 @@ class EquivariantLayerNorm(nn.Module):
                 good = good[..., :common]
         if unbalanced:
             s = s.where(good, torch.zeros((), device=s.device, dtype=s.dtype))
-        return (v * 1 / torch.sqrt(s + self.eps).unsqueeze(-2)) @ v.transpose(
-            -2, -1
-        )
+        return (v * 1 / torch.sqrt(s + self.eps).unsqueeze(-2)) @ v.transpose(-2, -1)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
-        input = input.to(torch.float64) # Need double precision for accurate inversion.
+        input = input.to(torch.float64)  # Need double precision for accurate inversion.
         input = self.mean_center(input)
         # We use different diagonal elements in case input matrix is approximately zero,
         # in which case all singular values are equal which is problematic for backprop.
@@ -340,14 +346,13 @@ class EquivariantLayerNorm(nn.Module):
         )
         covar = self.covariance(input) + self.eps * reg_matrix
         covar_sqrtinv = self.symsqrtinv(covar)
-        return (covar_sqrtinv @ input).to(
-            self.weight.dtype
-        ) * self.weight.reshape(1, 1, self.normalized_shape[0])
+        return (covar_sqrtinv @ input).to(self.weight.dtype) * self.weight.reshape(
+            1, 1, self.normalized_shape[0]
+        )
 
     def extra_repr(self) -> str:
-        return (
-            "{normalized_shape}, "
-            "elementwise_linear={elementwise_linear}".format(**self.__dict__)
+        return "{normalized_shape}, " "elementwise_linear={elementwise_linear}".format(
+            **self.__dict__
         )
 
 
@@ -380,6 +385,7 @@ class CosineCutoff(nn.Module):
             # remove contributions beyond the cutoff radius
             cutoffs = cutoffs * (distances < self.cutoff_upper).float()
             return cutoffs
+
 
 class ExpNormalSmearing(nn.Module):
     def __init__(self, cutoff_lower=0.0, cutoff_upper=5.0, num_rbf=64, trainable=False):
@@ -424,11 +430,12 @@ class ExpNormalSmearing(nn.Module):
             * (torch.exp(self.alpha * (-dist + self.cutoff_lower)) - self.means) ** 2
         )
 
+
 class Distance(nn.Module):
     def __init__(
         self,
-        cutoff_lower=0.,
-        cutoff_upper=5.,
+        cutoff_lower=0.0,
+        cutoff_upper=5.0,
         max_num_neighbors=32,
         return_vecs=True,
         loop=True,
@@ -475,14 +482,14 @@ class Distance(nn.Module):
 class EquivariantMultiHeadAttention(MessagePassing):
     def __init__(
         self,
-        hidden_channels = 256,
-        num_rbf = 64,
-        distance_influence = "both",
-        num_heads = 8,
-        activation = nn.SiLU,
-        attn_activation = "silu",
-        cutoff_lower = 0.,
-        cutoff_upper = 5.,
+        hidden_channels=256,
+        num_rbf=64,
+        distance_influence="both",
+        num_heads=8,
+        activation=nn.SiLU,
+        attn_activation="silu",
+        cutoff_lower=0.0,
+        cutoff_upper=5.0,
     ):
         super(EquivariantMultiHeadAttention, self).__init__(aggr="add", node_dim=0)
         assert hidden_channels % num_heads == 0, (
@@ -645,7 +652,6 @@ class GatedEquivariantBlock(nn.Module):
 
         self.vec1_proj = nn.Linear(hidden_channels, hidden_channels, bias=False)
         self.vec2_proj = nn.Linear(hidden_channels, out_channels, bias=False)
-
 
         act_class_mapping = {
             "silu": nn.SiLU,

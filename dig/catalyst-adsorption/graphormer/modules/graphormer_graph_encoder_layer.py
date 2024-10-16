@@ -138,8 +138,8 @@ class GraphormerGraphEncoderLayer(nn.Module):
         self_attn_mask: Optional[torch.Tensor] = None,
         self_attn_padding_mask: Optional[torch.Tensor] = None,
         need_weights=False,
-        expand_mask = None,
-        outcell_index = None,
+        expand_mask=None,
+        outcell_index=None,
     ):
         """
         LayerNorm is applied either before or after the self-attention/ffn

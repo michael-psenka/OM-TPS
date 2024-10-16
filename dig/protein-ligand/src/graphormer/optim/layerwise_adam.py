@@ -16,6 +16,7 @@ from omegaconf import II, OmegaConf
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class LayerwiseAdamConfig(FairseqDataclass):
     adam_betas: Any = field(
@@ -38,11 +39,14 @@ class LayerwiseAdamConfig(FairseqDataclass):
 
     lr_scale_decay: float = field(default=0.65)
 
+
 @register_optimizer("layerwise_adam", dataclass=LayerwiseAdamConfig)
 class LayerwiseAdam(FairseqAdam):
     def __init__(self, cfg: FairseqAdamConfig, params):
         self.cfg = cfg
-        self._optimizer = Adam(params, lr_scale_decay=cfg.lr_scale_decay, **self.optimizer_config)
+        self._optimizer = Adam(
+            params, lr_scale_decay=cfg.lr_scale_decay, **self.optimizer_config
+        )
 
 
 class LRManager:

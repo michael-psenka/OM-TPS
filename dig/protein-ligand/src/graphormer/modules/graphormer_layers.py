@@ -66,9 +66,13 @@ class GraphNodeFeature(nn.Module):
             + self.out_degree_encoder(out_degree)
         )
 
-        graph_token_feature = self.graph_token.weight.unsqueeze(0).repeat(n_graph, 1, 1) # virtaul graph token
+        graph_token_feature = self.graph_token.weight.unsqueeze(0).repeat(
+            n_graph, 1, 1
+        )  # virtaul graph token
 
-        graph_node_feature = torch.cat([graph_token_feature, node_feature], dim=1) # [n_graph, n_node+1, n_hidden]
+        graph_node_feature = torch.cat(
+            [graph_token_feature, node_feature], dim=1
+        )  # [n_graph, n_node+1, n_hidden]
 
         return graph_node_feature
 
@@ -189,7 +193,9 @@ class GraphAttnBias(nn.Module):
 
         # spatial pos [n_graph, n_node, n_node]
         # [n_graph, n_node, n_node, n_head] -> [n_graph, n_head, n_node, n_node]
-        spatial_pos_bias = self.spatial_pos_encoder(spatial_pos).permute(0, 3, 1, 2) # [n_graph, n_head, n_node, n_node]
+        spatial_pos_bias = self.spatial_pos_encoder(spatial_pos).permute(
+            0, 3, 1, 2
+        )  # [n_graph, n_head, n_node, n_node]
         graph_attn_bias[:, :, 1:, 1:] = graph_attn_bias[:, :, 1:, 1:] + spatial_pos_bias
 
         # reset spatial pos here
@@ -209,16 +215,18 @@ class GraphAttnBias(nn.Module):
 
             # [n_graph, n_node, n_node, max_dist, n_head]
             edge_input = self.edge_encoder(edge_input).mean(-2)
-            max_dist = edge_input.size(-2) # max_dist
+            max_dist = edge_input.size(-2)  # max_dist
             edge_input_flat = edge_input.permute(3, 0, 1, 2, 4).reshape(
                 max_dist, -1, self.num_heads
-            ) # [max_dist, n_graph*n_node*n_node, n_head]
+            )  # [max_dist, n_graph*n_node*n_node, n_head]
             edge_input_flat = torch.bmm(
                 edge_input_flat,
                 self.edge_dis_encoder.weight.reshape(
                     -1, self.num_heads, self.num_heads
-                )[:max_dist, :, :], # [max_dist, n_head, n_head]
-            ) # [max_dist, n_graph*n_node*n_node, n_head]
+                )[
+                    :max_dist, :, :
+                ],  # [max_dist, n_head, n_head]
+            )  # [max_dist, n_graph*n_node*n_node, n_head]
             edge_input = edge_input_flat.reshape(
                 max_dist, n_graph, n_node, n_node, self.num_heads
             ).permute(1, 2, 3, 0, 4)

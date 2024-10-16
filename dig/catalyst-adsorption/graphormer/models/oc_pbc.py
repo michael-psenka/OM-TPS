@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from ..modules.graphormer_3d_layer import NonLinear, GaussianLayer, RBF
 
+
 class Graph3DBiasPBCCutoff(nn.Module):
     """
     Compute 3D attention bias according to the position information for each head.
@@ -33,10 +34,16 @@ class Graph3DBiasPBCCutoff(nn.Module):
         )
         if dist_feature_extractor == "gbf" and dist_feature_extractor == "rbf":
             raise ValueError("dist_feature_extractor can only be gbf or rbf")
-        self.dist_feature_extractor = GaussianLayer(50, self.num_kernel, num_edge_types) if dist_feature_extractor == "gbf" \
-                                      else RBF(50, self.num_kernel, num_edge_types)
-        self.dist_feature_extractor_init = GaussianLayer(50, self.num_kernel, num_edge_types) if dist_feature_extractor == "gbf" \
-                                      else RBF(50, self.num_kernel, num_edge_types)
+        self.dist_feature_extractor = (
+            GaussianLayer(50, self.num_kernel, num_edge_types)
+            if dist_feature_extractor == "gbf"
+            else RBF(50, self.num_kernel, num_edge_types)
+        )
+        self.dist_feature_extractor_init = (
+            GaussianLayer(50, self.num_kernel, num_edge_types)
+            if dist_feature_extractor == "gbf"
+            else RBF(50, self.num_kernel, num_edge_types)
+        )
         self.feature_proj = NonLinear(self.num_kernel, rpe_heads)
 
         if self.num_kernel != self.embed_dim:
@@ -44,26 +51,31 @@ class Graph3DBiasPBCCutoff(nn.Module):
         else:
             self.edge_proj = None
 
-    def get_attn_bias(self, pos, padding_mask, expand_pos, expand_mask, n_node, expand_n_node, edge_types, t, is_init):
-        pos = pos.masked_fill(
-            padding_mask.unsqueeze(-1).to(torch.bool), 0.0
-        )
+    def get_attn_bias(
+        self,
+        pos,
+        padding_mask,
+        expand_pos,
+        expand_mask,
+        n_node,
+        expand_n_node,
+        edge_types,
+        t,
+        is_init,
+    ):
+        pos = pos.masked_fill(padding_mask.unsqueeze(-1).to(torch.bool), 0.0)
 
         expand_pos = expand_pos.masked_fill(
             expand_mask.unsqueeze(-1).to(torch.bool), 0.0
         )
-        expand_pos = torch.cat([pos, expand_pos], dim=1)    
+        expand_pos = torch.cat([pos, expand_pos], dim=1)
 
-        delta_pos = pos.unsqueeze(2) - expand_pos.unsqueeze(1) # B x T x (expand T) x 3
+        delta_pos = pos.unsqueeze(2) - expand_pos.unsqueeze(1)  # B x T x (expand T) x 3
         dist = delta_pos.norm(dim=-1).view(-1, n_node, expand_n_node)
         full_mask = torch.cat([padding_mask, expand_mask], dim=-1)
-        #ic(full_mask.size(), dist.size(), padding_mask.size(), delta_pos.size())
-        dist = dist.masked_fill(
-            full_mask.unsqueeze(1).to(torch.bool), 1.0
-        )
-        dist = dist.masked_fill(
-            padding_mask.unsqueeze(-1).to(torch.bool), 1.0
-        )
+        # ic(full_mask.size(), dist.size(), padding_mask.size(), delta_pos.size())
+        dist = dist.masked_fill(full_mask.unsqueeze(1).to(torch.bool), 1.0)
+        dist = dist.masked_fill(padding_mask.unsqueeze(-1).to(torch.bool), 1.0)
         delta_pos_norm = delta_pos / (dist.unsqueeze(-1) + 1e-5)
 
         if is_init:
@@ -88,7 +100,6 @@ class Graph3DBiasPBCCutoff(nn.Module):
         merge_edge_features = self.edge_proj(sum_edge_features)
         return dist, delta_pos_norm, graph_attn_bias, merge_edge_features
 
-
     def forward(self, batched_data):
         init_pos, pos, x, t, expand_pos, init_expand_pos, expand_mask, outcell_index = (
             batched_data["init_pos"],
@@ -106,15 +117,33 @@ class Graph3DBiasPBCCutoff(nn.Module):
         expand_atoms = torch.gather(atoms, dim=1, index=outcell_index)
         expand_atoms = torch.cat([atoms, expand_atoms], dim=1)
         expand_n_node = expand_atoms.size()[1]
-        edge_types = atoms.view(n_graph, n_node, 1) * self.num_atom_types + expand_atoms.view(
-            n_graph, 1, expand_n_node
-        )
+        edge_types = atoms.view(
+            n_graph, n_node, 1
+        ) * self.num_atom_types + expand_atoms.view(n_graph, 1, expand_n_node)
         padding_mask = atoms.eq(0)  # (G, T)
 
         dist, delta_pos, graph_attn_bias, merge_edge_features = self.get_attn_bias(
-            pos, padding_mask, expand_pos, expand_mask, n_node, expand_n_node, edge_types, t, False)
+            pos,
+            padding_mask,
+            expand_pos,
+            expand_mask,
+            n_node,
+            expand_n_node,
+            edge_types,
+            t,
+            False,
+        )
         _, _, init_graph_attn_bias, init_merge_edge_features = self.get_attn_bias(
-            init_pos, padding_mask, init_expand_pos, expand_mask, n_node, expand_n_node, edge_types, t, True)
+            init_pos,
+            padding_mask,
+            init_expand_pos,
+            expand_mask,
+            n_node,
+            expand_n_node,
+            edge_types,
+            t,
+            True,
+        )
 
         return {
             "dist": dist,

@@ -15,6 +15,7 @@ import pickle as pkl
 import os
 import time
 
+
 @dataclass
 class DiffusionLossConfig(FairseqDataclass):
     valid_times: int = field(
@@ -34,7 +35,18 @@ class DiffusionLoss(FairseqCriterion):
         if model.training:
             # output = model.get_training_output(**sample["net_input"])
             x = torch.randn(3, 3, requires_grad=True).mean()
-            return x, 1, {'loss': torch.tensor(0), 'sample_size': 1, 'nsentences': 1, 'rmsd': torch.tensor(0), 'rmsd_lig': torch.tensor(0), 'rmsd_pro': torch.tensor(0)}
+            return (
+                x,
+                1,
+                {
+                    "loss": torch.tensor(0),
+                    "sample_size": 1,
+                    "nsentences": 1,
+                    "rmsd": torch.tensor(0),
+                    "rmsd_lig": torch.tensor(0),
+                    "rmsd_pro": torch.tensor(0),
+                },
+            )
         else:
             with torch.no_grad():
                 output = model.get_sampling_output(
@@ -56,14 +68,14 @@ class DiffusionLoss(FairseqCriterion):
             rmsd = torch.sum(persample_rmsd)
             logging_output["rmsd"] = rmsd.data
 
-        if "persample_rmsd_lig" in output and output['persample_rmsd_lig'] is not None:
-            persample_rmsd_lig = output['persample_rmsd_lig']
+        if "persample_rmsd_lig" in output and output["persample_rmsd_lig"] is not None:
+            persample_rmsd_lig = output["persample_rmsd_lig"]
             rmsd_lig = torch.sum(persample_rmsd_lig)
-            logging_output['rmsd_lig'] = rmsd_lig.data
-        if "persample_rmsd_pro" in output and output['persample_rmsd_pro'] is not None:
-            persample_rmsd_pro = output['persample_rmsd_pro']
+            logging_output["rmsd_lig"] = rmsd_lig.data
+        if "persample_rmsd_pro" in output and output["persample_rmsd_pro"] is not None:
+            persample_rmsd_pro = output["persample_rmsd_pro"]
             rmsd_pro = torch.sum(persample_rmsd_pro)
-            logging_output['rmsd_pro'] = rmsd_pro.data
+            logging_output["rmsd_pro"] = rmsd_pro.data
 
         return loss, sample_size, logging_output
 
@@ -79,11 +91,14 @@ class DiffusionLoss(FairseqCriterion):
         if rmsd_sum > 0:
             metrics.log_scalar("rmsd", rmsd_sum / sample_size, sample_size, round=6)
         if rmsd_lig_sum > 0:
-            metrics.log_scalar("rmsd_lig", rmsd_lig_sum / sample_size, sample_size, round=6)
+            metrics.log_scalar(
+                "rmsd_lig", rmsd_lig_sum / sample_size, sample_size, round=6
+            )
         if rmsd_pro_sum > 0:
-            metrics.log_scalar("rmsd_pro", rmsd_pro_sum / sample_size, sample_size, round=6)
+            metrics.log_scalar(
+                "rmsd_pro", rmsd_pro_sum / sample_size, sample_size, round=6
+            )
 
     @staticmethod
     def logging_outputs_can_be_summed() -> bool:
         return True
-

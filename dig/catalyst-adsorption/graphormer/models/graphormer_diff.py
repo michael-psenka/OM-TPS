@@ -35,6 +35,7 @@ import pickle as pkl
 
 from scipy import integrate
 
+
 @torch.jit.script
 def mask_after_k_persample(n_sample: int, n_len: int, persample_k: torch.Tensor):
     assert persample_k.shape[0] == n_sample
@@ -119,36 +120,59 @@ class CellExpander:
         self.cutoff = cutoff
 
     def expand(self, batched_data):
-        pos = batched_data["pos"] # B x T x 3
-        init_pos = batched_data["init_pos"] # B x T x 3
+        pos = batched_data["pos"]  # B x T x 3
+        init_pos = batched_data["init_pos"]  # B x T x 3
         atoms = batched_data["x"][:, :, 0]
         batch_size, max_num_atoms = pos.size()[:2]
-        cell = batched_data["cell"] # B x 3 x 3
-        cell_tensor = torch.tensor(self.cells, device=pos.device).to(cell.dtype).unsqueeze(0).expand(batch_size, -1, -1)
-        offset = torch.bmm(cell_tensor, cell) # B x 8 x 3
-        expand_pos = pos.unsqueeze(1) + offset.unsqueeze(2) # B x 8 x T x 3
-        expand_pos = expand_pos.view(batch_size, -1, 3) # B x (8 x T) x 3
-        init_expand_pos = init_pos.unsqueeze(1) + offset.unsqueeze(2) # B x 8 x T x 3
-        init_expand_pos = init_expand_pos.view(batch_size, -1, 3) # B x (8 x T) x 3
-        expand_dist = torch.norm(pos.unsqueeze(2) - expand_pos.unsqueeze(1), p=2, dim=-1) # B x T x (8 x T)
-        expand_mask = expand_dist < self.cutoff # B x T x (8 x T)
+        cell = batched_data["cell"]  # B x 3 x 3
+        cell_tensor = (
+            torch.tensor(self.cells, device=pos.device)
+            .to(cell.dtype)
+            .unsqueeze(0)
+            .expand(batch_size, -1, -1)
+        )
+        offset = torch.bmm(cell_tensor, cell)  # B x 8 x 3
+        expand_pos = pos.unsqueeze(1) + offset.unsqueeze(2)  # B x 8 x T x 3
+        expand_pos = expand_pos.view(batch_size, -1, 3)  # B x (8 x T) x 3
+        init_expand_pos = init_pos.unsqueeze(1) + offset.unsqueeze(2)  # B x 8 x T x 3
+        init_expand_pos = init_expand_pos.view(batch_size, -1, 3)  # B x (8 x T) x 3
+        expand_dist = torch.norm(
+            pos.unsqueeze(2) - expand_pos.unsqueeze(1), p=2, dim=-1
+        )  # B x T x (8 x T)
+        expand_mask = expand_dist < self.cutoff  # B x T x (8 x T)
         expand_mask = torch.masked_fill(expand_mask, atoms.eq(0).unsqueeze(-1), False)
-        expand_mask = (torch.sum(expand_mask, dim=1) > 0) & (~(atoms.eq(0).repeat(1, 8))) # B x (8 x T)
+        expand_mask = (torch.sum(expand_mask, dim=1) > 0) & (
+            ~(atoms.eq(0).repeat(1, 8))
+        )  # B x (8 x T)
         expand_len = torch.sum(expand_mask, dim=-1)
         max_expand_len = torch.max(expand_len)
-        outcell_index = torch.zeros([batch_size, max_expand_len], dtype=torch.long, device=pos.device)
-        expand_pos_compressed = torch.zeros([batch_size, max_expand_len, 3], dtype=pos.dtype, device=pos.device)
-        init_expand_pos_compressed = torch.zeros([batch_size, max_expand_len, 3], dtype=pos.dtype, device=pos.device)
-        outcell_all_index = torch.arange(max_num_atoms, dtype=torch.long, device=pos.device).repeat(len(self.cells))
+        outcell_index = torch.zeros(
+            [batch_size, max_expand_len], dtype=torch.long, device=pos.device
+        )
+        expand_pos_compressed = torch.zeros(
+            [batch_size, max_expand_len, 3], dtype=pos.dtype, device=pos.device
+        )
+        init_expand_pos_compressed = torch.zeros(
+            [batch_size, max_expand_len, 3], dtype=pos.dtype, device=pos.device
+        )
+        outcell_all_index = torch.arange(
+            max_num_atoms, dtype=torch.long, device=pos.device
+        ).repeat(len(self.cells))
         for i in range(batch_size):
-           outcell_index[i, :expand_len[i]] = outcell_all_index[expand_mask[i]]
-           expand_pos_compressed[i, :expand_len[i], :] = expand_pos[i, expand_mask[i], :]
-           init_expand_pos_compressed[i, :expand_len[i], :] = init_expand_pos[i, expand_mask[i], :]
+            outcell_index[i, : expand_len[i]] = outcell_all_index[expand_mask[i]]
+            expand_pos_compressed[i, : expand_len[i], :] = expand_pos[
+                i, expand_mask[i], :
+            ]
+            init_expand_pos_compressed[i, : expand_len[i], :] = init_expand_pos[
+                i, expand_mask[i], :
+            ]
         batched_data["expand_pos"] = expand_pos_compressed
         batched_data["init_expand_pos"] = init_expand_pos_compressed
         batched_data["expand_len"] = expand_len
         batched_data["outcell_index"] = outcell_index
-        batched_data["expand_mask"] = mask_after_k_persample(batch_size, max_expand_len, expand_len)
+        batched_data["expand_mask"] = mask_after_k_persample(
+            batch_size, max_expand_len, expand_len
+        )
 
         return batched_data
 
@@ -193,7 +217,12 @@ class GraphormerGraphEncoder(GraphormerGraphEncoderBase):
         if self.pbc_approach == "cutoff":
             max_len = bias.size()[2]
             num_heads = bias.size()[1]
-            outcell_index = batched_data["outcell_index"].unsqueeze(1).unsqueeze(2).repeat(1, num_heads, max_len, 1)
+            outcell_index = (
+                batched_data["outcell_index"]
+                .unsqueeze(1)
+                .unsqueeze(2)
+                .repeat(1, num_heads, max_len, 1)
+            )
             extended_bias = torch.gather(bias[:, :, :, 1:], dim=3, index=outcell_index)
             bias = torch.cat([bias, extended_bias], dim=3)
         if self.use_bonds:
@@ -270,52 +299,72 @@ class GraphormerDiffModelConfig(FairseqDataclass):
         default=2.0e-3, metadata={"help": "beta end for diffusion"}
     )
     diffusion_sampling: str = field(
-        default="ddpm", metadata={"help": "sampling strategy, ddpm or ddim"},
+        default="ddpm",
+        metadata={"help": "sampling strategy, ddpm or ddim"},
     )
     ddim_steps: int = field(
-        default=50, metadata={"help": "sampling steps for ddim"},
+        default=50,
+        metadata={"help": "sampling steps for ddim"},
     )
     ddim_eta: float = field(
-        default=0.0, metadata={"help": "eta for ddim"},
+        default=0.0,
+        metadata={"help": "eta for ddim"},
     )
     num_atom_types: int = field(
-        default=128, metadata={"help": "number of atom types"},
+        default=128,
+        metadata={"help": "number of atom types"},
     )
     dist_feature_extractor: str = field(
-        default="rbf", metadata={"help": "distance feature extractor, can be rbf or gbf"},
+        default="rbf",
+        metadata={"help": "distance feature extractor, can be rbf or gbf"},
     )
     dist_feature_node_scale: float = field(
-        default=1.0, metadata={"help": "scale of distance feature added to node representations"},
+        default=1.0,
+        metadata={"help": "scale of distance feature added to node representations"},
     )
     dist_feature_num_kernels: int = field(
-        default=128, metadata={"help": "number of kernels to extract distance features"},
+        default=128,
+        metadata={"help": "number of kernels to extract distance features"},
     )
     no_diffusion: bool = field(
-        default=False, metadata={"help": "disable diffusion"},
+        default=False,
+        metadata={"help": "disable diffusion"},
     )
     max_pbc_cell_rep_threshold: int = field(
-        default=10, metadata={"help": "number of PBC cell types"},
+        default=10,
+        metadata={"help": "number of PBC cell types"},
     )
     max_num_neighbors_threshold: int = field(
-        default=10, metadata={"help": "maximum number of neighbors in PBC edge graph"},
+        default=10,
+        metadata={"help": "maximum number of neighbors in PBC edge graph"},
     )
     pbc_approach: str = field(
-        default="none", metadata={"help": "PBC for graph construction, can be oc_pbc, cutoff, or none"},
+        default="none",
+        metadata={"help": "PBC for graph construction, can be oc_pbc, cutoff, or none"},
     )
     pbc_cutoff: float = field(
-        default=6.0, metadata={"help": "cutoff for PBC"},
+        default=6.0,
+        metadata={"help": "cutoff for PBC"},
     )
     diffusion_noise_std: float = field(
-        default=1.0, metadata={"help": "noise std for diffusion"},
+        default=1.0,
+        metadata={"help": "noise std for diffusion"},
     )
     remove_head: bool = field(
-        default=False, metadata={"help": "whether to remove force_proj head parameters when loading checkpoints"},
+        default=False,
+        metadata={
+            "help": "whether to remove force_proj head parameters when loading checkpoints"
+        },
     )
     use_bonds: bool = field(
-        default=False, metadata={"help": "whether to use bonds in graph"},
+        default=False,
+        metadata={"help": "whether to use bonds in graph"},
     )
     num_epsilon_estimator: int = field(
-        default=10, metadata={"help": "number of epsilons to sampled for trace estimation in flow ode"},
+        default=10,
+        metadata={
+            "help": "number of epsilons to sampled for trace estimation in flow ode"
+        },
     )
 
 
@@ -339,7 +388,7 @@ class GraphormerDiffModel(FairseqEncoderModel):
                 num_kernel=args.dist_feature_num_kernels,
                 dist_feature_extractor=args.dist_feature_extractor,
                 num_diffusion_timesteps=args.num_diffusion_timesteps,
-                no_share_rpe=False
+                no_share_rpe=False,
             )
         elif self.pbc_approach == "none":
             self.graph_3d_bias = Graph3DBias(
@@ -350,7 +399,7 @@ class GraphormerDiffModel(FairseqEncoderModel):
                 num_kernel=args.dist_feature_num_kernels,
                 dist_feature_extractor=args.dist_feature_extractor,
                 num_diffusion_timesteps=args.num_diffusion_timesteps,
-                no_share_rpe=False
+                no_share_rpe=False,
             )
         else:
             raise ValueError(f"Unknown PBC approach {self.pbc_approach}")
@@ -419,11 +468,17 @@ class GraphormerDiffModel(FairseqEncoderModel):
         extend_n_atoms = attn_bias.size()[-1] - 1
 
         force = self.force_proj(
-            x[:, 1:], attn_bias[:, :, 1:, 1:].reshape(-1, n_atoms, extend_n_atoms), delta_pos, outcell_index
+            x[:, 1:],
+            attn_bias[:, :, 1:, 1:].reshape(-1, n_atoms, extend_n_atoms),
+            delta_pos,
+            outcell_index,
         )
 
         force_delta_pos = self.force_proj_delta_pos(
-            x[:, 1:], attn_bias[:, :, 1:, 1:].reshape(-1, n_atoms, extend_n_atoms), delta_pos, outcell_index
+            x[:, 1:],
+            attn_bias[:, :, 1:, 1:].reshape(-1, n_atoms, extend_n_atoms),
+            delta_pos,
+            outcell_index,
         )
 
         # to avoid memory leak
@@ -500,16 +555,23 @@ class GraphormerDiffModel(FairseqEncoderModel):
                     sigma_t = (
                         0.0
                         if t == 0
-                        else ((1.0 - hat_alpha_t_1) / (1.0 - hat_alpha_t) * beta_t).sqrt()
+                        else (
+                            (1.0 - hat_alpha_t_1) / (1.0 - hat_alpha_t) * beta_t
+                        ).sqrt()
                     )
 
                     # forward
-                    batched_data["ts"] = torch.ones(n_graphs, device=device, dtype=torch.long).fill_(t)
+                    batched_data["ts"] = torch.ones(
+                        n_graphs, device=device, dtype=torch.long
+                    ).fill_(t)
                     force, force_delta_pos = self(batched_data, **kwargs)
                     force = force.detach()
                     force_delta_pos = force_delta_pos.detach()
 
-                    epsilon = torch.zeros_like(batched_data["pos"]).normal_() * self.diffusion_noise_std
+                    epsilon = (
+                        torch.zeros_like(batched_data["pos"]).normal_()
+                        * self.diffusion_noise_std
+                    )
 
                     delta_pos = batched_data["pos"] - batched_data["init_pos"]
                     lig_pos = (
@@ -517,15 +579,26 @@ class GraphormerDiffModel(FairseqEncoderModel):
                     ) / alpha_t.sqrt() + sigma_t * epsilon
 
                     # update positions (only ligand)
-                    batched_data["pos"] = tensor_merge(
-                        lig_mask[:, :, None], lig_pos, delta_pos
-                    ) + batched_data["init_pos"]
+                    batched_data["pos"] = (
+                        tensor_merge(lig_mask[:, :, None], lig_pos, delta_pos)
+                        + batched_data["init_pos"]
+                    )
                     batched_data["pos"] = batched_data["pos"].detach()
             elif self.diffusion_sampling == "ddim":
-                sampled_steps, _ = torch.sort((torch.randperm(self.num_timesteps - 2, dtype=torch.long, device=device) + 1)[:self.ddim_steps - 1])
-                sampled_steps = torch.cat([
-                    sampled_steps,
-                    torch.tensor([self.num_timesteps - 1], device=device).long()])
+                sampled_steps, _ = torch.sort(
+                    (
+                        torch.randperm(
+                            self.num_timesteps - 2, dtype=torch.long, device=device
+                        )
+                        + 1
+                    )[: self.ddim_steps - 1]
+                )
+                sampled_steps = torch.cat(
+                    [
+                        sampled_steps,
+                        torch.tensor([self.num_timesteps - 1], device=device).long(),
+                    ]
+                )
                 for i in range(sampled_steps.shape[0] - 1, 0, -1):
                     t = sampled_steps[i]
                     t_1 = sampled_steps[i - 1]
@@ -533,17 +606,37 @@ class GraphormerDiffModel(FairseqEncoderModel):
                     hat_alpha_t_1 = self.alphas[t_1]
                     alpha_t = hat_alpha_t / hat_alpha_t_1
                     beta_t = 1.0 - alpha_t
-                    sigma_t = self.ddim_eta * ((1.0 - hat_alpha_t_1) / (1.0 - hat_alpha_t) * beta_t).sqrt()
+                    sigma_t = (
+                        self.ddim_eta
+                        * ((1.0 - hat_alpha_t_1) / (1.0 - hat_alpha_t) * beta_t).sqrt()
+                    )
 
                     # forward
-                    batched_data["ts"] = torch.zeros(n_graphs, device=device, dtype=torch.long).fill_(t)
-                    force, force_delta_pos = self.forward(batched_data, sampling=False, original_pos=None, **kwargs)
+                    batched_data["ts"] = torch.zeros(
+                        n_graphs, device=device, dtype=torch.long
+                    ).fill_(t)
+                    force, force_delta_pos = self.forward(
+                        batched_data, sampling=False, original_pos=None, **kwargs
+                    )
                     lig_pos = batched_data["pos"] - batched_data["init_pos"]
-                    x_0_pred = (lig_pos - (1.0 - hat_alpha_t).sqrt() * force) / hat_alpha_t.sqrt()
-                    epsilon = torch.zeros_like(lig_pos).normal_() * self.diffusion_noise_std
-                    lig_pos = hat_alpha_t_1.sqrt() * x_0_pred +\
-                        (1.0 - hat_alpha_t_1 - sigma_t ** 2).sqrt() * (lig_pos - hat_alpha_t.sqrt() * x_0_pred) / (1.0 - hat_alpha_t).sqrt() + sigma_t * epsilon
-                    batched_data["pos"] = tensor_merge(lig_mask[:, :, None], lig_pos + batched_data["init_pos"], batched_data["pos"])
+                    x_0_pred = (
+                        lig_pos - (1.0 - hat_alpha_t).sqrt() * force
+                    ) / hat_alpha_t.sqrt()
+                    epsilon = (
+                        torch.zeros_like(lig_pos).normal_() * self.diffusion_noise_std
+                    )
+                    lig_pos = (
+                        hat_alpha_t_1.sqrt() * x_0_pred
+                        + (1.0 - hat_alpha_t_1 - sigma_t**2).sqrt()
+                        * (lig_pos - hat_alpha_t.sqrt() * x_0_pred)
+                        / (1.0 - hat_alpha_t).sqrt()
+                        + sigma_t * epsilon
+                    )
+                    batched_data["pos"] = tensor_merge(
+                        lig_mask[:, :, None],
+                        lig_pos + batched_data["init_pos"],
+                        batched_data["pos"],
+                    )
                     batched_data["pos"] = batched_data["pos"].detach()
 
                 # forward for last step
@@ -551,19 +644,33 @@ class GraphormerDiffModel(FairseqEncoderModel):
                 hat_alpha_t = self.alphas[t]
 
                 # forward
-                batched_data["ts"] = torch.zeros(n_graphs, device=device, dtype=torch.long).fill_(t)
-                force, force_delta_pos = self.forward(batched_data, sampling=False, original_pos=None, **kwargs)
+                batched_data["ts"] = torch.zeros(
+                    n_graphs, device=device, dtype=torch.long
+                ).fill_(t)
+                force, force_delta_pos = self.forward(
+                    batched_data, sampling=False, original_pos=None, **kwargs
+                )
                 lig_pos = batched_data["pos"] - batched_data["init_pos"]
-                x_0_pred = (lig_pos - (1.0 - hat_alpha_t).sqrt() * force) / hat_alpha_t.sqrt()
-                batched_data["pos"] = tensor_merge(lig_mask[:, :, None], x_0_pred + batched_data["init_pos"], batched_data["pos"])
+                x_0_pred = (
+                    lig_pos - (1.0 - hat_alpha_t).sqrt() * force
+                ) / hat_alpha_t.sqrt()
+                batched_data["pos"] = tensor_merge(
+                    lig_mask[:, :, None],
+                    x_0_pred + batched_data["init_pos"],
+                    batched_data["pos"],
+                )
                 batched_data["pos"] = batched_data["pos"].detach()
             else:
-                raise ValueError(f"Unknown diffusion sampling strategy {self.args.diffusion_sampling}. Support only ddim and ddpm.")
+                raise ValueError(
+                    f"Unknown diffusion sampling strategy {self.args.diffusion_sampling}. Support only ddim and ddpm."
+                )
         else:
             batched_data["ts"] = torch.zeros(n_graphs, device=device, dtype=torch.long)
             _, lig_pos = self.forward(batched_data, **kwargs)
             lig_pos = lig_pos.detach()
-            batched_data["pos"] = tensor_merge(lig_mask[:, :, None], lig_pos + init_pos, batched_data["pos"])
+            batched_data["pos"] = tensor_merge(
+                lig_mask[:, :, None], lig_pos + init_pos, batched_data["pos"]
+            )
 
         pred_pos = batched_data["pos"].clone()
 
@@ -583,13 +690,17 @@ class GraphormerDiffModel(FairseqEncoderModel):
 
         rmsd = torch.sqrt(torch.sum(loss, dim=-2) / batched_data["lnode"][:, None])
         if not self.no_diffusion:
-            delta_pos_rmsd = torch.sqrt(torch.sum(delta_pos_loss, dim=-2) / batched_data["lnode"][:, None])
+            delta_pos_rmsd = torch.sqrt(
+                torch.sum(delta_pos_loss, dim=-2) / batched_data["lnode"][:, None]
+            )
 
         return {
             "pred_pos": pred_pos + pos_center,
             "persample_loss": loss,
             "persample_rmsd": rmsd,
-            "persample_delta_pos_rmsd": delta_pos_rmsd if not self.no_diffusion else torch.zeros_like(rmsd),
+            "persample_delta_pos_rmsd": (
+                delta_pos_rmsd if not self.no_diffusion else torch.zeros_like(rmsd)
+            ),
             "sample_size": n_graphs,
         }
 
@@ -623,9 +734,15 @@ class GraphormerDiffModel(FairseqEncoderModel):
 
         if not self.no_diffusion:
             a_pos_scale = a_pos.sqrt().masked_fill((~lig_mask)[:, :, None], 1.0)
-            pos_perturbed = batched_data["init_pos"] + delta_pos * a_pos_scale + pos_noise * (1.0 - a_pos).sqrt()
+            pos_perturbed = (
+                batched_data["init_pos"]
+                + delta_pos * a_pos_scale
+                + pos_noise * (1.0 - a_pos).sqrt()
+            )
         else:
-            pos_perturbed = tensor_merge(lig_mask.unsqueeze(-1), pos_noise + batched_data["init_pos"], pos)
+            pos_perturbed = tensor_merge(
+                lig_mask.unsqueeze(-1), pos_noise + batched_data["init_pos"], pos
+            )
         batched_data["pos"] = pos_perturbed.type_as(self.alphas)
 
         if not self.no_diffusion:
@@ -654,10 +771,14 @@ class GraphormerDiffModel(FairseqEncoderModel):
         loss = loss.masked_fill((~lig_mask)[:, :, None], 0.0)
         if not self.no_diffusion:
             delta_pos_loss = delta_pos_loss.masked_fill((~lig_mask)[:, :, None], 0.0)
-            delta_pos_rmsd = torch.sqrt(torch.sum(delta_pos_loss, dim=1) / batched_data["lnode"].unsqueeze(1))
+            delta_pos_rmsd = torch.sqrt(
+                torch.sum(delta_pos_loss, dim=1) / batched_data["lnode"].unsqueeze(1)
+            )
         else:
             delta_pos_loss = torch.zeros_like(loss)
-            delta_pos_rmsd = torch.sqrt(torch.sum(delta_pos_loss, dim=1) / batched_data["lnode"].unsqueeze(1))
+            delta_pos_rmsd = torch.sqrt(
+                torch.sum(delta_pos_loss, dim=1) / batched_data["lnode"].unsqueeze(1)
+            )
 
         return {
             "persample_loss": loss,
@@ -666,7 +787,6 @@ class GraphormerDiffModel(FairseqEncoderModel):
             "persample_delta_pos_rmsd": delta_pos_rmsd,
             "sample_size": n_graphs,
         }
-
 
     def get_flow_ode_output(self, batched_data, offset=None, **kwargs):
         make_masks(batched_data)
@@ -677,15 +797,27 @@ class GraphormerDiffModel(FairseqEncoderModel):
 
         if offset is not None:
             ads_mask = (batched_data["tags"] == 3).unsqueeze(-1)
-            cell = batched_data["cell"].transpose(1, 2).float() # B x 3 x 3
-            offseted_init_pos = tensor_merge(ads_mask, batched_data["init_pos"] + offset.unsqueeze(1), batched_data["init_pos"]).transpose(1, 2).float() # B x 3 x T
-            solv = torch.linalg.solve(cell, offseted_init_pos).transpose(1, 2) # B x T x 3
+            cell = batched_data["cell"].transpose(1, 2).float()  # B x 3 x 3
+            offseted_init_pos = (
+                tensor_merge(
+                    ads_mask,
+                    batched_data["init_pos"] + offset.unsqueeze(1),
+                    batched_data["init_pos"],
+                )
+                .transpose(1, 2)
+                .float()
+            )  # B x 3 x T
+            solv = torch.linalg.solve(cell, offseted_init_pos).transpose(
+                1, 2
+            )  # B x T x 3
             solv[:, :, 0] %= 1.0
             solv[:, :, 0] %= 1.0
             solv[:, :, 1] %= 1.0
             solv[:, :, 1] %= 1.0
             offseted_init_pos = torch.matmul(solv, cell.transpose(1, 2))
-            batched_data["init_pos"] = tensor_merge(ads_mask, offseted_init_pos, init_pos_clone)
+            batched_data["init_pos"] = tensor_merge(
+                ads_mask, offseted_init_pos, init_pos_clone
+            )
 
         init_center = get_init_center_pos(batched_data)
         batched_data["pos"] -= init_center
@@ -698,8 +830,12 @@ class GraphormerDiffModel(FairseqEncoderModel):
 
         def score_fn(x_pos, batched_data, t, max_num_moveable):
             pos_clone = batched_data["pos"].clone()
-            batched_data["ts"] = torch.ones(n_graphs, device=device, dtype=torch.long).fill_(t)
-            batched_data["pos"] = tensor_merge_truncated(lig_mask.unsqueeze(-1), x_pos, pos_clone, max_num_moveable)
+            batched_data["ts"] = torch.ones(
+                n_graphs, device=device, dtype=torch.long
+            ).fill_(t)
+            batched_data["pos"] = tensor_merge_truncated(
+                lig_mask.unsqueeze(-1), x_pos, pos_clone, max_num_moveable
+            )
             a = self.alphas[t]
             ret, _ = self(batched_data, **kwargs)
             ret = -1.0 * ret / (1.0 - a).sqrt()
@@ -707,42 +843,83 @@ class GraphormerDiffModel(FairseqEncoderModel):
             return ret[:, :max_num_moveable, :]
 
         def ode_fn(t, pos_and_p_numpy):
-            with torch.set_grad_enabled(True) and torch.autograd.set_detect_anomaly(True):
+            with torch.set_grad_enabled(True) and torch.autograd.set_detect_anomaly(
+                True
+            ):
                 beta = self.betas[t]
                 pos_and_p = pos_and_p_numpy.clone()
-                pos = torch.nn.parameter.Parameter(pos_and_p[:-n_graphs].reshape(n_graphs, max_num_moveable, 3).clone(), requires_grad=True)
+                pos = torch.nn.parameter.Parameter(
+                    pos_and_p[:-n_graphs]
+                    .reshape(n_graphs, max_num_moveable, 3)
+                    .clone(),
+                    requires_grad=True,
+                )
 
                 if self.num_epsilon_estimator <= 0:
-                    reverse_flow_ode_fn = lambda pos: (-0.5 * beta * score_fn(pos, batched_data, t, max_num_moveable) - \
-                        (1.0 - (1.0 - beta).sqrt()) * (pos - batched_data["init_pos"][:, :max_num_moveable])).\
-                        masked_fill((~lig_mask[:, :max_num_moveable]).unsqueeze(-1), 0.0)
+                    reverse_flow_ode_fn = lambda pos: (
+                        -0.5 * beta * score_fn(pos, batched_data, t, max_num_moveable)
+                        - (1.0 - (1.0 - beta).sqrt())
+                        * (pos - batched_data["init_pos"][:, :max_num_moveable])
+                    ).masked_fill((~lig_mask[:, :max_num_moveable]).unsqueeze(-1), 0.0)
                     reverse_flow_ode = reverse_flow_ode_fn(pos)
                     jacob = torch.autograd.functional.jacobian(reverse_flow_ode_fn, pos)
-                    jacob = jacob.reshape(n_graphs, max_num_moveable * 3, n_graphs, max_num_moveable, 3)
-                    jacob = jacob.transpose(1, 2).view(n_graphs, n_graphs, max_num_moveable, 3, max_num_moveable, 3)
+                    jacob = jacob.reshape(
+                        n_graphs, max_num_moveable * 3, n_graphs, max_num_moveable, 3
+                    )
+                    jacob = jacob.transpose(1, 2).view(
+                        n_graphs, n_graphs, max_num_moveable, 3, max_num_moveable, 3
+                    )
                     jacob = jacob[index, index]
-                    jacob = jacob.reshape(n_graphs, 3 * max_num_moveable, 3 * max_num_moveable)[:, trace_index, trace_index]
+                    jacob = jacob.reshape(
+                        n_graphs, 3 * max_num_moveable, 3 * max_num_moveable
+                    )[:, trace_index, trace_index]
                     trace = torch.sum(jacob, dim=-1)
                 else:
                     estimated_traces = []
-                    for_estimator = -0.5 * beta * score_fn(pos, batched_data, t, max_num_moveable)
-                    reverse_flow_ode = (for_estimator - (1.0 - (1.0 - beta).sqrt()) * (pos - batched_data["init_pos"][:, :max_num_moveable]))
-                    for_estimator = for_estimator.masked_fill((~lig_mask[:, :max_num_moveable]).unsqueeze(-1), 0.0)
-                    reverse_flow_ode = reverse_flow_ode.masked_fill((~lig_mask[:, :max_num_moveable]).unsqueeze(-1), 0.0)
+                    for_estimator = (
+                        -0.5 * beta * score_fn(pos, batched_data, t, max_num_moveable)
+                    )
+                    reverse_flow_ode = for_estimator - (1.0 - (1.0 - beta).sqrt()) * (
+                        pos - batched_data["init_pos"][:, :max_num_moveable]
+                    )
+                    for_estimator = for_estimator.masked_fill(
+                        (~lig_mask[:, :max_num_moveable]).unsqueeze(-1), 0.0
+                    )
+                    reverse_flow_ode = reverse_flow_ode.masked_fill(
+                        (~lig_mask[:, :max_num_moveable]).unsqueeze(-1), 0.0
+                    )
                     for _ in range(self.num_epsilon_estimator):
-                        epsilon = torch.zeros_like(batched_data["pos"][:, :max_num_moveable, :]).normal_()
-                        drift_prod_sum = torch.sum(torch.sum(epsilon * for_estimator, dim=[1, 2]))
-                        grad = torch.autograd.grad(drift_prod_sum, pos, retain_graph=True)[0]
-                        grad = grad.masked_fill((~lig_mask[:, :max_num_moveable]).unsqueeze(-1), 0.0)
-                        estimated_trace = torch.sum(grad * epsilon, dim=[1, 2]) - (1.0 - (1.0 - beta).sqrt()) * torch.sum(lig_mask[:, :max_num_moveable] * 3.0, dim=1)
+                        epsilon = torch.zeros_like(
+                            batched_data["pos"][:, :max_num_moveable, :]
+                        ).normal_()
+                        drift_prod_sum = torch.sum(
+                            torch.sum(epsilon * for_estimator, dim=[1, 2])
+                        )
+                        grad = torch.autograd.grad(
+                            drift_prod_sum, pos, retain_graph=True
+                        )[0]
+                        grad = grad.masked_fill(
+                            (~lig_mask[:, :max_num_moveable]).unsqueeze(-1), 0.0
+                        )
+                        estimated_trace = torch.sum(grad * epsilon, dim=[1, 2]) - (
+                            1.0 - (1.0 - beta).sqrt()
+                        ) * torch.sum(lig_mask[:, :max_num_moveable] * 3.0, dim=1)
                         estimated_traces.append(estimated_trace.unsqueeze(0))
                     estimated_traces = torch.cat(estimated_traces, dim=0)
                     trace = torch.mean(estimated_traces, dim=0)
             ret = torch.cat([reverse_flow_ode.reshape(-1), trace], dim=0).detach()
             return ret, for_estimator.detach()
 
-        init = torch.cat([batched_data["pred_pos"][:, :max_num_moveable, :].reshape(-1), torch.zeros(n_graphs, dtype=torch.float64, device=device)], dim=0)#.cpu()
-        for_estimator_sum = torch.zeros_like(batched_data["pred_pos"][:, :max_num_moveable])
+        init = torch.cat(
+            [
+                batched_data["pred_pos"][:, :max_num_moveable, :].reshape(-1),
+                torch.zeros(n_graphs, dtype=torch.float64, device=device),
+            ],
+            dim=0,
+        )  # .cpu()
+        for_estimator_sum = torch.zeros_like(
+            batched_data["pred_pos"][:, :max_num_moveable]
+        )
         pos_and_p_numpy = init
         for t in range(self.num_timesteps):
             delta_pos_and_p_numpy, delta_for_estimator = ode_fn(t, pos_and_p_numpy)
@@ -750,10 +927,15 @@ class GraphormerDiffModel(FairseqEncoderModel):
             for_estimator_sum += delta_for_estimator
         sol = pos_and_p_numpy
         likelihood = sol[-n_graphs:]
-        latent_pos = (sol[:-n_graphs].reshape(n_graphs, max_num_moveable, 3) - batched_data["init_pos"][:, :max_num_moveable, :])
+        latent_pos = (
+            sol[:-n_graphs].reshape(n_graphs, max_num_moveable, 3)
+            - batched_data["init_pos"][:, :max_num_moveable, :]
+        )
         lig_mask = lig_mask.unsqueeze(-1)
         latent_pos = latent_pos * lig_mask[:, :max_num_moveable, :]
-        prior_log_p = -0.5 * torch.sum(lig_mask * 3.0, dim=[1, 2]) * np.log(2 * np.pi) - torch.sum((latent_pos ** 2) / 2.0, dim=[1, 2])
+        prior_log_p = -0.5 * torch.sum(lig_mask * 3.0, dim=[1, 2]) * np.log(
+            2 * np.pi
+        ) - torch.sum((latent_pos**2) / 2.0, dim=[1, 2])
         likelihood += prior_log_p
 
         batched_data["pos"] += init_center
@@ -767,7 +949,6 @@ class GraphormerDiffModel(FairseqEncoderModel):
             "sample_size": n_graphs,
         }
 
-
     def upgrade_state_dict(self, state_dict):
         state_dict_keys = list(state_dict.keys())
 
@@ -778,14 +959,13 @@ class GraphormerDiffModel(FairseqEncoderModel):
                 state_dict.pop(key)
 
         for key in state_dict_keys:
-            if key.find("force_proj_delta_pos") != -1: # this is the latest architecture
+            if (
+                key.find("force_proj_delta_pos") != -1
+            ):  # this is the latest architecture
                 print("force_proj_delta_pos found")
                 return
 
-        named_parameters = {
-            k: v
-            for k, v in self.named_parameters()
-        }
+        named_parameters = {k: v for k, v in self.named_parameters()}
 
         collect_keys_1 = {}
         collect_keys_2 = {}
@@ -810,7 +990,11 @@ class GraphormerDiffModel(FairseqEncoderModel):
             mean_weight_dict[mean_key] = weight_sum
 
         for key in state_dict_keys:
-            if (key.find("force_proj1") != -1 or key.find("force_proj2") != -1 or key.find("force_proj3") != -1):
+            if (
+                key.find("force_proj1") != -1
+                or key.find("force_proj2") != -1
+                or key.find("force_proj3") != -1
+            ):
                 state_dict.pop(key)
 
         for key in mean_weight_dict:
@@ -888,7 +1072,9 @@ def base_architecture(args):
     args.sandwich_norm = safe_getattr(args, "sandwich_norm", False)
 
     args.num_diffusion_timesteps = safe_getattr(args, "num_diffusion_timesteps", 5000)
-    args.diffusion_beta_schedule = safe_getattr(args, "diffusion_beta_schedule", "sigmoid")
+    args.diffusion_beta_schedule = safe_getattr(
+        args, "diffusion_beta_schedule", "sigmoid"
+    )
     args.diffusion_beta_start = safe_getattr(args, "diffusion_beta_start", 1.0e-7)
     args.diffusion_beta_end = safe_getattr(args, "diffusion_beta_end", 2e-3)
     args.diffusion_sampling = safe_getattr(args, "diffusion_sampling", "ddpm")
@@ -899,8 +1085,12 @@ def base_architecture(args):
     args.dist_feature_node_scale = safe_getattr(args, "dist_feature_node_scale", 1.0)
     args.dist_feature_num_kernels = safe_getattr(args, "dist_feature_num_kernels", 128)
     args.no_diffusion = safe_getattr(args, "no_diffusion", False)
-    args.max_pbc_cell_rep_threshold = safe_getattr(args, "max_pbc_cell_rep_threshold", 10)
-    args.max_num_neighbors_threshold = safe_getattr(args, "max_num_neighbors_threshold", 10)
+    args.max_pbc_cell_rep_threshold = safe_getattr(
+        args, "max_pbc_cell_rep_threshold", 10
+    )
+    args.max_num_neighbors_threshold = safe_getattr(
+        args, "max_num_neighbors_threshold", 10
+    )
     args.pbc_approach = safe_getattr(args, "pbc_approach", "none")
     args.pbc_cutoff = safe_getattr(args, "pbc_cutoff", 6.0)
     args.diffusion_noise_std = safe_getattr(args, "diffusion_noise_std", 1.0)

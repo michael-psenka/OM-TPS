@@ -103,7 +103,11 @@ class Graph3DBias(nn.Module):
         )
         if dist_feature_extractor == "gbf" and dist_feature_extractor == "rbf":
             raise ValueError("dist_feature_extractor can only be gbf or rbf")
-        self.dist_feature_extractor = GaussianLayer(self.num_kernel, num_edge_types) if dist_feature_extractor == "gbf" else RBF(self.num_kernel, num_edge_types)
+        self.dist_feature_extractor = (
+            GaussianLayer(self.num_kernel, num_edge_types)
+            if dist_feature_extractor == "gbf"
+            else RBF(self.num_kernel, num_edge_types)
+        )
         self.feature_proj = NonLinear(self.num_kernel, rpe_heads)
 
         if self.num_kernel != self.embed_dim:
@@ -124,16 +128,18 @@ class Graph3DBias(nn.Module):
         )
         padding_mask = atoms.eq(0)  # (G, T)
 
-        delta_pos = pos.unsqueeze(1) - pos.unsqueeze(2) # (G, T, T, 3)
-        dist = delta_pos.norm(dim=-1).view(-1, n_node, n_node) # (G, T, T)
+        delta_pos = pos.unsqueeze(1) - pos.unsqueeze(2)  # (G, T, T, 3)
+        dist = delta_pos.norm(dim=-1).view(-1, n_node, n_node)  # (G, T, T)
         # delta_pos /= dist.unsqueeze(-1) + 1e-5 # (G, T, T, 3)
         delta_pos_norm = delta_pos / (dist.unsqueeze(-1) + 1e-5)
 
-        edge_feature = self.dist_feature_extractor(dist, edge_types) # (G, T, T, K)
+        edge_feature = self.dist_feature_extractor(dist, edge_types)  # (G, T, T, K)
 
-        graph_attn_bias = self.feature_proj(edge_feature) # (G, T, T, H)
+        graph_attn_bias = self.feature_proj(edge_feature)  # (G, T, T, H)
 
-        graph_attn_bias = graph_attn_bias.permute(0, 3, 1, 2).contiguous() # (G, H, T, T)
+        graph_attn_bias = graph_attn_bias.permute(
+            0, 3, 1, 2
+        ).contiguous()  # (G, H, T, T)
         graph_attn_bias.masked_fill_(
             padding_mask.unsqueeze(1).unsqueeze(2), float("-inf")
         )
@@ -177,7 +183,9 @@ class NodeTaskHead(nn.Module):
         self.v_proj: Callable[[Tensor], Tensor] = nn.Linear(embed_dim, embed_dim)
         self.num_heads = num_heads
         self.scaling = (embed_dim // num_heads) ** -0.5
-        self.force_proj: Callable[[Tensor], Tensor] = nn.Linear(embed_dim, 1, bias=False)
+        self.force_proj: Callable[[Tensor], Tensor] = nn.Linear(
+            embed_dim, 1, bias=False
+        )
 
     def forward(
         self,

@@ -154,7 +154,6 @@ class DDPMScheduler(SchedulerMixin, ConfigMixin):
 
         # hacks - were probs added for training stability
 
-
         if variance_type == "fixed_small":
             variance = self.clip(variance, min_value=1e-20)
         # for rl-diffuser https://arxiv.org/abs/2205.09991

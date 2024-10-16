@@ -53,10 +53,7 @@ def _score(exp, omega, eps, L=2000):  # score of density over SO(3)
         lo = np.sin(omega / 2)
         dlo = 1 / 2 * np.cos(omega / 2)
         dSigma += (
-            (2 * l + 1)
-            * np.exp(-l * (l + 1) * eps**2)
-            * (lo * dhi - hi * dlo)
-            / lo**2
+            (2 * l + 1) * np.exp(-l * (l + 1) * eps**2) * (lo * dhi - hi * dlo) / lo**2
         )
     return dSigma / exp
 
@@ -84,9 +81,7 @@ else:
     )
 
     _exp_score_norms = np.sqrt(
-        np.sum(_score_norms**2 * _pdf_vals, axis=1)
-        / np.sum(_pdf_vals, axis=1)
-        / np.pi
+        np.sum(_score_norms**2 * _pdf_vals, axis=1) / np.sum(_pdf_vals, axis=1) / np.pi
     )
 
     np.save(".so3_omegas_array2.npy", _omegas_array)

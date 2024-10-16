@@ -2,11 +2,14 @@ import math
 import torch
 import numpy as np
 
+
 def get_beta_schedule(beta_schedule, *, beta_start, beta_end, num_diffusion_timesteps):
     def sigmoid(x):
         return 1 / (np.exp(-x) + 1)
 
-    def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=beta_end): # original max_beta is 0.999
+    def betas_for_alpha_bar(
+        num_diffusion_timesteps, alpha_bar, max_beta=beta_end
+    ):  # original max_beta is 0.999
         """
         Create a beta schedule that discretizes the given alpha_t_bar function,
         which defines the cumulative product of (1-beta) over time from t = [0,1].

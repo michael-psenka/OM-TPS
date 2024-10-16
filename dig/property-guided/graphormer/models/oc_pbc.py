@@ -6,6 +6,7 @@ from ..modules.graphormer_3d_layer import gaussian, NonLinear, GaussianLayer, RB
 from typing import Callable
 from torch_scatter import scatter_sum
 
+
 class GaussianLayerFlatten(nn.Module):
     def __init__(self, num_diffusion_timesteps, K=128, edge_types=1024):
         super().__init__()
@@ -52,28 +53,30 @@ class RBFFlatten(nn.Module):
 
 
 def radius_graph_pbc(
-    data, radius, max_num_neighbors_threshold, max_pbc_cell_rep_threshold, pbc=[True, True, False]
+    data,
+    radius,
+    max_num_neighbors_threshold,
+    max_pbc_cell_rep_threshold,
+    pbc=[True, True, False],
 ):
     device = data["pos"].device
     batch_size = len(data["natoms"])
     bs, _, pos_dim = data["pos"].size()
-    assert bs == batch_size and pos_dim == 3 
+    assert bs == batch_size and pos_dim == 3
 
     # position of the atoms
-    atom_pos = torch.cat([pos[:natom] for pos, natom in zip(data["pos"], data["natoms"])], axis=0)
+    atom_pos = torch.cat(
+        [pos[:natom] for pos, natom in zip(data["pos"], data["natoms"])], axis=0
+    )
 
     # Before computing the pairwise distances between atoms, first create a list of atom indices to compare for the entire batch
     num_atoms_per_image = data["natoms"]
     num_atoms_per_image_sqr = (num_atoms_per_image**2).long()
 
     # index offset between images
-    index_offset = (
-        torch.cumsum(num_atoms_per_image, dim=0) - num_atoms_per_image
-    )
+    index_offset = torch.cumsum(num_atoms_per_image, dim=0) - num_atoms_per_image
 
-    index_offset_expand = torch.repeat_interleave(
-        index_offset, num_atoms_per_image_sqr
-    )
+    index_offset_expand = torch.repeat_interleave(index_offset, num_atoms_per_image_sqr)
     num_atoms_per_image_expand = torch.repeat_interleave(
         num_atoms_per_image, num_atoms_per_image_sqr
     )
@@ -90,20 +93,14 @@ def radius_graph_pbc(
     index_sqr_offset = torch.repeat_interleave(
         index_sqr_offset, num_atoms_per_image_sqr
     )
-    atom_count_sqr = (
-        torch.arange(num_atom_pairs, device=device) - index_sqr_offset
-    )
+    atom_count_sqr = torch.arange(num_atom_pairs, device=device) - index_sqr_offset
 
     # Compute the indices for the pairs of atoms (using division and mod)
     # If the systems get too large this apporach could run into numerical precision issues
     index1 = (
-        torch.div(
-            atom_count_sqr, num_atoms_per_image_expand, rounding_mode="floor"
-        )
+        torch.div(atom_count_sqr, num_atoms_per_image_expand, rounding_mode="floor")
     ) + index_offset_expand
-    index2 = (
-        atom_count_sqr % num_atoms_per_image_expand
-    ) + index_offset_expand
+    index2 = (atom_count_sqr % num_atoms_per_image_expand) + index_offset_expand
     # Get the positions for each atom
     pos1 = torch.index_select(atom_pos, 0, index1)
     pos2 = torch.index_select(atom_pos, 0, index2)
@@ -143,25 +140,21 @@ def radius_graph_pbc(
     # if the required repetitions are very different between images
     # (which they usually are). Changing this to sparse (scatter) operations
     # might be worth the effort if this function becomes a bottleneck.
-    max_rep = [min(rep_a1.max(), max_pbc_cell_rep_threshold),
-               min(rep_a2.max(), max_pbc_cell_rep_threshold),
-               min(rep_a3.max(), max_pbc_cell_rep_threshold)]
-
+    max_rep = [
+        min(rep_a1.max(), max_pbc_cell_rep_threshold),
+        min(rep_a2.max(), max_pbc_cell_rep_threshold),
+        min(rep_a3.max(), max_pbc_cell_rep_threshold),
+    ]
 
     # Tensor of unit cells
     cells_per_dim = [
-        torch.arange(-rep, rep + 1, device=device, dtype=torch.float)
-        for rep in max_rep
+        torch.arange(-rep, rep + 1, device=device, dtype=torch.float) for rep in max_rep
     ]
     unit_cell = torch.cartesian_prod(*cells_per_dim)
     num_cells = len(unit_cell)
-    unit_cell_per_atom = unit_cell.view(1, num_cells, 3).repeat(
-        len(index2), 1, 1
-    )
+    unit_cell_per_atom = unit_cell.view(1, num_cells, 3).repeat(len(index2), 1, 1)
     unit_cell = torch.transpose(unit_cell, 0, 1)
-    unit_cell_batch = unit_cell.view(1, 3, num_cells).expand(
-        batch_size, -1, -1
-    )
+    unit_cell_batch = unit_cell.view(1, 3, num_cells).expand(batch_size, -1, -1)
 
     # Compute the x, y, z positional offsets for each cell in each image
     data_cell = torch.transpose(data["cell"], 1, 2)
@@ -219,9 +212,7 @@ def radius_graph_pbc(
     return edge_index, unit_cell, num_neighbors_image, max_rep
 
 
-def get_max_neighbors_mask(
-    natoms, index, atom_distance, max_num_neighbors_threshold
-):
+def get_max_neighbors_mask(natoms, index, atom_distance, max_num_neighbors_threshold):
     """
     Give a mask that filters out edges so that each atom has at most
     `max_num_neighbors_threshold` neighbors.
@@ -236,16 +227,12 @@ def get_max_neighbors_mask(
     num_neighbors = segment_coo(ones, index, dim_size=num_atoms)
     max_num_neighbors = num_neighbors.max()
     if max_num_neighbors_threshold >= 0:
-        num_neighbors_thresholded = num_neighbors.clamp(
-            max=max_num_neighbors_threshold
-        )
+        num_neighbors_thresholded = num_neighbors.clamp(max=max_num_neighbors_threshold)
     else:
         num_neighbors_thresholded = num_neighbors.clone()
 
     # Get number of (thresholded) neighbors per image
-    image_indptr = torch.zeros(
-        natoms.shape[0] + 1, device=device, dtype=torch.long
-    )
+    image_indptr = torch.zeros(natoms.shape[0] + 1, device=device, dtype=torch.long)
     image_indptr[1:] = torch.cumsum(natoms, dim=0)
     num_neighbors_image = segment_csr(num_neighbors_thresholded, image_indptr)
 
@@ -254,16 +241,14 @@ def get_max_neighbors_mask(
         max_num_neighbors <= max_num_neighbors_threshold
         or max_num_neighbors_threshold <= 0
     ):
-        mask_num_neighbors = torch.tensor(
-            [True], dtype=bool, device=device
-        ).expand_as(index)
+        mask_num_neighbors = torch.tensor([True], dtype=bool, device=device).expand_as(
+            index
+        )
         return mask_num_neighbors, num_neighbors_image
 
     # Create a tensor of size [num_atoms, max_num_neighbors] to sort the distances of the neighbors.
     # Fill with infinity so we can easily remove unused distances later.
-    distance_sort = torch.full(
-        [num_atoms * max_num_neighbors], np.inf, device=device
-    )
+    distance_sort = torch.full([num_atoms * max_num_neighbors], np.inf, device=device)
 
     # Create an index map to map distances from atom_distance to distance_sort
     # index_sort_map assumes index to be sorted
@@ -325,7 +310,7 @@ def get_pbc_distances(
     distances = distance_vectors.norm(dim=-1)
 
     # redundancy: remove zero distances
-    nonzero_idx = torch.arange(len(distances))#[distances != 0]
+    nonzero_idx = torch.arange(len(distances))  # [distances != 0]
     edge_index = edge_index[:, nonzero_idx]
     distances = distances[nonzero_idx]
     cell_offsets = cell_offsets[nonzero_idx]
@@ -345,8 +330,12 @@ def get_pbc_distances(
     return out
 
 
-def gen_edges_from_batch(batched_data, radius, max_num_neighbors_threshold, max_pbc_cell_rep_threshold):
-    edge_index, cell_offsets, neighbors, max_rep = radius_graph_pbc(batched_data, radius, max_num_neighbors_threshold, max_pbc_cell_rep_threshold)
+def gen_edges_from_batch(
+    batched_data, radius, max_num_neighbors_threshold, max_pbc_cell_rep_threshold
+):
+    edge_index, cell_offsets, neighbors, max_rep = radius_graph_pbc(
+        batched_data, radius, max_num_neighbors_threshold, max_pbc_cell_rep_threshold
+    )
     out = get_pbc_distances(
         batched_data["pos"].view(-1, 3),
         edge_index,
@@ -365,7 +354,9 @@ def gen_edges_from_batch(batched_data, radius, max_num_neighbors_threshold, max_
 
     edge_cell_type += max_rep_tensor
     num_rep_tensor = 2 * max_rep_tensor + 1
-    max_rep_offsets = torch.tensor([num_rep_tensor[1] * num_rep_tensor[2], num_rep_tensor[1], 1], device=device)
+    max_rep_offsets = torch.tensor(
+        [num_rep_tensor[1] * num_rep_tensor[2], num_rep_tensor[1], 1], device=device
+    )
     edge_cell_type = torch.sum(edge_cell_type * max_rep_offsets, axis=-1)
     return edge_cell_type, edge_dist, edge_index, neighbors
 
@@ -401,17 +392,26 @@ class Graph3DBiasPBC(nn.Module):
         self.num_pbc_cell_types = (2 * max_pbc_cell_rep_threshold + 1) ** 2
         self.pbc_radius = pbc_radius
         self.max_num_neighbors_threshold = max_num_neighbors_threshold
-        num_edge_types = num_atom_types * num_atom_types * ((2 * max_pbc_cell_rep_threshold + 1) ** 2)
+        num_edge_types = (
+            num_atom_types
+            * num_atom_types
+            * ((2 * max_pbc_cell_rep_threshold + 1) ** 2)
+        )
 
         rpe_heads = (
             self.num_heads * self.num_layers if self.no_share_rpe else self.num_heads
         )
         if dist_feature_extractor == "gbf" and dist_feature_extractor == "rbf":
             raise ValueError("dist_feature_extractor can only be gbf or rbf")
-        self.dist_feature_extractor = GaussianLayerFlatten(self.num_diffusion_timesteps,
-                                                    self.num_kernel, num_edge_types) if dist_feature_extractor == "gbf" \
-                                      else RBFFlatten(self.num_diffusion_timesteps,
-                                               self.num_kernel, num_edge_types)
+        self.dist_feature_extractor = (
+            GaussianLayerFlatten(
+                self.num_diffusion_timesteps, self.num_kernel, num_edge_types
+            )
+            if dist_feature_extractor == "gbf"
+            else RBFFlatten(
+                self.num_diffusion_timesteps, self.num_kernel, num_edge_types
+            )
+        )
         self.feature_proj = NonLinear(self.num_kernel, rpe_heads)
 
         if self.num_kernel != self.embed_dim:
@@ -419,40 +419,71 @@ class Graph3DBiasPBC(nn.Module):
         else:
             self.edge_proj = None
 
-
-    def check_edge_index(self, edge_index, batch_size, max_num_atoms, scatter_edge_index):
+    def check_edge_index(
+        self, edge_index, batch_size, max_num_atoms, scatter_edge_index
+    ):
         ones = torch.ones_like(edge_index[0, :], dtype=torch.long)
-        num_edges = scatter_sum(ones, scatter_edge_index, dim=0, dim_size=batch_size * max_num_atoms * max_num_atoms).reshape(batch_size, max_num_atoms, max_num_atoms)
+        num_edges = scatter_sum(
+            ones,
+            scatter_edge_index,
+            dim=0,
+            dim_size=batch_size * max_num_atoms * max_num_atoms,
+        ).reshape(batch_size, max_num_atoms, max_num_atoms)
         # checks that edges are symmetric
-        assert torch.sum((num_edges - torch.transpose(num_edges, 1, 2)) ** 2) == 0.0, f"{torch.sum((num_edges - torch.transpose(num_edges, 1, 2)) ** 2)}"
+        assert (
+            torch.sum((num_edges - torch.transpose(num_edges, 1, 2)) ** 2) == 0.0
+        ), f"{torch.sum((num_edges - torch.transpose(num_edges, 1, 2)) ** 2)}"
 
     def forward(self, batched_data):
         x, t, atomic_numbers, natoms, pos = (
             batched_data["x"],
             batched_data["ts"],
-            batched_data["atomic_numbers"] + 1, # +1 to be consistent with x
+            batched_data["atomic_numbers"] + 1,  # +1 to be consistent with x
             batched_data["natoms"],
             batched_data["pos"],
         )  # x shape: [n_graphs, n_nodes, _]
         device = x.device
-        edge_cell_type, edge_dist, edge_index, neighbors = gen_edges_from_batch(batched_data, self.pbc_radius, self.max_num_neighbors_threshold, self.max_pbc_cell_rep_threshold)
+        edge_cell_type, edge_dist, edge_index, neighbors = gen_edges_from_batch(
+            batched_data,
+            self.pbc_radius,
+            self.max_num_neighbors_threshold,
+            self.max_pbc_cell_rep_threshold,
+        )
 
         padding_mask = x[:, :, 0].eq(0)
         batch_size, num_max_atoms = x.size()[:2]
 
-        atoms = atomic_numbers[edge_index[0, :]] * self.num_atom_types + atomic_numbers[edge_index[1, :]]
+        atoms = (
+            atomic_numbers[edge_index[0, :]] * self.num_atom_types
+            + atomic_numbers[edge_index[1, :]]
+        )
         edge_types = atoms * self.num_pbc_cell_types + edge_cell_type.long()
 
-        edge_feature = self.dist_feature_extractor(edge_dist, edge_types, torch.repeat_interleave(t, neighbors))
+        edge_feature = self.dist_feature_extractor(
+            edge_dist, edge_types, torch.repeat_interleave(t, neighbors)
+        )
         edge_index_offset = torch.cumsum(natoms, dim=0) - natoms
         edge_index_offset = torch.repeat_interleave(edge_index_offset, neighbors)
         edge_index_per_image = edge_index - edge_index_offset
-        assert torch.sum(neighbors) == edge_index.size()[-1], f"torch.sum(neighbors) = {torch.sum(neighbors)}, edge_index.size() = {edge_index.size()}"
+        assert (
+            torch.sum(neighbors) == edge_index.size()[-1]
+        ), f"torch.sum(neighbors) = {torch.sum(neighbors)}, edge_index.size() = {edge_index.size()}"
         scatter_edge_offset = torch.repeat_interleave(
-            torch.arange(batch_size, device=device) * num_max_atoms * num_max_atoms, neighbors)
-        scatter_edge_index = (edge_index_per_image[0, :] * num_max_atoms + edge_index_per_image[1, :]) + scatter_edge_offset
-        edge_feature_gathered = scatter_sum(edge_feature, scatter_edge_index, dim=0, dim_size=batch_size * num_max_atoms * num_max_atoms)
-        edge_feature_gathered = edge_feature_gathered.resize(batch_size, num_max_atoms, num_max_atoms, self.num_kernel)
+            torch.arange(batch_size, device=device) * num_max_atoms * num_max_atoms,
+            neighbors,
+        )
+        scatter_edge_index = (
+            edge_index_per_image[0, :] * num_max_atoms + edge_index_per_image[1, :]
+        ) + scatter_edge_offset
+        edge_feature_gathered = scatter_sum(
+            edge_feature,
+            scatter_edge_index,
+            dim=0,
+            dim_size=batch_size * num_max_atoms * num_max_atoms,
+        )
+        edge_feature_gathered = edge_feature_gathered.resize(
+            batch_size, num_max_atoms, num_max_atoms, self.num_kernel
+        )
 
         # self.check_edge_index(edge_index, batch_size, num_max_atoms, scatter_edge_index)
 
@@ -512,10 +543,16 @@ class Graph3DBiasPBCCutoff(nn.Module):
         )
         if dist_feature_extractor == "gbf" and dist_feature_extractor == "rbf":
             raise ValueError("dist_feature_extractor can only be gbf or rbf")
-        self.dist_feature_extractor = GaussianLayer(50, self.num_kernel, num_edge_types) if dist_feature_extractor == "gbf" \
-                                      else RBF(50, self.num_kernel, num_edge_types)
-        self.dist_feature_extractor_init = GaussianLayer(50, self.num_kernel, num_edge_types) if dist_feature_extractor == "gbf" \
-                                      else RBF(50, self.num_kernel, num_edge_types)
+        self.dist_feature_extractor = (
+            GaussianLayer(50, self.num_kernel, num_edge_types)
+            if dist_feature_extractor == "gbf"
+            else RBF(50, self.num_kernel, num_edge_types)
+        )
+        self.dist_feature_extractor_init = (
+            GaussianLayer(50, self.num_kernel, num_edge_types)
+            if dist_feature_extractor == "gbf"
+            else RBF(50, self.num_kernel, num_edge_types)
+        )
         self.feature_proj = NonLinear(self.num_kernel, rpe_heads)
 
         if self.num_kernel != self.embed_dim:
@@ -523,26 +560,31 @@ class Graph3DBiasPBCCutoff(nn.Module):
         else:
             self.edge_proj = None
 
-    def get_attn_bias(self, pos, padding_mask, expand_pos, expand_mask, n_node, expand_n_node, edge_types, t, is_init):
-        pos = pos.masked_fill(
-            padding_mask.unsqueeze(-1).to(torch.bool), 0.0
-        )
+    def get_attn_bias(
+        self,
+        pos,
+        padding_mask,
+        expand_pos,
+        expand_mask,
+        n_node,
+        expand_n_node,
+        edge_types,
+        t,
+        is_init,
+    ):
+        pos = pos.masked_fill(padding_mask.unsqueeze(-1).to(torch.bool), 0.0)
 
         expand_pos = expand_pos.masked_fill(
             expand_mask.unsqueeze(-1).to(torch.bool), 0.0
         )
-        expand_pos = torch.cat([pos, expand_pos], dim=1)    
+        expand_pos = torch.cat([pos, expand_pos], dim=1)
 
-        delta_pos = pos.unsqueeze(2) - expand_pos.unsqueeze(1) # B x T x (expand T) x 3
+        delta_pos = pos.unsqueeze(2) - expand_pos.unsqueeze(1)  # B x T x (expand T) x 3
         dist = delta_pos.norm(dim=-1).view(-1, n_node, expand_n_node)
         full_mask = torch.cat([padding_mask, expand_mask], dim=-1)
-        #ic(full_mask.size(), dist.size(), padding_mask.size(), delta_pos.size())
-        dist = dist.masked_fill(
-            full_mask.unsqueeze(1).to(torch.bool), 1.0
-        )
-        dist = dist.masked_fill(
-            padding_mask.unsqueeze(-1).to(torch.bool), 1.0
-        )
+        # ic(full_mask.size(), dist.size(), padding_mask.size(), delta_pos.size())
+        dist = dist.masked_fill(full_mask.unsqueeze(1).to(torch.bool), 1.0)
+        dist = dist.masked_fill(padding_mask.unsqueeze(-1).to(torch.bool), 1.0)
         delta_pos_norm = delta_pos / (dist.unsqueeze(-1) + 1e-5)
 
         if is_init:
@@ -567,7 +609,6 @@ class Graph3DBiasPBCCutoff(nn.Module):
         merge_edge_features = self.edge_proj(sum_edge_features)
         return dist, delta_pos_norm, graph_attn_bias, merge_edge_features
 
-
     def forward(self, batched_data):
         init_pos, pos, x, t, expand_pos, init_expand_pos, expand_mask, outcell_index = (
             batched_data["init_cell_pos"],
@@ -585,15 +626,33 @@ class Graph3DBiasPBCCutoff(nn.Module):
         expand_atoms = torch.gather(atoms, dim=1, index=outcell_index)
         expand_atoms = torch.cat([atoms, expand_atoms], dim=1)
         expand_n_node = expand_atoms.size()[1]
-        edge_types = atoms.view(n_graph, n_node, 1) * self.num_atom_types + expand_atoms.view(
-            n_graph, 1, expand_n_node
-        )
+        edge_types = atoms.view(
+            n_graph, n_node, 1
+        ) * self.num_atom_types + expand_atoms.view(n_graph, 1, expand_n_node)
         padding_mask = atoms.eq(0)  # (G, T)
 
         dist, delta_pos, graph_attn_bias, merge_edge_features = self.get_attn_bias(
-            pos, padding_mask, expand_pos, expand_mask, n_node, expand_n_node, edge_types, t, False)
+            pos,
+            padding_mask,
+            expand_pos,
+            expand_mask,
+            n_node,
+            expand_n_node,
+            edge_types,
+            t,
+            False,
+        )
         _, _, init_graph_attn_bias, init_merge_edge_features = self.get_attn_bias(
-            init_pos, padding_mask, init_expand_pos, expand_mask, n_node, expand_n_node, edge_types, t, True)
+            init_pos,
+            padding_mask,
+            init_expand_pos,
+            expand_mask,
+            n_node,
+            expand_n_node,
+            edge_types,
+            t,
+            True,
+        )
 
         return {
             "dist": dist,

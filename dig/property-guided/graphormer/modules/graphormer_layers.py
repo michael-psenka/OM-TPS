@@ -27,7 +27,14 @@ class GraphNodeFeature(nn.Module):
     """
 
     def __init__(
-        self, num_heads, num_atoms, num_in_degree, num_out_degree, hidden_dim, n_layers, use_bonds=False
+        self,
+        num_heads,
+        num_atoms,
+        num_in_degree,
+        num_out_degree,
+        hidden_dim,
+        n_layers,
+        use_bonds=False,
     ):
         super(GraphNodeFeature, self).__init__()
         self.num_heads = num_heads

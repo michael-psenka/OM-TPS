@@ -30,9 +30,7 @@ class MultiHeadAttention(nn.Module):
         self.fc_query = nn.Linear(d_model, d_key, bias=False)
         self.fc_key = nn.Linear(d_model, d_key, bias=False)
         self.fc_value = nn.Linear(d_model, d_key, bias=False)
-        self.attention = ScaledDotProductAttention(
-            scale=self.d_k**0.5, dropout=dropout
-        )
+        self.attention = ScaledDotProductAttention(scale=self.d_k**0.5, dropout=dropout)
         self.fc_out = nn.Linear(d_key, d_model, bias=False)
         self.dropout = nn.Dropout(dropout)
 
