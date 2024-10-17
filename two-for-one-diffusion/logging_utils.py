@@ -11,22 +11,23 @@ from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from IPython.display import Image as IPyImage, display
 
 
-def save_ovito_traj(positions, filename, alpha_carbon_lim=100000):
+def save_ovito_traj(positions, filename, alpha_carbon_lim=100000, all_backbone=False):
     """
     Save the given positions to a GSD file using Ovito.
     """
     t = gsd.hoomd.open(name=filename, mode="w")
     cell = 1.5 * torch.eye(3) * positions.cpu().abs().max()
     for i, pos in tqdm(enumerate(positions)):
-        t.append(create_frame(i, pos, cell, alpha_carbon_lim))
+        t.append(create_frame(i, pos, cell, alpha_carbon_lim, all_backbone))
     t.close()
 
 
-def create_frame(step, position, cell, alpha_carbon_lim):
+def create_frame(step, position, cell, alpha_carbon_lim, all_backbone):
     """
     Create an Ovito frame from the given positions.
     """
     # Particle positions, velocities, diameter
+    # TODO: add option to add bonds between C and N atoms
 
     natoms = position.shape[0]
     position = torch.Tensor(position)
@@ -42,8 +43,18 @@ def create_frame(step, position, cell, alpha_carbon_lim):
     s.configuration.box = [cell[0][0], cell[1][1], cell[2][2], 0, 0, 0]
 
     # Bonds for visualization
+    # TODO: add option to include bonds between backbone and C/N atoms
     senders = np.arange(min(position.shape[0], alpha_carbon_lim) - 1)
     receivers = np.arange(1, min(position.shape[0], alpha_carbon_lim))
+    if all_backbone:
+        # construct bonds between CA and N atoms
+        N_senders = senders
+        N_receivers = np.arange(alpha_carbon_lim, 2 * alpha_carbon_lim - 1)
+        C_senders = senders
+        C_receivers = np.arange(2 * alpha_carbon_lim, 3 * alpha_carbon_lim - 1)
+
+        senders = np.concatenate([senders, N_senders, C_senders])
+        receivers = np.concatenate([receivers, N_receivers, C_receivers])
     bonds = np.stack([senders, receivers], axis=1)
 
     s.bonds.N = bonds.shape[0]

@@ -1,4 +1,5 @@
 import math
+import scipy
 import torch
 from inspect import isfunction
 import numpy as np
@@ -250,6 +251,111 @@ def slerp(v0, v1, t, DOT_THRESHOLD=0.9995):
         s1 = sin_theta_t / sin_theta_0
         v2 = s0 * v0 + s1 * v1
     return v2
+
+
+def rotation_matrix_to_axis_angle(rot_mat):
+    """
+    Converts a batch of rotation matrices to axis-angle (rotation vector) representation.
+
+    Args:
+        rot_mat: Tensor of shape [batch_size, n_protein_residues, 3, 3] representing the rotation matrices.
+
+    Returns:
+        A tensor of shape [batch_size, n_protein_residues, 3] representing the rotation vectors (axis-angle).
+    """
+    batch_size, n_residues, _, _ = rot_mat.shape
+
+    # Trace of the matrix
+    trace = rot_mat[..., 0, 0] + rot_mat[..., 1, 1] + rot_mat[..., 2, 2]
+
+    # Angle of rotation
+    theta = torch.acos((trace - 1) / 2)
+
+    # Avoid division by zero
+    sin_theta = torch.sin(theta)
+    sin_theta[sin_theta == 0] = 1e-8  # Small value to prevent division by zero
+
+    # Rotation axis components
+    r1 = (rot_mat[..., 2, 1] - rot_mat[..., 1, 2]) / (2 * sin_theta)
+    r2 = (rot_mat[..., 0, 2] - rot_mat[..., 2, 0]) / (2 * sin_theta)
+    r3 = (rot_mat[..., 1, 0] - rot_mat[..., 0, 1]) / (2 * sin_theta)
+
+    rotation_vector = torch.stack((r1, r2, r3), dim=-1) * theta.unsqueeze(-1)
+    return rotation_vector
+
+
+def axis_angle_to_rotation_matrix(axis_angle):
+    """
+    Converts a batch of axis-angle vectors to rotation matrices using the Rodrigues formula.
+
+    Args:
+        axis_angle: Tensor of shape [batch_size, n_protein_residues, 3] representing the rotation vectors.
+
+    Returns:
+        A tensor of shape [batch_size, n_protein_residues, 3, 3] representing the rotation matrices.
+    """
+    batch_size, n_residues, _ = axis_angle.shape
+    theta = torch.norm(axis_angle, dim=-1, keepdim=True).clamp_min(
+        1e-8
+    )  # Avoid division by zero
+    k = axis_angle / theta
+
+    # Compute the Rodrigues' rotation formula components
+    kx = k[..., 0].unsqueeze(-1)
+    ky = k[..., 1].unsqueeze(-1)
+    kz = k[..., 2].unsqueeze(-1)
+
+    K = torch.zeros((batch_size, n_residues, 3, 3), device=axis_angle.device)
+    K[..., 0, 1] = -kz.squeeze()
+    K[..., 0, 2] = ky.squeeze()
+    K[..., 1, 0] = kz.squeeze()
+    K[..., 1, 2] = -kx.squeeze()
+    K[..., 2, 0] = -ky.squeeze()
+    K[..., 2, 1] = kx.squeeze()
+
+    I = torch.eye(3, device=axis_angle.device).unsqueeze(0).unsqueeze(0)
+    rot_mat = (
+        I
+        + torch.sin(theta).unsqueeze(-1) * K
+        + (1 - torch.cos(theta).unsqueeze(-1)) * torch.matmul(K, K)
+    )
+
+    return rot_mat
+
+
+def slerp_rotation_matrices(rot_mat1, rot_mat2, path_length):
+    """
+    Perform spherical linear interpolation (SLERP) between two sets of rotation matrices using axis-angle representation.
+
+    Args:
+        rot_mat1: Tensor of shape [batch_size, n_protein_residues, 3, 3] representing the first rotation matrix.
+        rot_mat2: Tensor of shape [batch_size, n_protein_residues, 3, 3] representing the second rotation matrix.
+        path_length: Number of steps in the interpolation.
+
+    Returns:
+        A tensor of shape [path_length, batch_size, n_protein_residues, 3, 3] representing interpolated rotation matrices.
+    """
+    # Convert rotation matrices to axis-angle (rotation vector) representation
+
+    n_protein_residues = rot_mat1.shape[1]
+
+    axis_angle1 = rotation_matrix_to_axis_angle(rot_mat1)
+    axis_angle2 = rotation_matrix_to_axis_angle(rot_mat2)
+
+    # Generate interpolation steps (alphas) from 0 to 1
+    alphas = torch.linspace(0, 1, path_length, device=rot_mat1.device).view(-1, 1, 1, 1)
+
+    # Interpolate rotation vectors
+    interpolated_vectors = (1 - alphas) * axis_angle1.unsqueeze(
+        0
+    ) + alphas * axis_angle2.unsqueeze(0)
+
+    # Convert the interpolated rotation vectors back to rotation matrices
+    noised_rot_mats = axis_angle_to_rotation_matrix(
+        interpolated_vectors.reshape(-1, n_protein_residues, 3)
+    ).reshape(path_length, -1, n_protein_residues, 3, 3)
+
+    return noised_rot_mats
 
 
 def filter_by_rmsd(coords: torch.Tensor, n: int = 2) -> torch.Tensor:

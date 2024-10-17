@@ -225,6 +225,10 @@ def main(
                     tr2 = tr2.unsqueeze(0).repeat(num_samples, 1, 1)
                     rot_mat1 = rot_mat1.unsqueeze(0).repeat(num_samples, 1, 1, 1)
                     rot_mat2 = rot_mat2.unsqueeze(0).repeat(num_samples, 1, 1, 1)
+                else:
+                    raise ValueError(
+                        "Please generate i.i.d samples before generating interpolated samples."
+                    )
                 if gen_mode == "interpolate":
                     # generate interpolated samples
                     tr, rot_mat = model.interpolate(
@@ -258,9 +262,6 @@ def main(
 
             print(f"Finished {i + 1}/{num_batches} batches")
 
-        import pdb
-
-        pdb.set_trace()
         all_tr = torch.cat(all_tr, dim=0)
         all_rot_mat = torch.cat(all_rot_mat, dim=0)
 
@@ -297,7 +298,9 @@ def main(
         sampled_CA_file = output_prefix + f"/sample-{gen_mode}.pt"
         torch.save(all_CA, sampled_CA_file)
         gsd_file = output_prefix + f"/sample-{gen_mode}.gsd"
-        save_ovito_traj(sampled_mol, gsd_file, alpha_carbon_lim=all_CA.shape[1])
+        save_ovito_traj(
+            sampled_mol, gsd_file, alpha_carbon_lim=all_CA.shape[1], all_backbone=True
+        )
 
 
 if __name__ == "__main__":
@@ -361,9 +364,9 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--use_tqdm", action="store_true", help="Enable tqdm progress bar"
+        "--disable_tqdm", action="store_true", help="Disable tqdm progress bar"
     )
-    parser.add_argument("--use_gpu", action="store_true", help="Enable GPU usage")
+    parser.add_argument("--disable_gpu", action="store_true", help="Disable GPU usage")
 
     args = parser.parse_args()
     main(
@@ -378,6 +381,6 @@ if __name__ == "__main__":
         args.path_length,
         args.latent_time,
         args.init_state,
-        args.use_tqdm,
-        args.use_gpu,
+        not args.disable_tqdm,
+        not args.disable_gpu,
     )

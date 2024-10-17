@@ -12,12 +12,14 @@ from rmsd import kabsch_rotate
 from scipy.spatial.transform import Rotation as R
 
 from actions import S2Action, TruncatedAction, SimpleAction
+from utils import slerp_rotation_matrices
 
 
 from . import geometry, so3
 from .base_model import BaseModel
 from .positional_encoding import RelativePositionBias
 from .structure_module import StructureModule
+from .geometry import rigid_transform_Kabsch_3D_torch
 
 
 class SinusoidalPositionEmbeddings(nn.Module):
@@ -448,7 +450,7 @@ class MainModel(BaseModel):
             ]
         )
 
-        # for now do linear interpolation of noised_rot_mat1 and noised_rot_mat2
+        # linear interpolation of noised_rot_mat1 and noised_rot_mat2
         noised_rot_mats = torch.stack(
             [
                 torch.lerp(noised_rot_mat1.cpu(), noised_rot_mat2.cpu(), alpha)
@@ -457,25 +459,16 @@ class MainModel(BaseModel):
         )
 
         # spherical interpolation of noised_rot_mat1 and noised_rot_mat2
-
-        # noised_rot_mats = []
-        # for alpha in np.linspace(0, 1, path_length):
-        #     mats = torch.matmul(noised_rot_mat2, noised_rot_mat1.inverse()).cpu()
-        #     mats = mats.reshape(-1, 3, 3)
-        #     exp_mats = torch.stack([torch.tensor(fractional_matrix_power(mat, alpha)) for mat in mats]).reshape(num_paths, n_atoms, 3, 3)
-        #     import pdb; pdb.set_trace()
-        #     noised_rot_mats.append(torch.matmul(exp_mats, noised_rot_mat1.cpu()))
-
-        # noise_rot_mats = torch.stack(noised_rot_mats)
+        # noised_rot_mats = slerp_rotation_matrices(noised_rot_mat1, noised_rot_mat2, path_length)
 
         noised_trs = noised_trs.permute((1, 0, 2, 3)).to(
             device
         )  # make batch dimension come first [B, path_length, n_atoms, 3]
         noised_rot_mats = noised_rot_mats.permute((1, 0, 2, 3, 4)).to(device)
+        # import pdb; pdb.set_trace()
 
-        # decode
-        # split into minibatches to save memory
-        batch_size = 32
+        # decode (split into minibatches to save memory)
+        batch_size = 100
         all_trs = []
         all_rot_mats = []
         for tr, rot_mats in zip(
@@ -565,26 +558,10 @@ class MainModel(BaseModel):
             ]
         )
 
-        # for now do linear interpolation of noised_rot_mat1 and noised_rot_mat2
-        noised_rot_mats = torch.stack(
-            [
-                torch.lerp(noised_rot_mat1.cpu(), noised_rot_mat2.cpu(), alpha)
-                for alpha in torch.linspace(0, 1, path_length)
-            ]
+        # spherical interpolation of noised_rot_mat1 and noised_rot_mat2
+        noised_rot_mats = slerp_rotation_matrices(
+            noised_rot_mat1, noised_rot_mat2, path_length
         )
-
-        # TODO: spherical interpolation of noised_rot_mat1 and noised_rot_mat2
-        # was getting weird complex matrices when doing the fractional_matrix_power
-
-        # noised_rot_mats = []
-        # for alpha in np.linspace(0, 1, path_length):
-        #     mats = torch.matmul(noised_rot_mat2, noised_rot_mat1.inverse()).cpu()
-        #     mats = mats.reshape(-1, 3, 3)
-        #     exp_mats = torch.stack([torch.tensor(fractional_matrix_power(mat, alpha)) for mat in mats]).reshape(num_paths, n_atoms, 3, 3)
-        #     import pdb; pdb.set_trace()
-        #     noised_rot_mats.append(torch.matmul(exp_mats, noised_rot_mat1.cpu()))
-
-        # noise_rot_mats = torch.stack(noised_rot_mats)
 
         noised_trs = noised_trs.permute((1, 0, 2, 3)).to(
             device
