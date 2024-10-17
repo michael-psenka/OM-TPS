@@ -1,5 +1,7 @@
-import math
+import wandb
 
+wandb.require("core")
+import math
 import numpy as np
 import time
 from tqdm import tqdm
@@ -458,7 +460,7 @@ class MainModel(BaseModel):
             ]
         )
 
-        # spherical interpolation of noised_rot_mat1 and noised_rot_mat2
+        # spherical interpolation of noised_rot_mat1 and noised_rot_mat2 (TODO: yields crazy structures when decoded)
         # noised_rot_mats = slerp_rotation_matrices(noised_rot_mat1, noised_rot_mat2, path_length)
 
         noised_trs = noised_trs.permute((1, 0, 2, 3)).to(
@@ -511,6 +513,7 @@ class MainModel(BaseModel):
         path_length,
         latent_time,
         encode_and_decode=True,
+        mlff=False,
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
         initial_guess_level=0,
@@ -522,6 +525,7 @@ class MainModel(BaseModel):
         add_noise=False,
         truncated_gradient=False,
         temperature=1.0,
+        log=False,
     ):
         """
         OM interpolation between two conformations.
@@ -558,10 +562,16 @@ class MainModel(BaseModel):
             ]
         )
 
-        # spherical interpolation of noised_rot_mat1 and noised_rot_mat2
-        noised_rot_mats = slerp_rotation_matrices(
-            noised_rot_mat1, noised_rot_mat2, path_length
+        # linear interpolation of noised_rot_mat1 and noised_rot_mat2
+        noised_rot_mats = torch.stack(
+            [
+                torch.lerp(noised_rot_mat1.cpu(), noised_rot_mat2.cpu(), alpha)
+                for alpha in torch.linspace(0, 1, path_length)
+            ]
         )
+
+        # spherical interpolation of noised_rot_mat1 and noised_rot_mat2 (TODO: yields crazy structures when decoded)
+        # noised_rot_mats = slerp_rotation_matrices(noised_rot_mat1, noised_rot_mat2, path_length)
 
         noised_trs = noised_trs.permute((1, 0, 2, 3)).to(
             device
@@ -575,38 +585,172 @@ class MainModel(BaseModel):
         actions = []
         path_terms = []
         force_terms = []
+        all_noised_trs = [noised_trs.clone().detach()]
+        all_noised_rot_mats = [noised_rot_mats.clone().detach()]
+        changed = False
 
-        for step in pbar:
-            # optimize the path using Onsager Machlup action
-            pass
+        ####### START OF OM OPTIMIZATION #######
+        with torch.enable_grad():
+            noised_trs.requires_grad = True
+            noised_rot_mats.requires_grad = True
 
-        # decode
-        # split into minibatches to save memory
-        batch_size = 32
-        all_trs = []
-        all_rot_mats = []
-        for tr, rot_mats in zip(
-            noised_trs.reshape(-1, n_atoms, 3).split(batch_size),
-            noised_rot_mats.reshape(-1, n_atoms, 3, 3).split(batch_size),
-        ):
-            with torch.no_grad():
+            for step in pbar:
+                # optimize the path using Onsager Machlup action
+                if anneal:
+                    # diff_time = max(
+                    #     0,
+                    #     self.num_timesteps - int(self.num_timesteps / om_steps) * i - 1,
+                    # )  # anneal the time from T to 0
+                    diff_time = anneal_schedule[i].item()
+                else:
+                    diff_time = latent_time
 
-                _tr, _rot_mats = self.sample(
-                    tr.shape[0],
-                    single_repr,
-                    pair_repr,
-                    tr_init=tr,
-                    rot_mat_init=rot_mats,
+                if truncated_gradient:
+                    # Truncated gradient method: (maybe would be better to directly populate grads with the forces?)
+                    force_func = None
+
+                    with torch.no_grad():
+                        targets = [
+                            x + self.force_func(center_zero(x), diff_time)
+                            for x in noised_xs
+                        ]
+                    forces = [target - x for x, target in zip(noised_xs, targets)]
+
+                elif mlff:
+                    force_func = get_force_from_mlff
+                    forces = [None] * len(noised_xs)
+                else:
+                    # main thing
+                    force_func = lambda state: self.forward_step(
+                        state,
+                        torch.isnan((state[1].sum(-1) + state[0]).sum(-1)),
+                        torch.tensor([diff_time]).to(device),
+                        single_repr,
+                        pair_repr,
+                    )
+                    forces = [None] * len(noised_trs)
+
+                laplace = None
+                action_func = action_cls(
+                    force_func=force_func,
+                    laplace_func=laplace,
+                    dt=dt,
+                    gamma=gamma,
+                    D=100,
+                )  # (D is only used for HessianAction)
+
+                # TODO: vmap over batch dimension
+                # (currently not possible because of calling requires_grad on x in GraphTransformer)
+
+                noised_xs = [
+                    (tr, rot_mat) for tr, rot_mat in zip(noised_trs, noised_rot_mats)
+                ]
+                terms = [action_func(x, force) for x, force in zip(noised_xs, forces)]
+                first_term = torch.cat([term[0].unsqueeze(0) for term in terms]).mean()
+                second_term = torch.cat([term[1].unsqueeze(0) for term in terms]).mean()
+                action = torch.cat(
+                    [(term[0] + term[1]).unsqueeze(0) for term in terms]
+                ).mean()
+
+                actions.append(action.item())
+                path_terms.append(first_term.item())
+                force_terms.append(second_term.item())
+
+                optimizer.zero_grad()
+                tr_grads, rot_mat_grads = torch.autograd.grad(
+                    action, (noised_trs, noised_rot_mats)
                 )
 
-            all_trs.append(_tr.reshape(-1, path_length, n_atoms, 3))
-            all_rot_mats.append(_rot_mats.reshape(-1, path_length, n_atoms, 3, 3))
+                if add_noise:
+                    # add noise to gradients, since adding directly to path yields optimization problems with Adam
+                    with torch.no_grad():
+                        _t = (
+                            torch.tensor([max(1000 - i - 1, diff_time)])
+                            .repeat(noised_xs.shape[0] * noised_xs.shape[1])
+                            .to(self.device)
+                        )
+                        _, _, model_log_variance = self.p_mean_variance(
+                            center_zero(noised_xs.reshape(-1, self.num_atoms, 3)), _t
+                        )
+                        noise = torch.randn_like(
+                            noised_xs.reshape(-1, self.num_atoms, 3)
+                        )
+                        noise = center_zero(noise)
+                        path_noise = (
+                            (0.5 * model_log_variance).exp() * noise * temperature
+                        )
 
-        all_trs = torch.cat(all_trs, dim=0)
-        all_rot_mats = torch.cat(all_rot_mats, dim=0)
+                    grads = grads + path_noise.reshape(grads.shape) / lr
 
-        # reset the endpoints
-        all_trs[:, 0], all_trs[:, -1] = original_tr1, original_tr2
-        all_rot_mats[:, 0], all_rot_mats[:, -1] = original_rot_mat1, original_rot_mat2
+                with torch.no_grad():
+
+                    tr_grads[:, 0], tr_grads[:, -1] = 0, 0
+                    rot_mat_grads[:, 0], rot_mat_grads[:, -1] = 0, 0
+                    noised_trs.grad = tr_grads
+                    noised_rot_mats.grad = rot_mat_grads
+                    optimizer.step()
+
+                all_noised_trs.append(noised_trs.clone().detach())
+                all_noised_rot_mats.append(noised_rot_mats.clone().detach())
+                path_contribution = first_term.item() / action.item()
+                force_contribution = second_term.item() / action.item()
+                pbar.set_description(
+                    f"OM Action: {action.item()}, Path Contribution: {round(path_contribution*100, 3)}%, Force Contribution: {round(force_contribution * 100, 3)}%"
+                )
+
+                if path_contribution > 0.99 and i > 50 and not changed:
+                    print(
+                        "Path contribution is too high, decreasing dt to upweight the path loss"
+                    )
+                    dt /= 10  # decrease the time step to upweight the path term
+                    changed = True
+                elif force_contribution > 0.99 and i > 50 and not changed:
+                    print(
+                        "Force contribution is too high, increasing dt to upweight the force loss"
+                    )
+                    dt *= 10  # increase the time step to upweight the force term
+                    changed = True
+
+                if log:
+                    wandb.log(
+                        {
+                            "OM Action": action.item(),
+                            "Path Norm": first_term.item(),
+                            "Force Norm": second_term.item(),
+                            "Path Contribution": path_contribution,
+                            "Force Contribution": force_contribution,
+                        }
+                    )
+
+        ####### END OF OM OPTIMIZATION #######
+
+        all_trs = []
+        all_rot_mats = []
+
+        # decode the optimized paths (keeping every 20 for future visualization)
+        for tr_path, rot_mat_path in zip(all_noised_trs, all_noised_rot_mats):
+
+            with torch.no_grad():
+                tr_path = tr_path.reshape(-1, n_atoms, 3)
+                rot_mat_path = rot_mat_path.reshape(-1, n_atoms, 3, 3)
+                _tr, _rot_mats = self.sample(
+                    tr_path.shape[0],
+                    single_repr,
+                    pair_repr,
+                    tr_init=tr_path,
+                    rot_mat_init=rot_mat_path,
+                )
+
+            _tr = _tr.reshape(-1, path_length, n_atoms, 3)
+            _rot_mats = _rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
+            # reset the endpoints
+            _tr[:, 0], _tr[:, -1] = original_tr1, original_tr2
+            _rot_mats[:, 0], _rot_mats[:, -1] = original_rot_mat1, original_rot_mat2
+
+            all_trs.append(_tr.reshape(-1, n_atoms, 3))
+            all_rot_mats.append(_rot_mats.reshape(-1, n_atoms, 3, 3))
+
+        all_trs = torch.stack(all_trs, dim=0)
+        all_rot_mats = torch.stack(all_rot_mats, dim=0)
 
         return all_trs, all_rot_mats

@@ -14,7 +14,7 @@ from model.main_model import MainModel as model_fn
 from tqdm import tqdm
 import mdtraj as md
 
-# Add parent directory to sys.path
+from actions import SimpleAction, TruncatedAction, S2Action
 from logging_utils import save_ovito_traj
 
 
@@ -117,37 +117,28 @@ def write_to_npz(tr, rot_mat, file):
     np.savez(file, **data)
 
 
-def main(
-    gen_mode,
-    checkpoint,
-    pdb_id,
-    pkl,
-    fasta,
-    output_prefix,
-    num_samples,
-    batch_size,
-    path_length,
-    latent_time,
-    init_state,
-    use_tqdm,
-    use_gpu,
-):
+def main(args):
+
+    args.use_gpu = not args.disable_gpu
+    args.use_tqdm = not args.disable_tqdm
 
     # make output directory
-    original_output_prefix = os.path.join(output_prefix, pdb_id)
-    output_prefix = os.path.join(original_output_prefix, "main_eval_output_" + gen_mode)
+    original_output_prefix = os.path.join(args.output_prefix, args.pdb_id)
+    output_prefix = os.path.join(
+        original_output_prefix, "main_eval_output_" + args.gen_mode
+    )
     os.makedirs(output_prefix, exist_ok=True)
 
-    pkl = f"{pkl}/{pdb_id}.pkl"
-    fasta = f"{fasta}/{pdb_id}.fasta"
+    pkl = f"{args.pkl}/{args.pdb_id}.pkl"
+    fasta = f"{args.fasta}/{args.pdb_id}.fasta"
 
-    output = pdb_id
+    output = args.pdb_id
 
-    model = load_model(checkpoint)
+    model = load_model(args.checkpoint)
     model = model.eval()
 
-    batch_size = min(batch_size, num_samples)
-    num_batches = num_samples // batch_size
+    batch_size = min(args.batch_size, args.num_samples)
+    num_batches = args.num_samples // batch_size
 
     if pkl.endswith(".list"):
         pkl_list = open(pkl, "r").readlines()
@@ -172,13 +163,13 @@ def main(
         seq = open(fasta, "r").readlines()[1].strip()
         assert len(seq) == single_repr.shape[0]
 
-        if use_gpu and torch.cuda.is_available():
+        if args.use_gpu and torch.cuda.is_available():
             model = model.cuda()
             single_repr = single_repr.cuda()
             pair_repr = pair_repr.cuda()
 
-        if init_state is not None:
-            init_data = np.load(init_state)
+        if args.init_state is not None:
+            init_data = np.load(args.init_state)
             tr_init = torch.from_numpy(init_data["tr"]).float()
             rot_mat_init = torch.from_numpy(init_data["rot_mat"]).float()
         else:
@@ -189,17 +180,17 @@ def main(
         all_rot_mat = []
         for i in range(num_batches):
 
-            if gen_mode == "iid":
+            if args.gen_mode == "iid":
                 # generate i.i.d samples
                 tr, rot_mat = model.sample(
-                    batch_size,
+                    args.batch_size,
                     single_repr,
                     pair_repr,
                     tr_init,
                     rot_mat_init,
-                    use_tqdm=use_tqdm,
+                    use_tqdm=args.use_tqdm,
                 )
-            elif "interpolate" in gen_mode:
+            elif "interpolate" in args.gen_mode:
                 if os.path.exists(
                     os.path.join(
                         original_output_prefix,
@@ -221,15 +212,15 @@ def main(
                     tr1, tr2 = tr[idx1], tr[idx2]
                     rot_mat1, rot_mat2 = rot_mat[idx1], rot_mat[idx2]
                     # repeat them to num_samples
-                    tr1 = tr1.unsqueeze(0).repeat(num_samples, 1, 1)
-                    tr2 = tr2.unsqueeze(0).repeat(num_samples, 1, 1)
-                    rot_mat1 = rot_mat1.unsqueeze(0).repeat(num_samples, 1, 1, 1)
-                    rot_mat2 = rot_mat2.unsqueeze(0).repeat(num_samples, 1, 1, 1)
+                    tr1 = tr1.unsqueeze(0).repeat(args.num_samples, 1, 1)
+                    tr2 = tr2.unsqueeze(0).repeat(args.num_samples, 1, 1)
+                    rot_mat1 = rot_mat1.unsqueeze(0).repeat(args.num_samples, 1, 1, 1)
+                    rot_mat2 = rot_mat2.unsqueeze(0).repeat(args.num_samples, 1, 1, 1)
                 else:
                     raise ValueError(
                         "Please generate i.i.d samples before generating interpolated samples."
                     )
-                if gen_mode == "interpolate":
+                if args.gen_mode == "interpolate":
                     # generate interpolated samples
                     tr, rot_mat = model.interpolate(
                         tr1,
@@ -238,24 +229,46 @@ def main(
                         rot_mat2,
                         single_repr,
                         pair_repr,
-                        path_length,
-                        latent_time,
-                        temperature=1.0,
+                        args.path_length,
+                        args.latent_time,
+                        temperature=args.interpolation_temp,
                     )
 
-                elif gen_mode == "om_interpolate":
+                elif args.gen_mode == "om_interpolate":
+                    if args.action == "hessian":
+                        action_cls = S2Action
+                    elif args.action == "truncated":
+                        action_cls = TruncatedAction
+                    elif args.action == "simple":
+                        action_cls = SimpleAction
                     # generate Onsager-Machlup interpolated samples
-                    tr, rot_mat = model.one_mode_interpolate(
+                    tr_progress, rot_mat_progress = model.om_interpolate(
                         tr1,
                         rot_mat1,
                         tr2,
                         rot_mat2,
                         single_repr,
                         pair_repr,
-                        path_length,
-                        latent_time,
-                        temperature=1.0,
+                        args.path_length,
+                        args.latent_time,
+                        not args.no_encode_and_decode,
+                        args.mlff,
+                        action_cls,
+                        torch.lerp if args.initial_guess_method == "linear" else slerp,
+                        args.initial_guess_level,
+                        args.steps,
+                        args.lr,
+                        args.om_dt,
+                        args.om_gamma,
+                        args.anneal,
+                        args.add_noise,
+                        args.truncated_gradient,
+                        args.interpolation_temp,
+                        log=not args.disable_logging,
                     )
+
+                    tr = tr_progress[-1]
+                    rot_mat = rot_mat_progress[-1]
 
             all_tr.append(tr)
             all_rot_mat.append(rot_mat)
@@ -265,7 +278,7 @@ def main(
         all_tr = torch.cat(all_tr, dim=0)
         all_rot_mat = torch.cat(all_rot_mat, dim=0)
 
-        pdb_file = output_prefix + f"/sample-{gen_mode}.pdb"
+        pdb_file = output_prefix + f"/sample-{args.gen_mode}.pdb"
 
         all_CA = []
         all_N = []
@@ -287,7 +300,7 @@ def main(
         all_N = torch.stack(all_N, dim=0)
         all_C = torch.stack(all_C, dim=0)
 
-        sampled_mol_file = output_prefix + f"/sample-{gen_mode}-all.pt"
+        sampled_mol_file = output_prefix + f"/sample-{args.gen_mode}-all.pt"
         sampled_mol = torch.cat([all_CA, all_N, all_C], dim=1)
         torch_dict = {
             "tr": all_tr,
@@ -295,17 +308,29 @@ def main(
             "sampled_mol": sampled_mol,
         }
         torch.save(torch_dict, sampled_mol_file)
-        sampled_CA_file = output_prefix + f"/sample-{gen_mode}.pt"
+        sampled_CA_file = output_prefix + f"/sample-{args.gen_mode}.pt"
         torch.save(all_CA, sampled_CA_file)
-        gsd_file = output_prefix + f"/sample-{gen_mode}.gsd"
+        gsd_file = output_prefix + f"/sample-{args.gen_mode}.gsd"
         save_ovito_traj(
             sampled_mol, gsd_file, alpha_carbon_lim=all_CA.shape[1], all_backbone=True
         )
+
+        if args.gen_mode == "om_interpolate":
+            progress_dict = {
+                "tr": tr_progress,
+                "rot_mat": rot_mat_progress,
+            }
+            progress_file = output_prefix + f"/path_history-{args.gen_mode}.pt"
+            torch.save(progress_dict, progress_file)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Evaluate a checkpoint and process data."
+    )
+
+    parser.add_argument(
+        "--disable_logging", action="store_true", help="Don't log to wandb"
     )
 
     parser.add_argument(
@@ -348,12 +373,6 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--path_length", type=int, default=200, help="Path length for interpolation"
-    )
-    parser.add_argument(
-        "--latent_time", type=int, default=499, help="Time for latent interpolation"
-    )
-    parser.add_argument(
         "-p",
         "--output-prefix",
         default="./output/",
@@ -368,19 +387,86 @@ if __name__ == "__main__":
     )
     parser.add_argument("--disable_gpu", action="store_true", help="Disable GPU usage")
 
-    args = parser.parse_args()
-    main(
-        args.gen_mode,
-        args.checkpoint,
-        args.pdb_id,
-        args.pkl,
-        args.fasta,
-        args.output_prefix,
-        args.num_samples,
-        args.batch_size,
-        args.path_length,
-        args.latent_time,
-        args.init_state,
-        not args.disable_tqdm,
-        not args.disable_gpu,
+    parser.add_argument(
+        "--latent_time",
+        type=int,
+        default=0,
+        help="time at which to do latent interpolation",
     )
+    parser.add_argument(
+        "--initial_guess_method",
+        type=str,
+        help="method to generate initial interpolation path (options: 'spherical' or 'linear')",
+        default="linear",
+    )
+
+    parser.add_argument(
+        "--initial_guess_level",
+        type=int,
+        help="At what latent level to generate the initial interpolation path",
+        default=0,
+    )
+    parser.add_argument(
+        "--anneal",
+        action="store_true",
+        help="whether to anneal temperature during interpolation",
+    )
+    parser.add_argument(
+        "--path_length", type=int, help="length of interpolation path", default=200
+    )
+
+    parser.add_argument(
+        "--steps", type=int, help="number of OM optimization steps", default=1000
+    )
+
+    parser.add_argument(
+        "--lr", type=float, help="learning rate for OM optimization", default=2e-1
+    )
+    parser.add_argument(
+        "--om_dt", type=float, help="dt for OM optimization", default=0.1
+    )
+
+    parser.add_argument(
+        "--om_gamma", type=float, help="gamma for OM optimization", default=10
+    )
+
+    parser.add_argument(
+        "--interpolation_temp",
+        type=float,
+        help="temperature for sampling during OM optimization",
+        default=1.0,
+    )
+
+    parser.add_argument(
+        "--action",
+        type=str,
+        help="Which action to use. Options: hessian, truncated, simple",
+        default="truncated",
+    )
+
+    parser.add_argument(
+        "--no_encode_and_decode",
+        action="store_true",
+        help="Don't encode the molecule into latent space before OM optimization, and also don't decode it after",
+    )
+
+    parser.add_argument(
+        "--add_noise",
+        action="store_true",
+        help="Add noise at every step of the OM optimization (to promote diversity)",
+    )
+
+    parser.add_argument(
+        "--truncated_gradient",
+        action="store_true",
+        help="Instead of taking gradient through the diffusion model forces, just follow the forces",
+    )
+
+    parser.add_argument(
+        "--mlff",
+        action="store_true",
+        help="Use a pretrained machine learning force field (MLFF) to compute forces instead of the diffusion model",
+    )
+
+    args = parser.parse_args()
+    main(args)
