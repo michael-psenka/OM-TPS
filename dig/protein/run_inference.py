@@ -11,7 +11,6 @@ import torch.nn.functional as F
 from common import config as cfg
 from model import geometry, so3
 from model.main_model import MainModel as model_fn
-from scipy.spatial.transform import Rotation as R
 from tqdm import tqdm
 import mdtraj as md
 
@@ -92,141 +91,6 @@ def load_model(step):
     return model
 
 
-def _inference_fn(
-    model,
-    num_samples,
-    single_repr,
-    pair_repr,
-    tr_init,  # option to provide initial translation
-    rot_mat_init,  # option to provide initial rotation
-    save_full_state=False,
-    use_tqdm=True,
-):
-    # TODO: provide option to pass in two initial structures and interpolate between them
-
-    # TODO: need to forward diffuse the two structures by calling _gen_noise and then adding that noise
-    # TODO: then optimize the path via minimizing the OM action
-    device = single_repr.device
-
-    inference_steps = model.n_time_step
-
-    def get_t_schedule(inference_steps):
-        return np.linspace(1, 0, inference_steps + 1)[:-1]
-
-    t_schedule = get_t_schedule(inference_steps=inference_steps)
-    tr_schedule, rot_schedule = t_schedule, t_schedule
-
-    tr_sigma_min, tr_sigma_max = model.tr_sigma_min, model.tr_sigma_max
-    rot_sigma_min, rot_sigma_max = model.rot_sigma_min, model.rot_sigma_max
-
-    # map timestep (1, 0) to noise scale according to diffusion model schedule
-    def t_to_sigma(t_tr, t_rot):
-        T_sigma = (tr_sigma_min ** (1 - t_tr)) * (tr_sigma_max ** (t_tr))
-        IR_sigma = (rot_sigma_min ** (1 - t_rot)) * (rot_sigma_max ** (t_rot))
-        return T_sigma, IR_sigma
-
-    # get random initial structure (top level latent)
-    def init_conformer(feature, num_samples):
-        L = feature.shape[0]
-        random_tr = torch.zeros(num_samples, L, 3).normal_(mean=0, std=tr_sigma_max)
-        torch.normal(mean=0, std=tr_sigma_max, size=(1, 3))
-        random_rot = torch.from_numpy(R.random(num=num_samples * L).as_matrix()).float()
-        random_rot = random_rot.reshape(num_samples, L, 3, 3)
-        return random_tr, random_rot
-
-    if tr_init is None or rot_mat_init is None:
-        # get initial structure
-        tr, rot_mat = init_conformer(single_repr, num_samples)
-        tr_init, rot_mat_init = tr.clone(), rot_mat.clone()
-    else:
-        tr, rot_mat = tr_init.clone(), rot_mat_init.clone()
-    tr, rot_mat = tr.to(device), rot_mat.to(device)
-
-    if save_full_state:
-        tr_list = []
-        rot_mat_list = []
-        tr_list.append(tr_init.clone().cpu())
-        rot_mat_list.append(rot_mat_init.clone().cpu())
-
-    # Sampling, t: 1 -> 0
-    start_time = time.time()
-
-    # Reverse diffusion loop starting t=1
-    # This is a deterministic process, unlike standard reverse diffusion which uses Langevin dynamics
-    # DiG paper rationalizes this by saying that if the score model is well trained, the ODE and SDE should match (Supplementary Sec A.1.3)
-    # The ODE corresponds to Eqn. 7 in the paper.
-    # TODO: how do we reconcile this with OM action optimization ? We should be able to try out a stochastic sampling process
-    # Should add ability to sample from arbitrary intermediate timestep
-    for t_idx in tqdm(range(inference_steps), disable=not use_tqdm):
-        t_tr, t_rot = tr_schedule[t_idx], rot_schedule[t_idx]
-        dt_tr = (
-            tr_schedule[t_idx] - tr_schedule[t_idx + 1]
-            if t_idx < inference_steps - 1
-            else tr_schedule[t_idx]
-        )
-        dt_rot = (
-            rot_schedule[t_idx] - rot_schedule[t_idx + 1]
-            if t_idx < inference_steps - 1
-            else rot_schedule[t_idx]
-        )
-
-        tr_sigma, rot_sigma = t_to_sigma(t_tr, t_rot)
-
-        # predict score update from diffusion model
-        with torch.no_grad():
-
-            tr_score, rot_score = model.forward_step(
-                (tr, rot_mat),
-                torch.zeros((num_samples, tr.shape[1]), dtype=bool, device=tr.device),
-                torch.tensor([t_idx]).to(device),
-                single_repr,
-                pair_repr,
-            )
-
-            tr_score /= tr_sigma
-            rot_score *= so3.score_norm(torch.tensor([rot_sigma]))[0]
-        # tr_score: (N, L, 3), rot_score: (N, L, 3)
-
-        tr_g = tr_sigma * torch.sqrt(
-            torch.tensor(2 * np.log(tr_sigma_max / tr_sigma_min))
-        )
-        rot_g = (
-            2
-            * rot_sigma
-            * torch.sqrt(torch.tensor(np.log(rot_sigma_max / rot_sigma_min)))
-        )
-
-        tr_perturb_nr = tr_g**2 * dt_tr * tr_score
-        rot_perturb_nr = rot_g**2 * dt_rot * rot_score
-
-        tr_perturb = tr_perturb_nr
-        rot_perturb = rot_perturb_nr
-
-        rot_mat_perturb_nr = geometry.axis_angle_to_matrix(rot_perturb_nr)
-        rot_mat_perturb = geometry.axis_angle_to_matrix(rot_perturb)
-
-        # update conformer
-        tr_mean = tr + tr_perturb_nr
-        rot_mat_mean = torch.matmul(rot_mat_perturb_nr, rot_mat)
-
-        if save_full_state:
-            tr_list.append(tr_mean.clone().cpu())
-            rot_mat_list.append(rot_mat_mean.clone().cpu())
-
-        tr = tr + tr_perturb
-        rot_mat = torch.matmul(rot_mat_perturb, rot_mat)
-
-    x = torch.norm(tr_mean[:, 1:] - tr_mean[:, :-1], dim=-1)
-    print(
-        f"CA-CA distance: {x.mean():.3f} +- {x.std():.3f} max: {x.max():.3f} min: {x.min():.3f}, len: {tr.shape[1]}, time: {time.time() - start_time:.3f}"
-    )
-
-    if not save_full_state:
-        return tr_init, rot_mat_init, tr_mean, rot_mat_mean
-    else:
-        return tr_list, rot_mat_list
-
-
 def convert_to_CANC(tr, rot_mat):
     tr, rot_mat = tr.cpu(), rot_mat.cpu()
     CA = tr
@@ -278,6 +142,7 @@ def inference(
     model = load_model(checkpoint)
     model = model.eval()
 
+    batch_size = min(batch_size, num_samples)
     num_batches = num_samples // batch_size
 
     save_full_state = True
@@ -322,9 +187,8 @@ def inference(
         all_rot_mat = []
         for i in range(num_batches):
 
-            # generate samples
-            _, _, tr, rot_mat = _inference_fn(
-                model,
+            # generate i.i.d samples
+            _, _, tr, rot_mat = model.sample(
                 batch_size,
                 single_repr,
                 pair_repr,
@@ -342,7 +206,7 @@ def inference(
         all_tr = torch.cat(all_tr, dim=0)
         all_rot_mat = torch.cat(all_rot_mat, dim=0)
 
-        pdb_file = output_prefix + f"{output}.pdb"
+        pdb_file = output_prefix + f"/{output}.pdb"
 
         all_CA = []
         all_N = []
@@ -364,12 +228,12 @@ def inference(
         all_N = torch.stack(all_N, dim=0)
         all_C = torch.stack(all_C, dim=0)
 
-        sampled_mol_file = output_prefix + f"sample-iid-all.pt"
+        sampled_mol_file = output_prefix + f"/sample-iid-all.pt"
         sampled_mol = torch.cat([all_CA, all_N, all_C], dim=1)
         torch.save(sampled_mol, sampled_mol_file)
-        sampled_CA_file = output_prefix + f"sample-iid.npy"
+        sampled_CA_file = output_prefix + f"/sample-iid.pt"
         torch.save(all_CA, sampled_CA_file)
-        gsd_file = output_prefix + f"{output}.gsd"
+        gsd_file = output_prefix + f"/{output}.gsd"
         save_ovito_traj(sampled_mol, gsd_file, alpha_carbon_lim=all_CA.shape[1])
 
 
