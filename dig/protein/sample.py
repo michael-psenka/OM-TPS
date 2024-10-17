@@ -390,7 +390,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--latent_time",
         type=int,
-        default=0,
+        default=10,
         help="time at which to do latent interpolation",
     )
     parser.add_argument(
@@ -404,7 +404,7 @@ if __name__ == "__main__":
         "--initial_guess_level",
         type=int,
         help="At what latent level to generate the initial interpolation path",
-        default=0,
+        default=500,
     )
     parser.add_argument(
         "--anneal",

@@ -280,23 +280,25 @@ class MainModel(BaseModel):
 
         return out
 
-    def sample(
+    def sample_from_t(
         self,
         num_samples,
         single_repr,
         pair_repr,
         tr_init,  # option to provide initial translation
         rot_mat_init,  # option to provide initial rotation
+        t,
         use_tqdm=True,
     ):
         """
-        Sample i.i.d conformations from the model.
+        Run reverse diffusion starting at start_time.
         Args:
             num_samples: number of samples to generate
             single_repr: (L, 25) single residue representation
             pair_repr: (L, L, 25) pair residue representation
             tr_init: (num_samples, L, 3) initial translation
             rot_mat_init: (num_samples, L, 3, 3) initial rotation
+            t: start time for sampling
             use_tqdm: use tqdm for progress bar
         """
         device = single_repr.device
@@ -305,6 +307,9 @@ class MainModel(BaseModel):
         tr_schedule, rot_schedule = t_schedule, t_schedule
 
         if tr_init is None or rot_mat_init is None:
+            assert (
+                start_time == 0
+            ), "If tr_init and rot_mat_init are not provided, start_time must be 0"
             # get initial structure
             tr, rot_mat = self._init_conformer(single_repr, num_samples)
             tr_init, rot_mat_init = tr.clone(), rot_mat.clone()
@@ -320,7 +325,10 @@ class MainModel(BaseModel):
         # DiG paper rationalizes this by saying that if the score model is well trained, the ODE and SDE should match (Supplementary Sec A.1.3)
         # The ODE corresponds to Eqn. 7 in the paper.
 
-        for t_idx in tqdm(range(self.n_time_step), disable=not use_tqdm):
+        for t_idx in tqdm(
+            range(self.n_time_step - t, self.n_time_step), disable=not use_tqdm
+        ):
+
             t_tr, t_rot = tr_schedule[t_idx], rot_schedule[t_idx]
             dt_tr = (
                 tr_schedule[t_idx] - tr_schedule[t_idx + 1]
@@ -395,6 +403,36 @@ class MainModel(BaseModel):
 
         return tr_mean, rot_mat_mean
 
+    def sample(
+        self,
+        num_samples,
+        single_repr,
+        pair_repr,
+        tr_init,  # option to provide initial translation
+        rot_mat_init,  # option to provide initial rotation
+        use_tqdm=True,
+    ):
+        """
+        Sample i.i.d conformations from the model.
+        Args:
+            num_samples: number of samples to generate
+            single_repr: (L, 25) single residue representation
+            pair_repr: (L, L, 25) pair residue representation
+            tr_init: (num_samples, L, 3) initial translation
+            rot_mat_init: (num_samples, L, 3, 3) initial rotation
+            use_tqdm: use tqdm for progress bar
+        """
+
+        return self.sample_from_t(
+            num_samples,
+            single_repr,
+            pair_repr,
+            tr_init,
+            rot_mat_init,
+            t=0,
+            use_tqdm=use_tqdm,
+        )
+
     def interpolate(
         self,
         tr1,
@@ -438,10 +476,10 @@ class MainModel(BaseModel):
             mask1 = torch.isnan((rot_mat1.sum(-1) + tr1).sum(-1))
             mask2 = torch.isnan((rot_mat2.sum(-1) + tr2).sum(-1))
             noised_tr1, noised_rot_mat1, _, _ = self.forward_diffusion(
-                tr1, rot_mat1, mask1, latent_time
+                tr1, rot_mat1, mask1, min(0, latent_time - 1)
             )
             noised_tr2, noised_rot_mat2, _, _ = self.forward_diffusion(
-                tr2, rot_mat2, mask2, latent_time
+                tr2, rot_mat2, mask2, min(0, latent_time - 1)
             )
 
         # linear interpolation of noised_tr1 and noised_tr2
@@ -467,7 +505,6 @@ class MainModel(BaseModel):
             device
         )  # make batch dimension come first [B, path_length, n_atoms, 3]
         noised_rot_mats = noised_rot_mats.permute((1, 0, 2, 3, 4)).to(device)
-        # import pdb; pdb.set_trace()
 
         # decode (split into minibatches to save memory)
         batch_size = 100
@@ -478,13 +515,13 @@ class MainModel(BaseModel):
             noised_rot_mats.reshape(-1, n_atoms, 3, 3).split(batch_size),
         ):
             with torch.no_grad():
-
-                _tr, _rot_mats = self.sample(
+                _tr, _rot_mats = self.sample_from_t(
                     tr.shape[0],
                     single_repr,
                     pair_repr,
                     tr_init=tr,
                     rot_mat_init=rot_mats,
+                    t=latent_time,
                 )
 
             all_trs.append(_tr.reshape(-1, path_length, n_atoms, 3))
@@ -543,42 +580,22 @@ class MainModel(BaseModel):
         original_rot_mat1 = rot_mat1.clone()
         original_rot_mat2 = rot_mat2.clone()
 
-        # Encode (sample from q(x_t | x_0))
-        with torch.no_grad():
-            mask1 = torch.isnan((rot_mat1.sum(-1) + tr1).sum(-1))
-            mask2 = torch.isnan((rot_mat2.sum(-1) + tr2).sum(-1))
-            noised_tr1, noised_rot_mat1, _, _ = self.forward_diffusion(
-                tr1, rot_mat1, mask1, latent_time
-            )
-            noised_tr2, noised_rot_mat2, _, _ = self.forward_diffusion(
-                tr2, rot_mat2, mask2, latent_time
-            )
-
-        # linear interpolation of noised_tr1 and noised_tr2
-        noised_trs = torch.stack(
-            [
-                torch.lerp(noised_tr1.cpu(), noised_tr2.cpu(), alpha)
-                for alpha in torch.linspace(0, 1, path_length)
-            ]
+        # Initial guess is from linear interpolation
+        noised_trs, noised_rot_mats = self.interpolate(
+            tr1,
+            rot_mat1,
+            tr2,
+            rot_mat2,
+            single_repr,
+            pair_repr,
+            path_length,
+            initial_guess_level,
+            temperature,
         )
+        noised_trs = noised_trs.reshape(-1, path_length, n_atoms, 3)
+        noised_rot_mats = noised_rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
 
-        # linear interpolation of noised_rot_mat1 and noised_rot_mat2
-        noised_rot_mats = torch.stack(
-            [
-                torch.lerp(noised_rot_mat1.cpu(), noised_rot_mat2.cpu(), alpha)
-                for alpha in torch.linspace(0, 1, path_length)
-            ]
-        )
-
-        # spherical interpolation of noised_rot_mat1 and noised_rot_mat2 (TODO: yields crazy structures when decoded)
-        # noised_rot_mats = slerp_rotation_matrices(noised_rot_mat1, noised_rot_mat2, path_length)
-
-        noised_trs = noised_trs.permute((1, 0, 2, 3)).to(
-            device
-        )  # make batch dimension come first [B, path_length, n_atoms, 3]
-        noised_rot_mats = noised_rot_mats.permute((1, 0, 2, 3, 4)).to(device)
-
-        # OM optimization
+        # Now refine the initial guess with OM optimization
         optimizer = torch.optim.Adam([noised_trs, noised_rot_mats], lr=lr)
 
         pbar = tqdm(range(om_steps))
@@ -727,19 +744,24 @@ class MainModel(BaseModel):
         all_trs = []
         all_rot_mats = []
 
-        # decode the optimized paths (keeping every 20 for future visualization)
-        for tr_path, rot_mat_path in zip(all_noised_trs, all_noised_rot_mats):
+        # decode the optimized paths (keeping every 50 for future visualization)
+        for tr_path, rot_mat_path in zip(
+            all_noised_trs[::50], all_noised_rot_mats[::50]
+        ):
 
-            with torch.no_grad():
-                tr_path = tr_path.reshape(-1, n_atoms, 3)
-                rot_mat_path = rot_mat_path.reshape(-1, n_atoms, 3, 3)
-                _tr, _rot_mats = self.sample(
-                    tr_path.shape[0],
-                    single_repr,
-                    pair_repr,
-                    tr_init=tr_path,
-                    rot_mat_init=rot_mat_path,
-                )
+            # with torch.no_grad():
+            #     tr_path = tr_path.reshape(-1, n_atoms, 3)
+            #     rot_mat_path = rot_mat_path.reshape(-1, n_atoms, 3, 3)
+            #     _tr, _rot_mats = self.sample_from_t(
+            #         tr_path.shape[0],
+            #         single_repr,
+            #         pair_repr,
+            #         tr_init=tr_path,
+            #         rot_mat_init=rot_mat_path,
+            #         t=latent_time
+            #     )
+            _tr = tr_path
+            _rot_mats = rot_mat_path
 
             _tr = _tr.reshape(-1, path_length, n_atoms, 3)
             _rot_mats = _rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
