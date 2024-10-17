@@ -8,7 +8,10 @@ import torch.nn.functional as F
 from common import config as cfg
 from torch import nn
 from scipy.linalg import fractional_matrix_power
+from rmsd import kabsch_rotate
 from scipy.spatial.transform import Rotation as R
+
+from actions import S2Action, TruncatedAction, SimpleAction
 
 
 from . import geometry, so3
@@ -130,7 +133,9 @@ class MainModel(BaseModel):
     def _gen_noise(self, time_step, T_size, IR_size, device):
         """generate noise for T and IR"""
 
-        T_sigma, IR_sigma = self._t_to_sigma(time_step, device)  # (B, ), (B, )
+        T_sigma, IR_sigma = self._t_to_sigma(time_step, device)
+        T_sigma = T_sigma.unsqueeze(0).repeat(T_size[0])
+        IR_sigma = IR_sigma.unsqueeze(0).repeat(IR_size[0])
 
         # T_update, T_score
         T_update = torch.stack(
@@ -203,9 +208,10 @@ class MainModel(BaseModel):
             "so3_rot_score_norm": rot_score_norm,
         }
 
-    def forward_diffusion(self, data, mask, time_step):
+    def forward_diffusion(self, T, IR, mask, time_step):
         """Go to a timestep in the forward diffusion process"""
         # sample random noise based on timestep (effective noise for forward diffusion)
+        device = T.device
         noise_gen = self._gen_noise(time_step, T.size(), IR.size(), device)
 
         T_sigma, IR_sigma = noise_gen["T_sigma"], noise_gen["IR_sigma"]
@@ -238,7 +244,7 @@ class MainModel(BaseModel):
 
         # add noise (forward diffusion)
         T_perturbed, IR_perturbed, T_score, so3_rot_score = self.forward_diffusion(
-            data, mask, time_step
+            T, IR, mask, time_step
         )
 
         # predict the added noise using the diffusion model
@@ -277,7 +283,6 @@ class MainModel(BaseModel):
         pair_repr,
         tr_init,  # option to provide initial translation
         rot_mat_init,  # option to provide initial rotation
-        save_full_state=False,
         use_tqdm=True,
     ):
         """
@@ -288,7 +293,6 @@ class MainModel(BaseModel):
             pair_repr: (L, L, 25) pair residue representation
             tr_init: (num_samples, L, 3) initial translation
             rot_mat_init: (num_samples, L, 3, 3) initial rotation
-            save_full_state: save the full trajectory of conformations
             use_tqdm: use tqdm for progress bar
         """
         device = single_repr.device
@@ -303,12 +307,6 @@ class MainModel(BaseModel):
         else:
             tr, rot_mat = tr_init.clone(), rot_mat_init.clone()
         tr, rot_mat = tr.to(device), rot_mat.to(device)
-
-        if save_full_state:
-            tr_list = []
-            rot_mat_list = []
-            tr_list.append(tr_init.clone().cpu())
-            rot_mat_list.append(rot_mat_init.clone().cpu())
 
         # Sampling, t: 1 -> 0
         start_time = time.time()
@@ -383,10 +381,6 @@ class MainModel(BaseModel):
             tr_mean = tr + tr_perturb_nr
             rot_mat_mean = torch.matmul(rot_mat_perturb_nr, rot_mat)
 
-            if save_full_state:
-                tr_list.append(tr_mean.clone().cpu())
-                rot_mat_list.append(rot_mat_mean.clone().cpu())
-
             tr = tr + tr_perturb
             rot_mat = torch.matmul(rot_mat_perturb, rot_mat)
 
@@ -395,10 +389,7 @@ class MainModel(BaseModel):
             f"CA-CA distance: {x.mean():.3f} +- {x.std():.3f} max: {x.max():.3f} min: {x.min():.3f}, len: {tr.shape[1]}, time: {time.time() - start_time:.3f}"
         )
 
-        if not save_full_state:
-            return tr_init, rot_mat_init, tr_mean, rot_mat_mean
-        else:
-            return tr_list, rot_mat_list
+        return tr_mean, rot_mat_mean
 
     def interpolate(
         self,
@@ -406,6 +397,8 @@ class MainModel(BaseModel):
         rot_mat1,
         tr2,
         rot_mat2,
+        single_repr,
+        pair_repr,
         path_length,
         latent_time,
         temperature=1.0,
@@ -417,6 +410,8 @@ class MainModel(BaseModel):
             rot_mat1: (N, L, 3, 3) rotation matrix
             tr2: (N, L, 3) translation
             rot_mat2: (N, L, 3, 3) rotation matrix
+            single_repr: (L, 3) single residue representation
+            pair_repr: (L, L, 3) pair residue representation
             path_length: number of frames to interpolate
             latent_time: the latent time to interpolate
             temperature: temperature for sampling
@@ -424,7 +419,6 @@ class MainModel(BaseModel):
         device = tr1.device
 
         num_paths, n_atoms = tr1.shape[0], tr1.shape[1]
-
         for i in range(num_paths):
             # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
             tr2[i] = torch.tensor(kabsch_rotate(tr2[i].cpu(), tr1[i].cpu())).to(device)
@@ -439,49 +433,203 @@ class MainModel(BaseModel):
         with torch.no_grad():
             mask1 = torch.isnan((rot_mat1.sum(-1) + tr1).sum(-1))
             mask2 = torch.isnan((rot_mat2.sum(-1) + tr2).sum(-1))
-            noised_tr1, noised_rot_mat1 = self.forward_diffusion(x1, mask1, latent_time)
-            noised_tr2, noised_rot_mat2 = self.forward_diffusion(x2, mask2, latent_time)
+            noised_tr1, noised_rot_mat1, _, _ = self.forward_diffusion(
+                tr1, rot_mat1, mask1, latent_time
+            )
+            noised_tr2, noised_rot_mat2, _, _ = self.forward_diffusion(
+                tr2, rot_mat2, mask2, latent_time
+            )
 
         # linear interpolation of noised_tr1 and noised_tr2
         noised_trs = torch.stack(
             [
-                interpolation_fn(noised_tr1.cpu(), noised_tr2.cpu(), alpha)
+                torch.lerp(noised_tr1.cpu(), noised_tr2.cpu(), alpha)
+                for alpha in torch.linspace(0, 1, path_length)
+            ]
+        )
+
+        # for now do linear interpolation of noised_rot_mat1 and noised_rot_mat2
+        noised_rot_mats = torch.stack(
+            [
+                torch.lerp(noised_rot_mat1.cpu(), noised_rot_mat2.cpu(), alpha)
                 for alpha in torch.linspace(0, 1, path_length)
             ]
         )
 
         # spherical interpolation of noised_rot_mat1 and noised_rot_mat2
-        noised_rot_mats = torch.stack(
-            [
-                torch.matmul(
-                    fractional_matrix_power(
-                        torch.matmul(noised_rot_mat2, noised_rot_mat1.inverse()), alpha
-                    ),
-                    noised_rot_mat1,
+
+        # noised_rot_mats = []
+        # for alpha in np.linspace(0, 1, path_length):
+        #     mats = torch.matmul(noised_rot_mat2, noised_rot_mat1.inverse()).cpu()
+        #     mats = mats.reshape(-1, 3, 3)
+        #     exp_mats = torch.stack([torch.tensor(fractional_matrix_power(mat, alpha)) for mat in mats]).reshape(num_paths, n_atoms, 3, 3)
+        #     import pdb; pdb.set_trace()
+        #     noised_rot_mats.append(torch.matmul(exp_mats, noised_rot_mat1.cpu()))
+
+        # noise_rot_mats = torch.stack(noised_rot_mats)
+
+        noised_trs = noised_trs.permute((1, 0, 2, 3)).to(
+            device
+        )  # make batch dimension come first [B, path_length, n_atoms, 3]
+        noised_rot_mats = noised_rot_mats.permute((1, 0, 2, 3, 4)).to(device)
+
+        # decode
+        # split into minibatches to save memory
+        batch_size = 32
+        all_trs = []
+        all_rot_mats = []
+        for tr, rot_mats in zip(
+            noised_trs.reshape(-1, n_atoms, 3).split(batch_size),
+            noised_rot_mats.reshape(-1, n_atoms, 3, 3).split(batch_size),
+        ):
+            with torch.no_grad():
+
+                _tr, _rot_mats = self.sample(
+                    tr.shape[0],
+                    single_repr,
+                    pair_repr,
+                    tr_init=tr,
+                    rot_mat_init=rot_mats,
                 )
+
+            all_trs.append(_tr.reshape(-1, path_length, n_atoms, 3))
+            all_rot_mats.append(_rot_mats.reshape(-1, path_length, n_atoms, 3, 3))
+
+        all_trs = torch.cat(all_trs, dim=0)
+        all_rot_mats = torch.cat(all_rot_mats, dim=0)
+
+        # reset the endpoints
+        all_trs[:, 0], all_trs[:, -1] = original_tr1, original_tr2
+        all_rot_mats[:, 0], all_rot_mats[:, -1] = original_rot_mat1, original_rot_mat2
+
+        all_trs = all_trs.reshape(-1, n_atoms, 3)
+        all_rot_mats = all_rot_mats.reshape(-1, n_atoms, 3, 3)
+
+        return all_trs, all_rot_mats
+
+    def om_interpolate(
+        self,
+        tr1,
+        rot_mat1,
+        tr2,
+        rot_mat2,
+        single_repr,
+        pair_repr,
+        path_length,
+        latent_time,
+        encode_and_decode=True,
+        action_cls=TruncatedAction,
+        initial_guess_fn=torch.lerp,
+        initial_guess_level=0,
+        om_steps=100,
+        lr=2e-1,
+        dt=0.1,
+        gamma=10,
+        anneal=False,
+        add_noise=False,
+        truncated_gradient=False,
+        temperature=1.0,
+    ):
+        """
+        OM interpolation between two conformations.
+        """
+        device = tr1.device
+
+        num_paths, n_atoms = tr1.shape[0], tr1.shape[1]
+        for i in range(num_paths):
+            # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
+            tr2[i] = torch.tensor(kabsch_rotate(tr2[i].cpu(), tr1[i].cpu())).to(device)
+            # TODO: do we need to rotate rot_mat2 to match rot_mat1?
+
+        original_tr1 = tr1.clone()
+        original_tr2 = tr2.clone()
+        original_rot_mat1 = rot_mat1.clone()
+        original_rot_mat2 = rot_mat2.clone()
+
+        # Encode (sample from q(x_t | x_0))
+        with torch.no_grad():
+            mask1 = torch.isnan((rot_mat1.sum(-1) + tr1).sum(-1))
+            mask2 = torch.isnan((rot_mat2.sum(-1) + tr2).sum(-1))
+            noised_tr1, noised_rot_mat1, _, _ = self.forward_diffusion(
+                tr1, rot_mat1, mask1, latent_time
+            )
+            noised_tr2, noised_rot_mat2, _, _ = self.forward_diffusion(
+                tr2, rot_mat2, mask2, latent_time
+            )
+
+        # linear interpolation of noised_tr1 and noised_tr2
+        noised_trs = torch.stack(
+            [
+                torch.lerp(noised_tr1.cpu(), noised_tr2.cpu(), alpha)
                 for alpha in torch.linspace(0, 1, path_length)
             ]
         )
 
-        noised_trs = noised_trs.permute((1, 0, 2, 3)).to(
-            self.device
-        )  # make batch dimension come first [B, path_length, n_atoms, 3]
-        noised_rot_mats = noised_rot_mats.permute((1, 0, 2, 3, 4)).to(self.device)
-        import pdb
-
-        pdb.set_trace()
-
-        # decode
-        xs = self.p_sample_loop(
-            noised_xs.reshape(-1, n_atoms, 3), latent_time, temperature=temperature
+        # for now do linear interpolation of noised_rot_mat1 and noised_rot_mat2
+        noised_rot_mats = torch.stack(
+            [
+                torch.lerp(noised_rot_mat1.cpu(), noised_rot_mat2.cpu(), alpha)
+                for alpha in torch.linspace(0, 1, path_length)
+            ]
         )
 
-        xs = xs.reshape(num_paths, path_length, n_atoms, 3)
-        xs = xs.clone().detach()
+        # TODO: spherical interpolation of noised_rot_mat1 and noised_rot_mat2
+        # was getting weird complex matrices when doing the fractional_matrix_power
+
+        # noised_rot_mats = []
+        # for alpha in np.linspace(0, 1, path_length):
+        #     mats = torch.matmul(noised_rot_mat2, noised_rot_mat1.inverse()).cpu()
+        #     mats = mats.reshape(-1, 3, 3)
+        #     exp_mats = torch.stack([torch.tensor(fractional_matrix_power(mat, alpha)) for mat in mats]).reshape(num_paths, n_atoms, 3, 3)
+        #     import pdb; pdb.set_trace()
+        #     noised_rot_mats.append(torch.matmul(exp_mats, noised_rot_mat1.cpu()))
+
+        # noise_rot_mats = torch.stack(noised_rot_mats)
+
+        noised_trs = noised_trs.permute((1, 0, 2, 3)).to(
+            device
+        )  # make batch dimension come first [B, path_length, n_atoms, 3]
+        noised_rot_mats = noised_rot_mats.permute((1, 0, 2, 3, 4)).to(device)
+
+        # OM optimization
+        optimizer = torch.optim.Adam([noised_trs, noised_rot_mats], lr=lr)
+
+        pbar = tqdm(range(om_steps))
+        actions = []
+        path_terms = []
+        force_terms = []
+
+        for step in pbar:
+            # optimize the path using Onsager Machlup action
+            pass
+
+        # decode
+        # split into minibatches to save memory
+        batch_size = 32
+        all_trs = []
+        all_rot_mats = []
+        for tr, rot_mats in zip(
+            noised_trs.reshape(-1, n_atoms, 3).split(batch_size),
+            noised_rot_mats.reshape(-1, n_atoms, 3, 3).split(batch_size),
+        ):
+            with torch.no_grad():
+
+                _tr, _rot_mats = self.sample(
+                    tr.shape[0],
+                    single_repr,
+                    pair_repr,
+                    tr_init=tr,
+                    rot_mat_init=rot_mats,
+                )
+
+            all_trs.append(_tr.reshape(-1, path_length, n_atoms, 3))
+            all_rot_mats.append(_rot_mats.reshape(-1, path_length, n_atoms, 3, 3))
+
+        all_trs = torch.cat(all_trs, dim=0)
+        all_rot_mats = torch.cat(all_rot_mats, dim=0)
 
         # reset the endpoints
-        xs[:, 0], xs[:, -1] = original_x1, original_x2
+        all_trs[:, 0], all_trs[:, -1] = original_tr1, original_tr2
+        all_rot_mats[:, 0], all_rot_mats[:, -1] = original_rot_mat1, original_rot_mat2
 
-        final_path = xs.reshape(-1, n_atoms, 3) * self.norm_factor
-
-        return {"final_path": final_path}  #
+        return all_trs, all_rot_mats

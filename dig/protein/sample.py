@@ -117,7 +117,8 @@ def write_to_npz(tr, rot_mat, file):
     np.savez(file, **data)
 
 
-def inference(
+def main(
+    gen_mode,
     checkpoint,
     pdb_id,
     pkl,
@@ -125,13 +126,16 @@ def inference(
     output_prefix,
     num_samples,
     batch_size,
+    path_length,
+    latent_time,
     init_state,
     use_tqdm,
     use_gpu,
 ):
 
     # make output directory
-    output_prefix = os.path.join(output_prefix, pdb_id)
+    original_output_prefix = os.path.join(output_prefix, pdb_id)
+    output_prefix = os.path.join(original_output_prefix, "main_eval_output_" + gen_mode)
     os.makedirs(output_prefix, exist_ok=True)
 
     pkl = f"{pkl}/{pdb_id}.pkl"
@@ -144,8 +148,6 @@ def inference(
 
     batch_size = min(batch_size, num_samples)
     num_batches = num_samples // batch_size
-
-    save_full_state = True
 
     if pkl.endswith(".list"):
         pkl_list = open(pkl, "r").readlines()
@@ -187,26 +189,82 @@ def inference(
         all_rot_mat = []
         for i in range(num_batches):
 
-            # generate i.i.d samples
-            _, _, tr, rot_mat = model.sample(
-                batch_size,
-                single_repr,
-                pair_repr,
-                tr_init,
-                rot_mat_init,
-                save_full_state=False,
-                use_tqdm=use_tqdm,
-            )
+            if gen_mode == "iid":
+                # generate i.i.d samples
+                tr, rot_mat = model.sample(
+                    batch_size,
+                    single_repr,
+                    pair_repr,
+                    tr_init,
+                    rot_mat_init,
+                    use_tqdm=use_tqdm,
+                )
+            elif "interpolate" in gen_mode:
+                if os.path.exists(
+                    os.path.join(
+                        original_output_prefix,
+                        "main_eval_output_iid",
+                        "sample-iid-all.pt",
+                    )
+                ):
+                    samples_iid = torch.load(
+                        os.path.join(
+                            original_output_prefix,
+                            "main_eval_output_iid",
+                            "sample-iid-all.pt",
+                        )
+                    )
+                    tr = samples_iid["tr"]
+                    rot_mat = samples_iid["rot_mat"]
+                    # get two random samples
+                    idx1, idx2 = np.random.choice(tr.shape[0], 2, replace=False)
+                    tr1, tr2 = tr[idx1], tr[idx2]
+                    rot_mat1, rot_mat2 = rot_mat[idx1], rot_mat[idx2]
+                    # repeat them to num_samples
+                    tr1 = tr1.unsqueeze(0).repeat(num_samples, 1, 1)
+                    tr2 = tr2.unsqueeze(0).repeat(num_samples, 1, 1)
+                    rot_mat1 = rot_mat1.unsqueeze(0).repeat(num_samples, 1, 1, 1)
+                    rot_mat2 = rot_mat2.unsqueeze(0).repeat(num_samples, 1, 1, 1)
+                if gen_mode == "interpolate":
+                    # generate interpolated samples
+                    tr, rot_mat = model.interpolate(
+                        tr1,
+                        rot_mat1,
+                        tr2,
+                        rot_mat2,
+                        single_repr,
+                        pair_repr,
+                        path_length,
+                        latent_time,
+                        temperature=1.0,
+                    )
+
+                elif gen_mode == "om_interpolate":
+                    # generate Onsager-Machlup interpolated samples
+                    tr, rot_mat = model.one_mode_interpolate(
+                        tr1,
+                        rot_mat1,
+                        tr2,
+                        rot_mat2,
+                        single_repr,
+                        pair_repr,
+                        path_length,
+                        latent_time,
+                        temperature=1.0,
+                    )
 
             all_tr.append(tr)
             all_rot_mat.append(rot_mat)
 
             print(f"Finished {i + 1}/{num_batches} batches")
 
+        import pdb
+
+        pdb.set_trace()
         all_tr = torch.cat(all_tr, dim=0)
         all_rot_mat = torch.cat(all_rot_mat, dim=0)
 
-        pdb_file = output_prefix + f"/{output}.pdb"
+        pdb_file = output_prefix + f"/sample-{gen_mode}.pdb"
 
         all_CA = []
         all_N = []
@@ -228,18 +286,29 @@ def inference(
         all_N = torch.stack(all_N, dim=0)
         all_C = torch.stack(all_C, dim=0)
 
-        sampled_mol_file = output_prefix + f"/sample-iid-all.pt"
+        sampled_mol_file = output_prefix + f"/sample-{gen_mode}-all.pt"
         sampled_mol = torch.cat([all_CA, all_N, all_C], dim=1)
-        torch.save(sampled_mol, sampled_mol_file)
-        sampled_CA_file = output_prefix + f"/sample-iid.pt"
+        torch_dict = {
+            "tr": all_tr,
+            "rot_mat": all_rot_mat,
+            "sampled_mol": sampled_mol,
+        }
+        torch.save(torch_dict, sampled_mol_file)
+        sampled_CA_file = output_prefix + f"/sample-{gen_mode}.pt"
         torch.save(all_CA, sampled_CA_file)
-        gsd_file = output_prefix + f"/{output}.gsd"
+        gsd_file = output_prefix + f"/sample-{gen_mode}.gsd"
         save_ovito_traj(sampled_mol, gsd_file, alpha_carbon_lim=all_CA.shape[1])
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Evaluate a checkpoint and process data."
+    )
+
+    parser.add_argument(
+        "--gen_mode",
+        default="iid",
+        help="Mode of generation (iid, interpolate, or om_interpolate)",
     )
 
     parser.add_argument(
@@ -265,14 +334,21 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-n",
-        "--num-samples",
+        "--num_samples",
         type=int,
         default=50,
         help="Number of samples to generate",
     )
 
     parser.add_argument(
-        "-b", "--batch-size", type=int, default=50, help="Number of samples to generate"
+        "-b", "--batch_size", type=int, default=50, help="Number of samples to generate"
+    )
+
+    parser.add_argument(
+        "--path_length", type=int, default=200, help="Path length for interpolation"
+    )
+    parser.add_argument(
+        "--latent_time", type=int, default=499, help="Time for latent interpolation"
     )
     parser.add_argument(
         "-p",
@@ -281,16 +357,17 @@ if __name__ == "__main__":
         help="Prefix for the output directory",
     )
     parser.add_argument(
-        "--init-state", required=False, help="Path to the initial state"
+        "--init_state", required=False, help="Path to the initial state"
     )
 
     parser.add_argument(
-        "--use-tqdm", action="store_true", help="Enable tqdm progress bar"
+        "--use_tqdm", action="store_true", help="Enable tqdm progress bar"
     )
-    parser.add_argument("--use-gpu", action="store_true", help="Enable GPU usage")
+    parser.add_argument("--use_gpu", action="store_true", help="Enable GPU usage")
 
     args = parser.parse_args()
-    inference(
+    main(
+        args.gen_mode,
         args.checkpoint,
         args.pdb_id,
         args.pkl,
@@ -298,6 +375,8 @@ if __name__ == "__main__":
         args.output_prefix,
         args.num_samples,
         args.batch_size,
+        args.path_length,
+        args.latent_time,
         args.init_state,
         args.use_tqdm,
         args.use_gpu,
