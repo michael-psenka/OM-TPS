@@ -88,9 +88,7 @@ class MainModel(BaseModel):
     def forward_step(self, input_pose, mask, step, single_repr, pair_repr):
         x1d = self.x1d_proj(single_repr) + self.step_emb(step)[:, None]
         x2d = self.x2d_proj(pair_repr)
-        T, IR = (
-            input_pose  # T corresponds to alpha carbon coordinates, and IR corresponds to orientation of the residue
-        )
+        T, IR = input_pose
 
         pos = torch.arange(T.shape[1], device=x1d.device)
         pos = pos.unsqueeze(1) - pos.unsqueeze(0)
@@ -308,8 +306,8 @@ class MainModel(BaseModel):
 
         if tr_init is None or rot_mat_init is None:
             assert (
-                start_time == 0
-            ), "If tr_init and rot_mat_init are not provided, start_time must be 0"
+                t == self.n_time_step
+            ), f"If tr_init and rot_mat_init are not provided, t must be {self.n_time_step}"
             # get initial structure
             tr, rot_mat = self._init_conformer(single_repr, num_samples)
             tr_init, rot_mat_init = tr.clone(), rot_mat.clone()
@@ -429,7 +427,7 @@ class MainModel(BaseModel):
             pair_repr,
             tr_init,
             rot_mat_init,
-            t=0,
+            t=self.n_time_step,
             use_tqdm=use_tqdm,
         )
 
@@ -506,29 +504,18 @@ class MainModel(BaseModel):
         )  # make batch dimension come first [B, path_length, n_atoms, 3]
         noised_rot_mats = noised_rot_mats.permute((1, 0, 2, 3, 4)).to(device)
 
-        # decode (split into minibatches to save memory)
-        batch_size = 100
-        all_trs = []
-        all_rot_mats = []
-        for tr, rot_mats in zip(
-            noised_trs.reshape(-1, n_atoms, 3).split(batch_size),
-            noised_rot_mats.reshape(-1, n_atoms, 3, 3).split(batch_size),
-        ):
-            with torch.no_grad():
-                _tr, _rot_mats = self.sample_from_t(
-                    tr.shape[0],
-                    single_repr,
-                    pair_repr,
-                    tr_init=tr,
-                    rot_mat_init=rot_mats,
-                    t=latent_time,
-                )
-
-            all_trs.append(_tr.reshape(-1, path_length, n_atoms, 3))
-            all_rot_mats.append(_rot_mats.reshape(-1, path_length, n_atoms, 3, 3))
-
-        all_trs = torch.cat(all_trs, dim=0)
-        all_rot_mats = torch.cat(all_rot_mats, dim=0)
+        # decode the interpolated paths
+        with torch.no_grad():
+            all_trs, all_rot_mats = self.sample_from_t(
+                noised_trs.reshape(-1, n_atoms, 3).shape[0],
+                single_repr,
+                pair_repr,
+                tr_init=noised_trs.reshape(-1, n_atoms, 3),
+                rot_mat_init=noised_rot_mats.reshape(-1, n_atoms, 3, 3),
+                t=latent_time,
+            )
+        all_trs = all_trs.reshape(-1, path_length, n_atoms, 3)
+        all_rot_mats = all_rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
 
         # reset the endpoints
         all_trs[:, 0], all_trs[:, -1] = original_tr1, original_tr2

@@ -52,18 +52,37 @@ class TruncatedAction(torch.nn.Module):
         self.dt = dt
         self.gamma = gamma
 
-    def forward(self, path: torch.Tensor, forces: torch.Tensor = None):
+    def forward(self, _path: torch.Tensor, _forces: torch.Tensor = None):
         """
-        Args: path of shape [P, N, 3], forces of shape [P, N, 3]
-        """
-        first_term = torch.square((path[1:] - path[:-1])) * (self.gamma / 4 / self.dt)
-        if forces is not None:
-            f_n = forces[:-1]
-        else:
-            f_n = self.force_func(path[:-1])
-        second_term = torch.square(f_n) * (self.dt / 4 / self.gamma)
+        Args:
+            path: tuple consisting of one or more elements of shape [P, N, 3]
+            forces: tuple consisting of one or more elements of shape [P, N, 3]
 
-        return first_term.sum(), second_term.sum()
+        For Two for One, the path and forces are just tensors (just the alpha-Carbon coordinates and scores)
+        For DiG, the path and forces are tuples of length 2 (alpha-Carbon and residue rotation values and scores)
+
+        """
+        first_term_all = 0
+        second_term_all = 0
+
+        if not isinstance(_path, tuple):
+            _path = (_path,)
+        if _forces is None or None in _forces:
+            _forces = self.force_func(_path)
+
+        elif not isinstance(_forces, tuple):
+            _forces = (_forces,)
+
+        for i, (path, forces) in enumerate(zip(_path, _forces)):
+            # TODO: is a per-element square the correct distance metric for SO(3) rotation matrices?
+            first_term = torch.square((path[1:] - path[:-1])) * (
+                self.gamma / 4 / self.dt
+            )
+            second_term = torch.square(forces) * (self.dt / 4 / self.gamma)
+            first_term_all += first_term.sum()
+            second_term_all += second_term.sum()
+
+        return first_term_all, second_term_all
 
 
 class SimpleAction(torch.nn.Module):

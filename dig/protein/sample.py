@@ -346,7 +346,7 @@ if __name__ == "__main__":
         default="/data/sanjeevr/dig_data/checkpoint-520k.pth",
     )
 
-    parser.add_argument("--pdb-id", default="6lu7", help="pdb ID")
+    parser.add_argument("--pdb_id", help="pdb ID")
 
     parser.add_argument(
         "-i",
