@@ -418,6 +418,8 @@ if __name__ == "__main__":
                     sigma=(g_sigma, g_sigma),
                 ).reshape((batch_size, path_length, C, H, W))
 
+                # normalize forces based on init distance of points, to normalized based
+                # on average path norm
                 forces = forces * torch.linalg.norm(
                     torch.flatten(
                         interpolated_images_blur[:, 0, :, :, :]
@@ -432,14 +434,9 @@ if __name__ == "__main__":
                     interpolated_images_blur, forces
                 ).sum()
 
-                # print first and second components
-                # with torch.no_grad():
-                #     first_component = torch.square((interpolated_images_blur[1:] - interpolated_images_blur[:-1]) / const_time).sum()
-
-                #     second_component = torch.square(forces[:-1] / path_length).sum()
-
-                #     print(f'First component: {first_component.item()}, second component: {second_component.item()}')
             else:
+                # normalize forces based on init distance of points, to normalized based
+                # on average path norm
                 forces = forces * torch.linalg.norm(
                     torch.flatten(
                         interpolated_images[:, 0, :, :, :]
@@ -486,44 +483,6 @@ if __name__ == "__main__":
                     save = interpolated_images[batch_idx].detach().clone()
                     save = inv_normalizer(torch.clamp(save, -1.0, 1.0))
                     final_draw.append(save.cpu())
-
-        # free up gpu memory
-        # optimizer.zero_grad()
-        # del total_action, grads, forces
-        # torch.cuda.empty_cache()
-
-        # print out list of force norms throughout the path of final_draw
-        # with torch.no_grad():
-        #     forces_finpath = model.model(
-        #         interpolated_images[batch_idx],
-        #         torch.tensor([100]).repeat(path_length).to(device),
-        #     )
-
-        #     # output norms of forces
-        #     print(
-        #         "Norms of forces: ",
-        #         torch.linalg.norm(forces_finpath.reshape(path_length, C * H * W), dim=1)
-        #         .cpu()
-        #         .detach()
-        #         .numpy(),
-        #     )
-        #     # print path norm
-        #     if g_sigma > 0:
-        #         print(
-        #             "Path norm: ",
-        #             torch.sqrt(
-        #                 torch.square(
-        #                     (
-        #                         interpolated_images_blur[:, 1:, :, :, :]
-        #                         - interpolated_images_blur[:, :-1, :, :, :]
-        #                     )
-        #                     / const_time
-        #                 ).sum(dim=(0, 2, 3, 4))
-        #             )
-        #             .cpu()
-        #             .detach()
-        #             .numpy(),
-        #         )
 
         with torch.no_grad():
             # run reverse diffusion on the final, optimized path

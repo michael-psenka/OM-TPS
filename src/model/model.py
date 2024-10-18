@@ -20,16 +20,6 @@ class CelebADiffusion(nn.Module):
         # Set device
         self.device = self.ddpm.device
 
-        # # Define image preprocessing and postprocessing transforms
-        # self.preprocess = transforms.Compose([
-        #     transforms.Resize((256, 256)),
-        #     transforms.ToTensor(),               # Convert to tensor [0, 1]
-        #     transforms.Normalize([0.5], [0.5])   # Normalize to [-1, 1]
-        # ])
-        # self.postprocess = transforms.Compose([
-        #     transforms.Normalize([-1], [2]),    # Scale from [-1, 1] to [0, 1]
-        # ])
-
     def sampling(self, n_samples):
         return self.ddpm(batch_size=n_samples, output_type="np.array")
 
@@ -58,7 +48,7 @@ class CelebADiffusion(nn.Module):
         x_t = self.ddpm.scheduler.add_noise(x0, noise, timesteps)
         return x_t
 
-    def sample_from_t(self, x_t, t, num_inference_steps=None):
+    def sample_from_t(self, x_t, t):
         """
         Performs reverse denoising starting from x_t at timestep t down to t=0.
 
@@ -71,9 +61,6 @@ class CelebADiffusion(nn.Module):
             torch.FloatTensor: Denoised image tensor at timestep 0.
         """
         x_t = x_t.to(self.device)
-        # Set custom timesteps in the scheduler from t down to 0
-        if num_inference_steps is None:
-            num_inference_steps = t + 1  # Ensure we have steps from t down to 0
         timesteps = list(range(t, -1, -1))
         self.ddpm.scheduler.set_timesteps(timesteps=timesteps)
         # Denoising loop
@@ -124,6 +111,7 @@ class MNISTDiffusion(nn.Module):
 
     def forward(self, x, noise):
         # x:NCHW
+        # testing the the Two-For-One alternative time sampling trick: https://arxiv.org/abs/2302.00600
         if self.use_alt_timesampling:
             t_mask = torch.rand(x.shape[0], device=x.device) < 0.5
             # first dist, just in first 10th
