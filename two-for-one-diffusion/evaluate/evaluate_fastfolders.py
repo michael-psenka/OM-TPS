@@ -78,6 +78,9 @@ def evaluate_fastfolders(
     protein_name,
     gen_mode,
     append_exp_name,
+    checkpoint_folder,
+    reference_folder,
+    pdb_folder,
     subsample=0,
     window_size=3,
     gif=True,
@@ -102,8 +105,9 @@ def evaluate_fastfolders(
         num_paths = 1
 
     append_exp_name_str = "_" + append_exp_name if append_exp_name else ""
-    eval_folder = (
-        f"saved_models/{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}"
+    eval_folder = os.path.join(
+        checkpoint_folder,
+        f"{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}",
     )
 
     # Load the reference dataset
@@ -126,30 +130,29 @@ def evaluate_fastfolders(
     else:
         cluster_endpoints_path = Path(
             os.path.join(
-                "evaluate",
-                "saved_references",
-                f"saved_cluster_endpoints_{protein_name.upper()}.npy",
+                reference_folder, f"saved_cluster_endpoints_{protein_name.upper()}.npy"
             )
         )
 
     ref_dihedral_path = Path(
-        os.path.join(
-            "evaluate",
-            "saved_references",
-            f"saved_dihedrals_{protein_name.upper()}.npy",
-        )
+        os.path.join(reference_folder, f"saved_dihedrals_{protein_name.upper()}.npy")
     )
     if ref_dihedral_path.exists():
         ref_dihedrals = np.load(ref_dihedral_path)
         gt_prob_matrix = np.load(
-            f"./evaluate/saved_references/saved_transition_matrix_{protein_name.upper()}.npy"
+            os.path.join(
+                reference_folder, f"saved_transition_matrix_{protein_name.upper()}.npy"
+            )
         )
 
         kmeans_cluster_centers = np.load(
-            f"./evaluate/saved_references/saved_cluster_centers_{protein_name.upper()}.npy"
+            os.path.join(
+                reference_folder, f"saved_cluster_centers_{protein_name.upper()}.npy"
+            )
         )
+
         ref_pwds = np.load(
-            f"./evaluate/saved_references/saved_pwds_{protein_name.upper()}.npy"
+            os.path.join(reference_folder, f"saved_pwds_{protein_name.upper()}.npy")
         )
 
     else:
@@ -162,6 +165,8 @@ def evaluate_fastfolders(
             ref_pwds,
         ) = dynamics_analysis(
             protein_name,
+            reference_folder,
+            pdb_folder,
             sampled_mol=None,
             num_clusters=20,
             gt_traj=gt_traj,
@@ -176,8 +181,8 @@ def evaluate_fastfolders(
         val_data=None,
         mol_name=protein_name,
         eval_folder=eval_folder,
-        data_folder="datasets",
-        folded_pdb_folder="datasets/folded_pdbs",
+        data_folder=pdb_folder,
+        folded_pdb_folder=os.path.join(pdb_folder, "folded_pdbs"),
         bins=101,
         evalset="testset",
     )
@@ -186,20 +191,25 @@ def evaluate_fastfolders(
     if gen_mode == "langevin":
         subsample = int(subsample * 1000)  # convert from nanoseconds to frames
     if gen_mode == "gt":
-        eval_folder = f"saved_models/{protein_name}/main_eval_output_gt"
+        eval_folder = os.path.join(
+            checkpoint_folder, f"{protein_name}/main_eval_output_gt"
+        )
         os.makedirs(eval_folder, exist_ok=True)
         sampled_mol = torch.tensor(gt_traj)
         subsample = int(subsample * 5)  # convert from nanoseconds to frames
     else:
         append_exp_name_str = "_" + append_exp_name if append_exp_name else ""
-        eval_folder = f"saved_models/{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}"
+        eval_folder = os.path.join(
+            checkpoint_folder,
+            f"{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}",
+        )
         sample_path = Path(eval_folder, f"sample-{gen_mode}.pt")
 
         # Load sampled molecules
         sampled_mol = torch.load(sample_path)
 
-    pdb_file = (
-        f"datasets/folded_pdbs/{Molecules[protein_name.upper()].value}-0-c-alpha.pdb"
+    pdb_file = os.path.join(
+        pdb_folder, f"folded_pdbs/{Molecules[protein_name.upper()].value}-0-c-alpha.pdb"
     )
 
     if subsample != 0:
@@ -220,13 +230,16 @@ def evaluate_fastfolders(
     topology = md.load(pdb_file).topology
 
     # Load committor probabilities
-    committor_probs_file = (
-        f"evaluate/saved_references/{protein_name}_committor_probs_{start}_{end}.npy"
+    committor_probs_file = os.path.join(
+        reference_folder, f"{protein_name}_committor_probs_{start}_{end}.npy"
     )
+
     bin_committor_probs = np.load(committor_probs_file)
 
     # Load GT transition ensemble TIC coordinates
-    gt_transition_ensemble_file = f"./evaluate/saved_references/{protein_name}_{start}_{end}_transition_ensemble_TICA.npy"
+    gt_transition_ensemble_file = os.path.join(
+        reference_folder, f"{protein_name}_{start}_{end}_transition_ensemble_TICA.npy"
+    )
     gt_transition_ensemble = np.load(gt_transition_ensemble_file)
 
     n_ref_samples = 1000
@@ -250,6 +263,8 @@ def evaluate_fastfolders(
             _,
         ) = dynamics_analysis(
             protein_name,
+            reference_folder,
+            pdb_folder,
             sampled_mol,
             num_clusters=20,
             gt_cluster_assignments=cluster_assignments,
@@ -362,6 +377,9 @@ def evaluate_fastfolders(
         protein_name,
         gen_mode,
         append_exp_name,
+        checkpoint_folder,
+        reference_folder,
+        pdb_folder,
         sampled_mol,
         gen_paths=(
             kmeans_cluster_centers[sampled_traj[:20]]
@@ -423,6 +441,9 @@ def get_tic_free_energy_plots(
     protein_name,
     gen_mode,
     append_exp_name,
+    checkpoint_folder,
+    reference_folder,
+    pdb_folder,
     sampled_mol,
     gen_paths=None,
     ref_paths=None,
@@ -441,12 +462,13 @@ def get_tic_free_energy_plots(
 
     # Load data
     append_exp_name_str = "_" + append_exp_name if append_exp_name else ""
-    eval_folder = (
-        f"saved_models/{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}"
+    eval_folder = os.path.join(
+        checkpoint_folder,
+        f"{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}",
     )
     sample_path = Path(eval_folder, f"sample-{gen_mode}.pt")
-    pdb_file = (
-        f"datasets/folded_pdbs/{Molecules[protein_name.upper()].value}-0-c-alpha.pdb"
+    pdb_file = os.path.join(
+        pdb_folder, f"folded_pdbs/{Molecules[protein_name.upper()].value}-0-c-alpha.pdb"
     )
     n_atoms = sampled_mol.shape[1]
 
@@ -460,8 +482,11 @@ def get_tic_free_energy_plots(
     model = GraphTransformer(num_beads=n_atoms, hidden_nf=64, conservative=True)
     committor_model = CommittorNN(model)
     state_dict = torch.load(
-        f"saved_models/{protein_name}/committor-model-{start}_{end}.pt"
+        os.path.join(
+            checkpoint_folder, protein_name, f"committor-model-{start}_{end}.pt"
+        )
     )
+
     committor_model.load_state_dict(state_dict.state_dict())
     committor_model.to(device)
 
@@ -476,8 +501,8 @@ def get_tic_free_energy_plots(
         val_data=None,
         mol_name=protein_name,
         eval_folder=eval_folder,
-        data_folder="datasets",
-        folded_pdb_folder="datasets/folded_pdbs",
+        data_folder=pdb_folder,
+        folded_pdb_folder=os.path.join(pdb_folder, "folded_pdbs"),
         bins=101,
         evalset="testset",
     )  # The evalset is the set we'll compare to in the next evaluation steps
@@ -802,6 +827,8 @@ def get_tic_free_energy_plots(
 
 def dynamics_analysis(
     protein_name,
+    reference_folder,
+    pdb_folder,
     sampled_mol,
     num_clusters=None,
     gt_traj=None,
@@ -814,16 +841,17 @@ def dynamics_analysis(
     Returns the transition probability matrix and the cluster centers.
     """
 
+    # TODO: pass in folders here too
     # Load data
     if num_clusters is None:
         num_clusters = num_clusters_per_protein[protein_name]
 
     if gt_traj is not None:
-        eval_folder = "evaluate/saved_references"
+        eval_folder = reference_folder
         sampled_mol = torch.tensor(gt_traj)
 
-    pdb_file = (
-        f"datasets/folded_pdbs/{Molecules[protein_name.upper()].value}-0-c-alpha.pdb"
+    pdb_file = os.path.join(
+        pdb_folder, f"folded_pdbs/{Molecules[protein_name.upper()].value}-0-c-alpha.pdb"
     )
 
     n_atoms = sampled_mol.shape[1]
@@ -838,8 +866,8 @@ def dynamics_analysis(
         val_data=None,
         mol_name=protein_name,
         eval_folder=None,
-        data_folder="datasets",
-        folded_pdb_folder="datasets/folded_pdbs",
+        data_folder=pdb_folder,
+        folded_pdb_folder=os.path.join(pdb_folder, "folded_pdbs"),
         bins=101,
         evalset="testset",
     )  # The evalset is the set we'll compare to in the next evaluation steps
@@ -876,12 +904,17 @@ def dynamics_analysis(
     if gt_traj is not None:
         start_cluster_idx, end_cluster_idx = find_min_flux_states(count_matrix)
         np.save(
-            f"./evaluate/saved_references/saved_cluster_endpoints_{protein_name.upper()}.npy",
+            os.path.join(
+                reference_folder, f"saved_cluster_endpoints_{protein_name.upper()}.npy"
+            ),
             np.array([start_cluster_idx, end_cluster_idx]),
         )
+
         # Also save the transition matrix
         np.save(
-            f"./evaluate/saved_references/saved_transition_matrix_{protein_name.upper()}.npy",
+            os.path.join(
+                reference_folder, f"saved_transition_matrix_{protein_name.upper()}.npy"
+            ),
             count_matrix,
         )
 
@@ -894,17 +927,23 @@ def dynamics_analysis(
         # Save the cluster centers for the reference simulation
         if kmeans_cluster_centers is not None:
             np.save(
-                f"./evaluate/saved_references/saved_cluster_centers_{protein_name.upper()}.npy",
+                os.path.join(
+                    reference_folder,
+                    f"saved_cluster_centers_{protein_name.upper()}.npy",
+                ),
                 kmeans_cluster_centers,
             )
 
         # Save the dihedrals and pairwise distances for the reference simulation
         np.save(
-            f"./evaluate/saved_references/saved_dihedrals_{protein_name.upper()}.npy",
+            os.path.join(
+                reference_folder, f"saved_dihedrals_{protein_name.upper()}.npy"
+            ),
             dihedrals,
         )
+
         np.save(
-            f"./evaluate/saved_references/saved_pwds_{protein_name.upper()}.npy",
+            os.path.join(reference_folder, f"saved_pwds_{protein_name.upper()}.npy"),
             pwds,
         )
 
@@ -933,6 +972,25 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--dig",
+        action="store_true",
+    )
+
+    parser.add_argument(
+        "--reference_folder",
+        type=str,
+        default="/home/sanjeevr/om-diffusion/two-for-one-diffusion/evaluate/saved_references",
+        help="Folder where the reference data is saved",
+    )
+
+    parser.add_argument(
+        "--pdb_folder",
+        type=str,
+        default="/home/sanjeevr/om-diffusion/two-for-one-diffusion/datasets",
+        help="Folder where the folded pdb data is saved",
+    )
+
+    parser.add_argument(
         "--subsample",
         type=int,
         default=0,
@@ -954,16 +1012,27 @@ if __name__ == "__main__":
         if args.subsample != 0 and args.gen_mode != "iid":
             subsample_append += f"ns"
         wandb.login()
+        # TODO: append DiG if needed
         wandb.init(
             project="fastfolders",
             name=args.protein_name + "_" + args.gen_mode + append + subsample_append,
             config=args,
         )
 
+    if args.dig:
+        checkpoint_folder = "/home/sanjeevr/om-diffusion/dig/protein/output"
+    else:
+        checkpoint_folder = (
+            "/home/sanjeevr/om-diffusion/two-for-one-diffusion/saved_models"
+        )
+
     evaluate_fastfolders(
         args.protein_name,
         args.gen_mode,
         args.append_exp_name,
+        checkpoint_folder,
+        args.reference_folder,
+        args.pdb_folder,
         args.subsample,
         log=not args.disable_logging,
     )

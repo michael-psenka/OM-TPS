@@ -70,7 +70,7 @@ class TruncatedAction(torch.nn.Module):
         if _forces is None or None in _forces:
             _forces = self.force_func(_path)
 
-        elif not isinstance(_forces, tuple):
+        if not isinstance(_forces, tuple):
             _forces = (_forces,)
 
         for i, (path, forces) in enumerate(zip(_path, _forces)):

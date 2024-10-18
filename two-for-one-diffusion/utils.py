@@ -95,6 +95,8 @@ def center_zero(x):
     """
     Move the molecule center to zero.
     """
+    if isinstance(x, tuple):
+        x = x[0]
     assert len(x.shape) == 3 and x.shape[-1] == 3, "Dimensionality error"
     return x - x.mean(dim=1, keepdim=True)
 
