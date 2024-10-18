@@ -1,2 +1,2 @@
-from .model import MNISTDiffusion
+from .model import MNISTDiffusion, CelebADiffusion
 from .unet import Unet

@@ -16,3 +16,11 @@ two-for-one-diffusion/
 
 # ignore test notebook
 michael_testbed.ipynb
+src/michael_testbed2.ipynb
+src/model/checkpoints
+
+# training scripts
+src/train_script.sh
+
+# vs code
+.vscode/

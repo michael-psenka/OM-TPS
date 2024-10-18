@@ -158,7 +158,7 @@ class TruncatedAction(torch.nn.Module):
 
         # Third term just ignored.
 
-        result = torch.sum(first_term + second_term)
+        result = torch.mean(first_term + second_term)
 
         return result * self.dt / 2.0
 

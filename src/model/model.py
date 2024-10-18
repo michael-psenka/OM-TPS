@@ -4,6 +4,76 @@ import math
 from .unet import Unet
 from tqdm import tqdm
 
+from diffusers import DDPMPipeline
+
+
+class CelebADiffusion(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        model_id = "google/ddpm-celebahq-256"
+
+        # load model and scheduler. ddpm doesn't support multi-gpu, map to first available device1q
+        self.ddpm = DDPMPipeline.from_pretrained(model_id, device_map={"": "cuda:0"})
+        self.model = lambda x, t: self.ddpm.unet(x, t).sample
+
+        # Set device
+        self.device = self.ddpm.device
+
+    def sampling(self, n_samples):
+        return self.ddpm(batch_size=n_samples, output_type="np.array")
+
+    def forward_diffusion(self, x0, t, noise=None):
+        """
+        Adds noise to the input image x0 at timestep t using the scheduler's add_noise method.
+
+        Args:
+            x0 (torch.FloatTensor): Original image tensor of shape [batch_size, channels, height, width].
+            t (int): Timestep at which to add noise.
+
+        Returns:
+            torch.FloatTensor: Noised image tensor at timestep t.
+        """
+        x0 = x0.to(self.device)
+        # Generate noise if none given
+        if noise is None:
+            noise = torch.randn_like(x0, device=self.device)
+
+        assert (
+            noise.shape == x0.shape
+        ), "Noise and image tensor must have the same shape."
+        # Create timesteps tensor
+        timesteps = torch.tensor(t, device=self.device, dtype=torch.long)
+        # Use scheduler's add_noise method
+        x_t = self.ddpm.scheduler.add_noise(x0, noise, timesteps)
+        return x_t
+
+    def sample_from_t(self, x_t, t):
+        """
+        Performs reverse denoising starting from x_t at timestep t down to t=0.
+
+        Args:
+            x_t (torch.FloatTensor): Starting image tensor at timestep t.
+            t (int): Starting timestep.
+            num_inference_steps (int, optional): Number of denoising steps. Defaults to t+1.
+
+        Returns:
+            torch.FloatTensor: Denoised image tensor at timestep 0.
+        """
+        x_t = x_t.to(self.device)
+        timesteps = list(range(t, -1, -1))
+        self.ddpm.scheduler.set_timesteps(timesteps=timesteps)
+        # Denoising loop
+        image = x_t
+        for timestep in self.ddpm.scheduler.timesteps:
+            # Predict the noise
+            model_output = self.ddpm.unet(image, timestep).sample
+            # Step through the scheduler
+            image = self.ddpm.scheduler.step(model_output, timestep, image).prev_sample
+        # Post-process the image to [-1,1] range
+        image = image.clamp(-1, 1)
+        return image
+
 
 class MNISTDiffusion(nn.Module):
     def __init__(
@@ -14,11 +84,13 @@ class MNISTDiffusion(nn.Module):
         timesteps=1000,
         base_dim=32,
         dim_mults=[1, 2, 4, 8],
+        use_alt_timesampling=False,
     ):
         super().__init__()
         self.timesteps = timesteps
         self.in_channels = in_channels
         self.image_size = image_size
+        self.use_alt_timesampling = use_alt_timesampling
 
         betas = self._cosine_variance_schedule(timesteps)
 
@@ -39,7 +111,18 @@ class MNISTDiffusion(nn.Module):
 
     def forward(self, x, noise):
         # x:NCHW
-        t = torch.randint(0, self.timesteps, (x.shape[0],)).to(x.device)
+        # testing the the Two-For-One alternative time sampling trick: https://arxiv.org/abs/2302.00600
+        if self.use_alt_timesampling:
+            t_mask = torch.rand(x.shape[0], device=x.device) < 0.5
+            # first dist, just in first 10th
+            t = torch.randint(0, self.timesteps // 10, (x.shape[0],)).to(x.device)
+            # with probability 1/2, sample from rest
+            t_g = torch.randint(self.timesteps // 10, self.timesteps, (x.shape[0],)).to(
+                x.device
+            )
+            t[t_mask] = t_g[t_mask]
+        else:
+            t = torch.randint(0, self.timesteps, (x.shape[0],)).to(x.device)
         x_t = self._forward_diffusion(x, t, noise)
         pred_noise = self.model(x_t, t)
 
@@ -62,26 +145,45 @@ class MNISTDiffusion(nn.Module):
 
     @torch.no_grad()
     def sample_from_t(
-        self, start_t, x_t, clipped_reverse_diffusion=True, device="cuda", display=False
+        self,
+        x_t,
+        start_t,
+        clipped_reverse_diffusion=True,
+        device="cuda",
+        display=False,
+        addnoise=True,
+        save_intermediate=False,
     ):
 
+        if save_intermediate:
+            x_t_list = []
         if display:
             ddpm_range = tqdm(range(start_t - 1, -1, -1))
         else:
             ddpm_range = range(start_t - 1, -1, -1)
         for i in ddpm_range:
-            noise = torch.randn_like(x_t).to(device)
+            if addnoise:
+                noise = torch.randn_like(x_t).to(device)
+            else:
+                noise = torch.zeros_like(x_t).to(device)
             t = torch.tensor([i for _ in range(x_t.shape[0])]).to(device)
 
             if clipped_reverse_diffusion:
                 x_t = self._reverse_diffusion_with_clip(x_t, t, noise)
             else:
                 x_t = self._reverse_diffusion(x_t, t, noise)
+            if save_intermediate:
+                x_t_list.append(x_t)
 
         # Using transformation to do that
         # x_t=(x_t+1.)/2. #[-1,1] to [0,1]
+        if save_intermediate:
 
-        return x_t
+            # flip the indexing of x_t_list
+            x_t_list = x_t_list[::-1]
+            return x_t_list
+        else:
+            return x_t
 
     def _cosine_variance_schedule(self, timesteps, epsilon=0.008):
         steps = torch.linspace(0, timesteps, steps=timesteps + 1, dtype=torch.float32)
@@ -93,7 +195,11 @@ class MNISTDiffusion(nn.Module):
 
         return betas
 
-    def _forward_diffusion(self, x_0, t, noise):
+    def forward_diffusion(self, x_0, t, noise=None):
+
+        if noise is None:
+            noise = torch.randn_like(x_0)
+
         assert x_0.shape == noise.shape
         # q(x_{t}|x_{t-1})
         return (
@@ -189,13 +295,11 @@ class MNISTDiffusion(nn.Module):
             for step in range(num_steps):
                 # current t is max(0, t - step)
                 curr_t = torch.max(t - step, torch.tensor(0).to(device))
-                x_next = x_next - self.model(
-                    x_next, curr_t.repeat(t.size())
-                )
+                x_next = x_next - self.model(x_next, curr_t)
 
         # scale down output such that scale of output step is approximately
         # invariant to num_steps. 1/num_steps is too steep since it assumes
         # all gradients are in line and don't shrink, both of which are typically
         # false. 1/sqrt empirically seems to keep the scale invariant, at least
         # as tested in smaller settings. TODO: more testing and rigorous analysis
-        return (1 / math.sqrt(num_steps))*x_next - x_t
+        return (1 / math.sqrt(num_steps)) * x_next - x_t
