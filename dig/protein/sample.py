@@ -16,6 +16,7 @@ import mdtraj as md
 
 from actions import SimpleAction, TruncatedAction, S2Action
 from logging_utils import save_ovito_traj
+from evaluate.evaluate_fastfolders import PDB_ID_TO_NAME, evaluate_fastfolders
 
 
 def xyz2pdb(seq, CA, N, C):
@@ -123,7 +124,10 @@ def main(args):
     args.use_tqdm = not args.disable_tqdm
 
     # make output directory
-    original_output_prefix = os.path.join(args.output_prefix, args.pdb_id)
+    original_output_prefix = os.path.join(
+        args.output_prefix,
+        PDB_ID_TO_NAME[args.pdb_id] if args.pdb_id in PDB_ID_TO_NAME else args.pdb_id,
+    )
     output_prefix = os.path.join(
         original_output_prefix, "main_eval_output_" + args.gen_mode
     )
@@ -322,6 +326,24 @@ def main(args):
             }
             progress_file = output_prefix + f"/path_history-{args.gen_mode}.pt"
             torch.save(progress_dict, progress_file)
+
+        # evaluation
+        if args.pdb_id in PDB_ID_TO_NAME:
+            protein_name = PDB_ID_TO_NAME[args.pdb_id]
+            evaluate_fastfolders(
+                protein_name,
+                args.gen_mode,
+                None,
+                checkpoint_folder="/home/sanjeevr/om-diffusion/dig/protein/output",
+                reference_folder="/home/sanjeevr/om-diffusion/two-for-one-diffusion/evaluate/saved_references",
+                pdb_folder="/home/sanjeevr/om-diffusion/two-for-one-diffusion/datasets",
+                log=not args.disable_logging,
+            )
+
+        else:
+            raise NotImplementedError(
+                "Evaluation not yet implemented for non-fast folder proteins"
+            )
 
 
 if __name__ == "__main__":
