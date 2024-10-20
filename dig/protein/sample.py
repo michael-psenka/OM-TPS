@@ -14,9 +14,11 @@ from model.main_model import MainModel as model_fn
 from tqdm import tqdm
 import mdtraj as md
 
+# Two for One repo imports
 from actions import SimpleAction, TruncatedAction, S2Action
 from logging_utils import save_ovito_traj
 from evaluate.evaluate_fastfolders import PDB_ID_TO_NAME, evaluate_fastfolders
+from models import CommittorNN
 
 
 def xyz2pdb(seq, CA, N, C):
@@ -133,8 +135,8 @@ def main(args):
     )
     os.makedirs(output_prefix, exist_ok=True)
 
-    pkl = f"{args.pkl}/{args.pdb_id}.pkl"
-    fasta = f"{args.fasta}/{args.pdb_id}.fasta"
+    pkl = os.path.join(args.pkl, args.pdb_id + ".pkl")
+    fasta = os.path.join(args.fasta, args.pdb_id + ".fasta")
 
     output = args.pdb_id
 

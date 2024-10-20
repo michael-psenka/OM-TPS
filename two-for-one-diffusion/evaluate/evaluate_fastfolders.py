@@ -73,6 +73,14 @@ CLUSTER_ENDPOINTS = {
     "protein_g": [11, 14],
 }
 
+PDB_ID_TO_NAME = {
+    "cln025": "chignolin",
+    "2jof": "trp_cage",
+    "1fme": "bba",
+    "2f4k": "villin",
+    "1mi0": "protein_g",
+}
+
 
 def evaluate_fastfolders(
     protein_name,
@@ -481,11 +489,17 @@ def get_tic_free_energy_plots(
     device = torch.device(torch.cuda.current_device())
     model = GraphTransformer(num_beads=n_atoms, hidden_nf=64, conservative=True)
     committor_model = CommittorNN(model)
-    state_dict = torch.load(
-        os.path.join(
-            checkpoint_folder, protein_name, f"committor-model-{start}_{end}.pt"
-        )
+    committor_state_dict_file = os.path.join(
+        checkpoint_folder, protein_name, f"committor-model-{start}_{end}.pt"
     )
+    if not os.path.exists(committor_state_dict_file):
+        # load from two-for-one-diffusion saved models
+        committor_state_dict_file = os.path.join(
+            "/home/sanjeevr/om-diffusion/two-for-one-diffusion/saved_models",
+            protein_name,
+            f"committor-model-{start}_{end}.pt",
+        )
+    state_dict = torch.load(committor_state_dict_file)
 
     committor_model.load_state_dict(state_dict.state_dict())
     committor_model.to(device)

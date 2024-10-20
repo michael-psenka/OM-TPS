@@ -394,7 +394,7 @@ class TicEvaluator:
 
         # Check if the computed objects are already saved
         if saved_ref == "none":
-            saved_ref = f"./evaluate/saved_references/saved_TICA_{mol_name.upper()}_{evalset}.pickle"
+            saved_ref = f"/home/sanjeevr/om-diffusion/two-for-one-diffusion/evaluate/saved_references/saved_TICA_{mol_name.upper()}_{evalset}.pickle"
         if os.path.exists(saved_ref):
             # Load the saved objects
             with open(saved_ref, "rb") as f:
