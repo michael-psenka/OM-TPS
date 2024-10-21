@@ -197,6 +197,7 @@ def main(args):
                     use_tqdm=args.use_tqdm,
                 )
             elif "interpolate" in args.gen_mode:
+                # TODO: change this to interpolate between two PDB files (e.g open and closed)
                 if os.path.exists(
                     os.path.join(
                         original_output_prefix,
