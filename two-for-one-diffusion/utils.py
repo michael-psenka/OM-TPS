@@ -8,6 +8,7 @@ import random
 from git import Repo
 from actions import SimpleAction, TruncatedAction
 from rmsd import kabsch_rmsd
+from scipy.linalg import svd
 
 NUM_RESIDUES_TO_PROTEIN = {
     10: "chignolin",
@@ -388,6 +389,101 @@ def filter_by_rmsd(coords: torch.Tensor, n: int = 2) -> torch.Tensor:
         )
         final_idxs.append(best)
     return torch.tensor(coords[final_idxs])
+
+
+def pdb_to_tr_rots(pdb_file):
+    """
+    Converts an all-atom PDB structure to the positions of the alpha carbons (CA)
+    and the rotation matrices for each residue, assuming standard amino acid backbone geometry.
+
+    Args:
+        pdb_file (str): Path to the PDB file.
+
+    Returns:
+        tr (torch.Tensor): Tensor of shape (L, 3), where L is the number of residues,
+                           containing the positions of the Cα atoms.
+        rot_mats (torch.Tensor): Tensor of shape (L, 3, 3), containing the rotation
+                                 matrices for each residue.
+    """
+    # Reference vectors in the standard residue coordinate system
+    N_ref = np.array([1.45597958, 0.0, 0.0])
+    C_ref = np.array([-0.533655602, 1.42752619, 0.0])
+
+    # Dictionaries to hold atom coordinates
+    residues = {}
+    with open(pdb_file, "r") as f:
+        for line in f:
+            if line.startswith("ATOM"):
+                atom_name = line[12:16].strip()
+                res_name = line[17:20].strip()
+                chain_id = line[21].strip()
+                res_seq = int(line[22:26])
+                key = (chain_id, res_seq)
+                if key not in residues:
+                    residues[key] = {}
+                if atom_name in ["N", "CA", "C"]:
+                    x = float(line[30:38])
+                    y = float(line[38:46])
+                    z = float(line[46:54])
+                    residues[key][atom_name] = np.array([x, y, z])
+
+    # Lists to store translations and rotation matrices
+    tr_list = []
+    rot_mat_list = []
+
+    all_N = []
+    all_C = []
+    all_CA = []
+
+    for key in sorted(residues.keys()):
+        residue = residues[key]
+        if all(atom in residue for atom in ["N", "CA", "C"]):
+            N = residue["N"]
+            CA = residue["CA"]
+            C = residue["C"]
+            all_N.append(N)
+            all_C.append(C)
+            all_CA.append(CA)
+
+            # Translation vector (position of the Cα atom)
+            tr = CA
+            tr_list.append(tr)
+
+            # Local coordinate vectors
+            N_rel = N - CA
+            C_rel = C - CA
+
+            # Reference vectors
+            A = np.stack([N_ref, C_ref], axis=1)  # Shape: (3, 2)
+            B = np.stack([N_rel, C_rel], axis=1)  # Shape: (3, 2)
+
+            # Compute covariance matrix
+            H = np.dot(A, B.T)  # Shape: (3, 3)
+
+            # Singular Value Decomposition
+            U, S, Vt = svd(H)
+            R_matrix = np.dot(Vt.T, U.T)
+
+            # Ensure a proper rotation (determinant = 1)
+            if np.linalg.det(R_matrix) < 0:
+                Vt[2, :] *= -1
+                R_matrix = np.dot(Vt.T, U.T)
+
+            rot_mat_list.append(R_matrix)
+        else:
+            # If any backbone atom is missing, skip this residue
+            print(f"Warning: Missing backbone atoms in residue {key}. Skipping.")
+            continue
+
+    # Convert lists to tensors
+    tr = torch.from_numpy(np.stack(tr_list)).float()
+    rot_mats = torch.from_numpy(np.stack(rot_mat_list)).float()
+
+    all_CA = np.stack(all_CA)
+    all_N = np.stack(all_N)
+    all_C = np.stack(all_C)
+
+    return tr, rot_mats, all_CA, all_N, all_C
 
 
 class SamplerWrapper(torch.nn.Module):
