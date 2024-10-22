@@ -2,7 +2,3 @@
 	path = src/guided-diffusion
 	url = https://github.com/openai/guided-diffusion.git
 	ignore = dirty
-[submodule "torchmd-net"]
-	path = torchmd-net
-	url = https://github.com/torchmd/torchmd-net
-	ignore = dirty
