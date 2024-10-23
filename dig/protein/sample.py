@@ -3,6 +3,7 @@ import os
 import pickle
 import time
 import sys
+import warnings
 
 import argparse
 import numpy as np
@@ -19,6 +20,7 @@ from actions import SimpleAction, TruncatedAction, S2Action
 from logging_utils import save_ovito_traj
 from evaluate.evaluate_fastfolders import PDB_ID_TO_NAME, evaluate_fastfolders
 from models import CommittorNN
+from dig_utils import pdb_to_tr_rots
 
 
 def xyz2pdb(seq, CA, N, C):
@@ -135,8 +137,8 @@ def main(args):
     )
     os.makedirs(output_prefix, exist_ok=True)
 
-    pkl = os.path.join(args.pkl, args.pdb_id + ".pkl")
-    fasta = os.path.join(args.fasta, args.pdb_id + ".fasta")
+    pkl = os.path.join(args.data, args.pdb_id + ".pkl")
+    fasta = os.path.join(args.data, args.pdb_id + ".fasta")
 
     output = args.pdb_id
 
@@ -198,13 +200,40 @@ def main(args):
                 )
             elif "interpolate" in args.gen_mode:
                 # TODO: change this to interpolate between two PDB files (e.g open and closed)
-                if os.path.exists(
+                if args.endpoint_pdbs is not None:
+                    print("Using provided PDBs as endpoints")
+                    tr1, rot_mat1 = pdb_to_tr_rots(
+                        os.path.join(args.data, f"{args.endpoint_pdbs[0]}.pdb")
+                    )
+                    tr2, rot_mat2 = pdb_to_tr_rots(
+                        os.path.join(args.data, f"{args.endpoint_pdbs[1]}.pdb")
+                    )
+
+                    assert (
+                        tr1.shape == tr2.shape and rot_mat1.shape == rot_mat2.shape
+                    ), "Endpoint PDBs must have the same number of residues"
+                    if tr1.shape[0] != single_repr.shape[0]:
+                        # make sure it's an integer multiple of the number of residues
+                        assert (
+                            tr1.shape[0] % single_repr.shape[0] == 0
+                        ), "Number of residues in endpoint PDBs must be a multiple of the number of residues in the protein representation"
+                        warnings.warn(
+                            "Mismatch in number of chains, taking the first chain from endpoint PDB"
+                        )
+                        tr1 = tr1[: single_repr.shape[0]]
+                        rot_mat1 = rot_mat1[: single_repr.shape[0]]
+                        tr2 = tr2[: single_repr.shape[0]]
+                        rot_mat2 = rot_mat2[: single_repr.shape[0]]
+
+                elif os.path.exists(
                     os.path.join(
                         original_output_prefix,
                         "main_eval_output_iid",
                         "sample-iid-all.pt",
                     )
                 ):
+
+                    print("Using random i.i.d samples as endpoints")
                     samples_iid = torch.load(
                         os.path.join(
                             original_output_prefix,
@@ -218,15 +247,18 @@ def main(args):
                     idx1, idx2 = np.random.choice(tr.shape[0], 2, replace=False)
                     tr1, tr2 = tr[idx1], tr[idx2]
                     rot_mat1, rot_mat2 = rot_mat[idx1], rot_mat[idx2]
-                    # repeat them to num_samples
-                    tr1 = tr1.unsqueeze(0).repeat(args.num_samples, 1, 1)
-                    tr2 = tr2.unsqueeze(0).repeat(args.num_samples, 1, 1)
-                    rot_mat1 = rot_mat1.unsqueeze(0).repeat(args.num_samples, 1, 1, 1)
-                    rot_mat2 = rot_mat2.unsqueeze(0).repeat(args.num_samples, 1, 1, 1)
+
                 else:
                     raise ValueError(
-                        "Please generate i.i.d samples before generating interpolated samples."
+                        "Please generate i.i.d samples or provide PDB paths for endpoints before generating interpolations."
                     )
+
+                # repeat tr and rot_mat to num_samples
+                tr1 = tr1.unsqueeze(0).repeat(args.num_samples, 1, 1)
+                tr2 = tr2.unsqueeze(0).repeat(args.num_samples, 1, 1)
+                rot_mat1 = rot_mat1.unsqueeze(0).repeat(args.num_samples, 1, 1, 1)
+                rot_mat2 = rot_mat2.unsqueeze(0).repeat(args.num_samples, 1, 1, 1)
+
                 if args.gen_mode == "interpolate":
                     # generate interpolated samples
                     tr, rot_mat = model.interpolate(
@@ -365,6 +397,13 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--endpoint_pdbs",
+        nargs=2,
+        help="Paths to PDB files for the two endpoints of the interpolation",
+        default=None,
+    )
+
+    parser.add_argument(
         "-c",
         "--checkpoint",
         help="Checkpoint path",
@@ -375,16 +414,11 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "-i",
-        "--pkl",
+        "--data",
         default="/data/sanjeevr/dig_data/",
-        help="Path to the dataset pickle file",
+        help="Data directory (pickle, fasta, pdb files)",
     )
-    parser.add_argument(
-        "-s",
-        "--fasta",
-        default="/data/sanjeevr/dig_data/",
-        help="Path to the dataset fasta file",
-    )
+
     parser.add_argument(
         "-n",
         "--num_samples",

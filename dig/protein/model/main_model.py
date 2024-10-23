@@ -14,7 +14,7 @@ from rmsd import kabsch_rotate
 from scipy.spatial.transform import Rotation as R
 
 from actions import S2Action, TruncatedAction, SimpleAction
-from utils import slerp_rotation_matrices
+from dig_utils import slerp_rotation_matrices
 
 
 from . import geometry, so3
@@ -497,12 +497,14 @@ class MainModel(BaseModel):
         )
 
         # spherical interpolation of noised_rot_mat1 and noised_rot_mat2 (TODO: yields crazy structures when decoded)
-        # noised_rot_mats = slerp_rotation_matrices(noised_rot_mat1, noised_rot_mat2, path_length)
+        noised_rot_mats = slerp_rotation_matrices(
+            noised_rot_mat1, noised_rot_mat2, path_length
+        )
 
-        noised_trs = noised_trs.permute((1, 0, 2, 3)).to(
-            device
-        )  # make batch dimension come first [B, path_length, n_atoms, 3]
-        noised_rot_mats = noised_rot_mats.permute((1, 0, 2, 3, 4)).to(device)
+        # noised_trs = noised_trs.permute((1, 0, 2, 3)).to(
+        #     device
+        # )  # make batch dimension come first [B, path_length, n_atoms, 3]
+        # noised_rot_mats = noised_rot_mats.permute((1, 0, 2, 3, 4)).to(device)
 
         # decode the interpolated paths
         with torch.no_grad():
