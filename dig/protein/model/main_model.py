@@ -14,6 +14,7 @@ from rmsd import kabsch_rotate
 from scipy.spatial.transform import Rotation as R
 
 from actions import S2Action, TruncatedAction, SimpleAction
+from utils import center_zero
 from dig_utils import slerp_rotation_matrices
 
 
@@ -463,10 +464,14 @@ class MainModel(BaseModel):
         device = tr1.device
 
         num_paths, n_atoms = tr1.shape[0], tr1.shape[1]
+
         for i in range(num_paths):
             # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
             tr2[i] = torch.tensor(kabsch_rotate(tr2[i].cpu(), tr1[i].cpu())).to(device)
             # TODO: do we need to rotate rot_mat2 to match rot_mat1?
+
+        tr1 = center_zero(tr1)
+        tr2 = center_zero(tr2)
 
         original_tr1 = tr1.clone()
         original_tr2 = tr2.clone()
@@ -484,21 +489,26 @@ class MainModel(BaseModel):
                 tr2, rot_mat2, mask2, min(max(0, latent_time - 1), self.n_time_step - 1)
             )
 
+        noised_tr1 = center_zero(noised_tr1)
+        noised_tr2 = center_zero(noised_tr2)
+
         # linear interpolation of noised_tr1 and noised_tr2
         noised_trs = torch.stack(
             [
-                torch.lerp(noised_tr1.cpu(), noised_tr2.cpu(), alpha)
+                center_zero(torch.lerp(noised_tr1.cpu(), noised_tr2.cpu(), alpha))
                 for alpha in torch.linspace(0, 1, path_length)
             ]
         )
 
         # linear interpolation of noised_rot_mat1 and noised_rot_mat2
-        noised_rot_mats = torch.stack(
-            [
-                torch.lerp(noised_rot_mat1.cpu(), noised_rot_mat2.cpu(), alpha)
-                for alpha in torch.linspace(0, 1, path_length)
-            ]
-        )
+        # noised_rot_mats = torch.stack(
+        #     [
+        #         torch.lerp(noised_rot_mat1.cpu(), noised_rot_mat2.cpu(), alpha)
+        #         for alpha in torch.linspace(0, 1, path_length)
+        #     ]
+        # )
+        # just repeat the same rotation matrix for now
+        noised_rot_mats = noised_rot_mat1.repeat(path_length, 1, 1, 1)
 
         # spherical interpolation of noised_rot_mat1 and noised_rot_mat2 (TODO: yields crazy structures when decoded)
         # noised_rot_mats = slerp_rotation_matrices(
@@ -520,6 +530,7 @@ class MainModel(BaseModel):
                 rot_mat_init=noised_rot_mats.reshape(-1, n_atoms, 3, 3),
                 t=latent_time,
             )
+
         all_trs = all_trs.reshape(-1, path_length, n_atoms, 3)
         all_rot_mats = all_rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
 
