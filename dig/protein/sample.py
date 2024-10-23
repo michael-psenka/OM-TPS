@@ -218,7 +218,7 @@ def main(args):
                             tr1.shape[0] % single_repr.shape[0] == 0
                         ), "Number of residues in endpoint PDBs must be a multiple of the number of residues in the protein representation"
                         warnings.warn(
-                            "Mismatch in number of chains, taking the first chain from endpoint PDB"
+                            "Mismatch in number of chains between endpoint PDBs and EvoFormer representations, taking the first chain from endpoint PDBs"
                         )
                         tr1 = tr1[: single_repr.shape[0]]
                         rot_mat1 = rot_mat1[: single_repr.shape[0]]
@@ -351,7 +351,7 @@ def main(args):
         torch.save(all_CA, sampled_CA_file)
         gsd_file = output_prefix + f"/sample-{args.gen_mode}.gsd"
         save_ovito_traj(
-            sampled_mol, gsd_file, alpha_carbon_lim=all_CA.shape[1], all_backbone=True
+            sampled_mol, gsd_file, alpha_carbon_lim=all_CA.shape[1], all_backbone=False
         )
 
         if args.gen_mode == "om_interpolate":

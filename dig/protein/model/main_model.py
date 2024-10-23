@@ -214,7 +214,10 @@ class MainModel(BaseModel):
         """Go to a timestep in the forward diffusion process"""
         # sample random noise based on timestep (effective noise for forward diffusion)
         device = T.device
-        noise_gen = self._gen_noise(time_step, T.size(), IR.size(), device)
+        t = min(
+            self.n_time_step - 1, self.n_time_step - time_step
+        )  # t convention is inverted for _gen_noise
+        noise_gen = self._gen_noise(t, T.size(), IR.size(), device)
 
         T_sigma, IR_sigma = noise_gen["T_sigma"], noise_gen["IR_sigma"]
         T_update = noise_gen["T_update"].type_as(T)
@@ -314,6 +317,7 @@ class MainModel(BaseModel):
         else:
             tr, rot_mat = tr_init.clone(), rot_mat_init.clone()
         tr, rot_mat = tr.to(device), rot_mat.to(device)
+        tr_mean, rot_mat_mean = tr.clone(), rot_mat.clone()
 
         # Sampling, t: 1 -> 0
         start_time = time.time()
@@ -474,10 +478,10 @@ class MainModel(BaseModel):
             mask1 = torch.isnan((rot_mat1.sum(-1) + tr1).sum(-1))
             mask2 = torch.isnan((rot_mat2.sum(-1) + tr2).sum(-1))
             noised_tr1, noised_rot_mat1, _, _ = self.forward_diffusion(
-                tr1, rot_mat1, mask1, min(0, latent_time - 1)
+                tr1, rot_mat1, mask1, min(max(0, latent_time - 1), self.n_time_step - 1)
             )
             noised_tr2, noised_rot_mat2, _, _ = self.forward_diffusion(
-                tr2, rot_mat2, mask2, min(0, latent_time - 1)
+                tr2, rot_mat2, mask2, min(max(0, latent_time - 1), self.n_time_step - 1)
             )
 
         # linear interpolation of noised_tr1 and noised_tr2
@@ -497,9 +501,9 @@ class MainModel(BaseModel):
         )
 
         # spherical interpolation of noised_rot_mat1 and noised_rot_mat2 (TODO: yields crazy structures when decoded)
-        noised_rot_mats = slerp_rotation_matrices(
-            noised_rot_mat1, noised_rot_mat2, path_length
-        )
+        # noised_rot_mats = slerp_rotation_matrices(
+        #     noised_rot_mat1, noised_rot_mat2, path_length
+        # )
 
         # noised_trs = noised_trs.permute((1, 0, 2, 3)).to(
         #     device
