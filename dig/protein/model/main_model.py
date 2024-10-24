@@ -221,7 +221,10 @@ class MainModel(BaseModel):
         pair_repr=None,
         deterministic=False,
     ):
-        """Go to a timestep in the forward diffusion process"""
+        """
+        Go to a timestep in the forward diffusion process,
+        either deterministically (ODE) or stochastically (SDE).
+        """
 
         if deterministic:
             assert single_repr is not None and pair_repr is not None
@@ -229,8 +232,8 @@ class MainModel(BaseModel):
                 T.shape[0],
                 single_repr,
                 pair_repr,
-                T,  # option to provide initial translation
-                IR,  # option to provide initial rotation
+                T,  # initial translation
+                IR,  # initial rotation
                 time_step,
                 forward=True,
             )
@@ -317,7 +320,8 @@ class MainModel(BaseModel):
         forward=False,
     ):
         """
-        Run reverse diffusion starting at start_time.
+        Run reverse ODE starting at t to generate samples.
+        Alternatively, run forward ODE starting at t=0 to encode samples deterministically.
 
         Args:
             num_samples: number of samples to generate
@@ -337,6 +341,9 @@ class MainModel(BaseModel):
             assert (
                 t == self.n_time_step
             ), f"If tr_init and rot_mat_init are not provided, t must be {self.n_time_step}"
+            assert (
+                not forward
+            ), "If tr_init and rot_mat_init are not provided, forward must be False"
             # get initial structure
             tr, rot_mat = self._init_conformer(single_repr, num_samples)
             tr_init, rot_mat_init = tr.clone(), rot_mat.clone()
@@ -349,7 +356,8 @@ class MainModel(BaseModel):
 
         # Reverse diffusion loop starting t=1
         # This is a deterministic process, unlike standard reverse diffusion which uses Langevin dynamics
-        # DiG paper rationalizes this by saying that if the score model is well trained, the ODE and SDE should match (Supplementary Sec A.1.3)
+        # DiG paper rationalizes this by saying that if the score model is well trained,
+        # the ODE and SDE should match (Supplementary Sec A.1.3)
         # The ODE corresponds to Eqn. 7 in the paper.
 
         # Sampling, t: 1 -> 0
@@ -414,6 +422,7 @@ class MainModel(BaseModel):
             tr_perturb_nr = tr_g**2 * dt_tr * tr_score
             rot_perturb_nr = rot_g**2 * dt_rot * rot_score
 
+            # Flip the perturbation if running the forward ODE
             if forward:
                 tr_perturb_nr = -tr_perturb_nr
                 rot_perturb_nr = -rot_perturb_nr
@@ -491,7 +500,7 @@ class MainModel(BaseModel):
             single_repr: (L, 3) single residue representation
             pair_repr: (L, L, 3) pair residue representation
             path_length: number of frames to interpolate
-            latent_time: the latent time to interpolate
+            latent_time: the latent time at which to interpolate
             temperature: temperature for sampling
         """
         device = tr1.device
@@ -516,11 +525,12 @@ class MainModel(BaseModel):
         with torch.no_grad():
             mask1 = torch.isnan((rot_mat1.sum(-1) + tr1).sum(-1))
             mask2 = torch.isnan((rot_mat2.sum(-1) + tr2).sum(-1))
+            t = min(max(0, latent_time - 1), self.n_time_step - 1)
             noised_tr1, noised_rot_mat1 = self.forward_diffusion(
                 tr1.reshape(-1, n_atoms, 3),
                 rot_mat1.reshape(-1, n_atoms, 3, 3),
                 mask1,
-                min(max(0, latent_time - 1), self.n_time_step - 1),
+                t,
                 single_repr,
                 pair_repr,
                 deterministic=True,
@@ -529,7 +539,7 @@ class MainModel(BaseModel):
                 tr2.reshape(-1, n_atoms, 3),
                 rot_mat2.reshape(-1, n_atoms, 3, 3),
                 mask2,
-                min(max(0, latent_time - 1), self.n_time_step - 1),
+                t,
                 single_repr,
                 pair_repr,
                 deterministic=True,
@@ -565,7 +575,7 @@ class MainModel(BaseModel):
         all_trs = all_trs.reshape(-1, path_length, n_atoms, 3)
         all_rot_mats = all_rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
 
-        # resetting the endpoints is not necessary, since our mapping between data and latent is deterministic
+        # resetting the endpoints is not necessary, since the mapping between data and latent is deterministic
         # all_trs[:, 0], all_trs[:, -1] = original_tr1, original_tr2
         # all_rot_mats[:, 0], all_rot_mats[:, -1] = original_rot_mat1, original_rot_mat2
 

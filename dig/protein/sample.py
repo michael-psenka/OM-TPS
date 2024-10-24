@@ -132,10 +132,16 @@ def main(args):
         args.output_prefix,
         PDB_ID_TO_NAME[args.pdb_id] if args.pdb_id in PDB_ID_TO_NAME else args.pdb_id,
     )
-    output_prefix = os.path.join(
-        original_output_prefix, "main_eval_output_" + args.gen_mode
+    basic_append = f"_{args.gen_mode}"
+    append_exp_name = (
+        basic_append
+        if args.append_exp_name is None
+        else f"{basic_append}_{args.append_exp_name}"
     )
-    os.makedirs(output_prefix, exist_ok=True)
+    eval_folder = os.path.join(
+        original_output_prefix, "main_eval_output" + append_exp_name
+    )
+    os.makedirs(eval_folder, exist_ok=True)
 
     pkl = os.path.join(args.data, args.pdb_id + ".pkl")
     fasta = os.path.join(args.data, args.pdb_id + ".fasta")
@@ -317,7 +323,7 @@ def main(args):
         all_tr = torch.cat(all_tr, dim=0)
         all_rot_mat = torch.cat(all_rot_mat, dim=0)
 
-        pdb_file = output_prefix + f"/sample-{args.gen_mode}.pdb"
+        pdb_file = eval_folder + f"/sample-{args.gen_mode}.pdb"
 
         all_CA = []
         all_N = []
@@ -339,7 +345,7 @@ def main(args):
         all_N = torch.stack(all_N, dim=0)
         all_C = torch.stack(all_C, dim=0)
 
-        sampled_mol_file = output_prefix + f"/sample-{args.gen_mode}-all.pt"
+        sampled_mol_file = eval_folder + f"/sample-{args.gen_mode}-all.pt"
         sampled_mol = torch.cat([all_CA, all_N, all_C], dim=1)
         torch_dict = {
             "tr": all_tr,
@@ -347,9 +353,9 @@ def main(args):
             "sampled_mol": sampled_mol,
         }
         torch.save(torch_dict, sampled_mol_file)
-        sampled_CA_file = output_prefix + f"/sample-{args.gen_mode}.pt"
+        sampled_CA_file = eval_folder + f"/sample-{args.gen_mode}.pt"
         torch.save(all_CA, sampled_CA_file)
-        gsd_file = output_prefix + f"/sample-{args.gen_mode}.gsd"
+        gsd_file = eval_folder + f"/sample-{args.gen_mode}.gsd"
         save_ovito_traj(
             sampled_mol, gsd_file, alpha_carbon_lim=all_CA.shape[1], all_backbone=False
         )
@@ -359,7 +365,7 @@ def main(args):
                 "tr": tr_progress,
                 "rot_mat": rot_mat_progress,
             }
-            progress_file = output_prefix + f"/path_history-{args.gen_mode}.pt"
+            progress_file = eval_folder + f"/path_history-{args.gen_mode}.pt"
             torch.save(progress_dict, progress_file)
 
         # evaluation
@@ -394,6 +400,13 @@ if __name__ == "__main__":
         "--gen_mode",
         default="iid",
         help="Mode of generation (iid, interpolate, or om_interpolate)",
+    )
+
+    parser.add_argument(
+        "--append_exp_name",
+        type=str,
+        default=None,
+        help="Name to append to the experiment name",
     )
 
     parser.add_argument(
