@@ -502,6 +502,7 @@ class MainModel(BaseModel):
             # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
             tr2[i] = torch.tensor(kabsch_rotate(tr2[i].cpu(), tr1[i].cpu())).to(device)
             # TODO: do we need to rotate rot_mat2 to match rot_mat1?
+            # TODO: still seems like there is some global rotation in the interpolated paths
 
         tr1 = center_zero(tr1)
         tr2 = center_zero(tr2)
@@ -550,7 +551,7 @@ class MainModel(BaseModel):
             noised_rot_mat1, noised_rot_mat2, path_length
         )
 
-        # decode the interpolated paths
+        # decode the interpolated paths with reverse ODE
         with torch.no_grad():
             all_trs, all_rot_mats = self.sample_from_t(
                 noised_trs.reshape(-1, n_atoms, 3).shape[0],
@@ -564,7 +565,7 @@ class MainModel(BaseModel):
         all_trs = all_trs.reshape(-1, path_length, n_atoms, 3)
         all_rot_mats = all_rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
 
-        # reset the endpoints
+        # resetting the endpoints is not necessary, since our mapping between data and latent is deterministic
         # all_trs[:, 0], all_trs[:, -1] = original_tr1, original_tr2
         # all_rot_mats[:, 0], all_rot_mats[:, -1] = original_rot_mat1, original_rot_mat2
 
