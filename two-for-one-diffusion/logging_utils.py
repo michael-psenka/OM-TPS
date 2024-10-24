@@ -20,12 +20,14 @@ def save_ovito_traj(positions, filename, alpha_carbon_lim=100000, all_backbone=F
 
     t = gsd.hoomd.open(name=filename, mode="w")
     cell = 1.5 * torch.eye(3) * positions.cpu().abs().max()
-    positions = center_zero(positions)
+    # positions = center_zero(positions)
+    if not all_backbone:
+        positions = positions[:, :alpha_carbon_lim]
     for i, pos in enumerate(positions):
         # Rotate all frames to match first one
-        positions[i] = torch.tensor(
-            kabsch_rotate(positions[i].cpu(), positions[0].cpu())
-        )
+        # positions[i] = torch.tensor(
+        #     kabsch_rotate(positions[i].cpu(), positions[0].cpu())
+        # )
         t.append(create_frame(i, pos, cell, alpha_carbon_lim, all_backbone))
 
     t.close()

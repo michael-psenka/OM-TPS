@@ -211,13 +211,36 @@ class MainModel(BaseModel):
             "so3_rot_score_norm": rot_score_norm,
         }
 
-    def forward_diffusion(self, T, IR, mask, time_step):
+    def forward_diffusion(
+        self,
+        T,
+        IR,
+        mask,
+        time_step,
+        single_repr=None,
+        pair_repr=None,
+        deterministic=False,
+    ):
         """Go to a timestep in the forward diffusion process"""
+
+        if deterministic:
+            assert single_repr is not None and pair_repr is not None
+            return self.sample_from_t(
+                T.shape[0],
+                single_repr,
+                pair_repr,
+                T,  # option to provide initial translation
+                IR,  # option to provide initial rotation
+                time_step,
+                forward=True,
+            )
+
         # sample random noise based on timestep (effective noise for forward diffusion)
         device = T.device
         t = min(
             self.n_time_step - 1, self.n_time_step - time_step
         )  # t convention is inverted for _gen_noise
+
         noise_gen = self._gen_noise(t, T.size(), IR.size(), device)
 
         T_sigma, IR_sigma = noise_gen["T_sigma"], noise_gen["IR_sigma"]
@@ -291,9 +314,11 @@ class MainModel(BaseModel):
         rot_mat_init,  # option to provide initial rotation
         t,
         use_tqdm=True,
+        forward=False,
     ):
         """
         Run reverse diffusion starting at start_time.
+
         Args:
             num_samples: number of samples to generate
             single_repr: (L, 25) single residue representation
@@ -320,7 +345,6 @@ class MainModel(BaseModel):
         tr, rot_mat = tr.to(device), rot_mat.to(device)
         tr_mean, rot_mat_mean = tr.clone(), rot_mat.clone()
 
-        # Sampling, t: 1 -> 0
         start_time = time.time()
 
         # Reverse diffusion loop starting t=1
@@ -328,9 +352,13 @@ class MainModel(BaseModel):
         # DiG paper rationalizes this by saying that if the score model is well trained, the ODE and SDE should match (Supplementary Sec A.1.3)
         # The ODE corresponds to Eqn. 7 in the paper.
 
-        for t_idx in tqdm(
-            range(self.n_time_step - t, self.n_time_step), disable=not use_tqdm
-        ):
+        # Sampling, t: 1 -> 0
+        # Deterministic forward: t: 0 -> 1
+        progress = range(self.n_time_step - t, self.n_time_step)
+        if forward:
+            progress = reversed(progress)
+        desc = "Forward ODE (Encoding)" if forward else "Reverse ODE (Sampling)"
+        for t_idx in tqdm(progress, disable=not use_tqdm, desc=f"Runnning {desc}"):
 
             t_tr, t_rot = tr_schedule[t_idx], rot_schedule[t_idx]
             dt_tr = (
@@ -386,6 +414,10 @@ class MainModel(BaseModel):
             tr_perturb_nr = tr_g**2 * dt_tr * tr_score
             rot_perturb_nr = rot_g**2 * dt_rot * rot_score
 
+            if forward:
+                tr_perturb_nr = -tr_perturb_nr
+                rot_perturb_nr = -rot_perturb_nr
+
             tr_perturb = tr_perturb_nr
             rot_perturb = rot_perturb_nr
 
@@ -400,9 +432,10 @@ class MainModel(BaseModel):
             rot_mat = torch.matmul(rot_mat_perturb, rot_mat)
 
         x = torch.norm(tr_mean[:, 1:] - tr_mean[:, :-1], dim=-1)
-        print(
-            f"CA-CA distance: {x.mean():.3f} +- {x.std():.3f} max: {x.max():.3f} min: {x.min():.3f}, len: {tr.shape[1]}, time: {time.time() - start_time:.3f}"
-        )
+        if not forward:
+            print(
+                f"CA-CA distance: {x.mean():.3f} +- {x.std():.3f} max: {x.max():.3f} min: {x.min():.3f}, len: {tr.shape[1]}, time: {time.time() - start_time:.3f}"
+            )
 
         return tr_mean, rot_mat_mean
 
@@ -478,15 +511,27 @@ class MainModel(BaseModel):
         original_rot_mat1 = rot_mat1.clone()
         original_rot_mat2 = rot_mat2.clone()
 
-        # Encode (sample from q(x_t | x_0))
+        # Encode with forward ODE (deterministic)
         with torch.no_grad():
             mask1 = torch.isnan((rot_mat1.sum(-1) + tr1).sum(-1))
             mask2 = torch.isnan((rot_mat2.sum(-1) + tr2).sum(-1))
-            noised_tr1, noised_rot_mat1, _, _ = self.forward_diffusion(
-                tr1, rot_mat1, mask1, min(max(0, latent_time - 1), self.n_time_step - 1)
+            noised_tr1, noised_rot_mat1 = self.forward_diffusion(
+                tr1.reshape(-1, n_atoms, 3),
+                rot_mat1.reshape(-1, n_atoms, 3, 3),
+                mask1,
+                min(max(0, latent_time - 1), self.n_time_step - 1),
+                single_repr,
+                pair_repr,
+                deterministic=True,
             )
-            noised_tr2, noised_rot_mat2, _, _ = self.forward_diffusion(
-                tr2, rot_mat2, mask2, min(max(0, latent_time - 1), self.n_time_step - 1)
+            noised_tr2, noised_rot_mat2 = self.forward_diffusion(
+                tr2.reshape(-1, n_atoms, 3),
+                rot_mat2.reshape(-1, n_atoms, 3, 3),
+                mask2,
+                min(max(0, latent_time - 1), self.n_time_step - 1),
+                single_repr,
+                pair_repr,
+                deterministic=True,
             )
 
         noised_tr1 = center_zero(noised_tr1)
@@ -500,25 +545,10 @@ class MainModel(BaseModel):
             ]
         )
 
-        # linear interpolation of noised_rot_mat1 and noised_rot_mat2
-        # noised_rot_mats = torch.stack(
-        #     [
-        #         torch.lerp(noised_rot_mat1.cpu(), noised_rot_mat2.cpu(), alpha)
-        #         for alpha in torch.linspace(0, 1, path_length)
-        #     ]
-        # )
-        # just repeat the same rotation matrix for now
-        noised_rot_mats = noised_rot_mat1.repeat(path_length, 1, 1, 1)
-
-        # spherical interpolation of noised_rot_mat1 and noised_rot_mat2 (TODO: yields crazy structures when decoded)
-        # noised_rot_mats = slerp_rotation_matrices(
-        #     noised_rot_mat1, noised_rot_mat2, path_length
-        # )
-
-        # noised_trs = noised_trs.permute((1, 0, 2, 3)).to(
-        #     device
-        # )  # make batch dimension come first [B, path_length, n_atoms, 3]
-        # noised_rot_mats = noised_rot_mats.permute((1, 0, 2, 3, 4)).to(device)
+        # spherical interpolation of noised_rot_mat1 and noised_rot_mat2
+        noised_rot_mats = slerp_rotation_matrices(
+            noised_rot_mat1, noised_rot_mat2, path_length
+        )
 
         # decode the interpolated paths
         with torch.no_grad():
@@ -535,8 +565,8 @@ class MainModel(BaseModel):
         all_rot_mats = all_rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
 
         # reset the endpoints
-        all_trs[:, 0], all_trs[:, -1] = original_tr1, original_tr2
-        all_rot_mats[:, 0], all_rot_mats[:, -1] = original_rot_mat1, original_rot_mat2
+        # all_trs[:, 0], all_trs[:, -1] = original_tr1, original_tr2
+        # all_rot_mats[:, 0], all_rot_mats[:, -1] = original_rot_mat1, original_rot_mat2
 
         all_trs = all_trs.reshape(-1, n_atoms, 3)
         all_rot_mats = all_rot_mats.reshape(-1, n_atoms, 3, 3)
@@ -575,6 +605,7 @@ class MainModel(BaseModel):
 
         num_paths, n_atoms = tr1.shape[0], tr1.shape[1]
         for i in range(num_paths):
+            pass
             # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
             tr2[i] = torch.tensor(kabsch_rotate(tr2[i].cpu(), tr1[i].cpu())).to(device)
             # TODO: do we need to rotate rot_mat2 to match rot_mat1?
