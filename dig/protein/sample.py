@@ -205,7 +205,6 @@ def main(args):
                     use_tqdm=args.use_tqdm,
                 )
             elif "interpolate" in args.gen_mode:
-                # TODO: change this to interpolate between two PDB files (e.g open and closed)
                 if args.endpoint_pdbs is not None:
                     print("Using provided PDBs as endpoints")
                     tr1, rot_mat1 = pdb_to_tr_rots(

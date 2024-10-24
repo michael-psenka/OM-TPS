@@ -10,11 +10,11 @@ import torch.nn.functional as F
 from common import config as cfg
 from torch import nn
 from scipy.linalg import fractional_matrix_power
-from rmsd import kabsch_rotate
+from rmsd import kabsch_rotate, kabsch_rmsd
 from scipy.spatial.transform import Rotation as R
 
 from actions import S2Action, TruncatedAction, SimpleAction
-from utils import center_zero
+from utils import center_zero, rotation_aligned
 from dig_utils import slerp_rotation_matrices
 
 
@@ -445,7 +445,6 @@ class MainModel(BaseModel):
             print(
                 f"CA-CA distance: {x.mean():.3f} +- {x.std():.3f} max: {x.max():.3f} min: {x.min():.3f}, len: {tr.shape[1]}, time: {time.time() - start_time:.3f}"
             )
-
         return tr_mean, rot_mat_mean
 
     def sample(
@@ -478,6 +477,45 @@ class MainModel(BaseModel):
             use_tqdm=use_tqdm,
         )
 
+    def reconstruct(
+        self,
+        tr,
+        rot_mat,
+        single_repr,
+        pair_repr,
+        t,
+    ):
+        """
+        Reconstruct the input conformations.
+        Args:
+            tr: (N, L, 3) translation
+            rot_mat: (N, L, 3, 3) rotation matrix
+            single_repr: (L, 3) single residue representation
+            pair_repr: (L, L, 3) pair residue representation
+            use_tqdm: use tqdm for progress bar
+        """
+        natoms = tr.shape[1]
+        encoded_tr, encoded_rot_mat = self.forward_diffusion(
+            tr,
+            rot_mat,
+            torch.isnan((rot_mat.sum(-1) + tr).sum(-1)),
+            t,
+            single_repr,
+            pair_repr,
+            deterministic=True,
+        )
+
+        reconstructed_tr, reconstructed_rot_mat = self.sample_from_t(
+            tr.shape[0],
+            single_repr,
+            pair_repr,
+            encoded_tr.reshape(-1, natoms, 3),
+            encoded_rot_mat.reshape(-1, natoms, 3, 3),
+            t,
+        )
+
+        return reconstructed_tr, reconstructed_rot_mat
+
     def interpolate(
         self,
         tr1,
@@ -503,9 +541,12 @@ class MainModel(BaseModel):
             latent_time: the latent time at which to interpolate
             temperature: temperature for sampling
         """
-        device = tr1.device
+        device = single_repr.device
 
         num_paths, n_atoms = tr1.shape[0], tr1.shape[1]
+
+        tr1 = center_zero(tr1)
+        tr2 = center_zero(tr2)
 
         for i in range(num_paths):
             # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
@@ -513,14 +554,25 @@ class MainModel(BaseModel):
             # TODO: do we need to rotate rot_mat2 to match rot_mat1?
             # TODO: still seems like there is some global rotation in the interpolated paths
 
-        tr1 = center_zero(tr1)
-        tr2 = center_zero(tr2)
+        # At this point, tr2 is rotated to match tr1
+        assert rotation_aligned(tr2[0], tr1[0])
+
+        recon_tr1, recon_rot_mat1 = self.reconstruct(
+            tr1, rot_mat1, single_repr, pair_repr, latent_time
+        )
+        print(
+            f"RMSD of recon_tr1 and tr1: {kabsch_rmsd(recon_tr1[0].cpu().numpy(), tr1[0].numpy())} A"
+        )
+        import pdb
+
+        pdb.set_trace()
 
         original_tr1 = tr1.clone()
         original_tr2 = tr2.clone()
         original_rot_mat1 = rot_mat1.clone()
         original_rot_mat2 = rot_mat2.clone()
 
+        assert rotation_aligned(tr2[0], tr1[0])
         # Encode with forward ODE (deterministic)
         with torch.no_grad():
             mask1 = torch.isnan((rot_mat1.sum(-1) + tr1).sum(-1))
@@ -545,6 +597,7 @@ class MainModel(BaseModel):
                 deterministic=True,
             )
 
+        # assert rotation_aligned(noised_tr2[0], noised_tr1[0])
         noised_tr1 = center_zero(noised_tr1)
         noised_tr2 = center_zero(noised_tr2)
 
@@ -555,6 +608,9 @@ class MainModel(BaseModel):
                 for alpha in torch.linspace(0, 1, path_length)
             ]
         )
+
+        # assert rotation_aligned(noised_trs.reshape(-1, n_atoms, 3)[-1], noised_trs.reshape(-1, n_atoms, 3)[0])
+        # assert np.allclose(noised_trs.reshape(-1, n_atoms, 3)[-1].cpu().numpy(), kabsch_rotate(noised_trs.reshape(-1, n_atoms, 3)[-1].cpu(), noised_trs.reshape(-1, n_atoms, 3)[0].cpu()), atol = 1e-3), "tr1 and tr2 should be the same after rotation"
 
         # spherical interpolation of noised_rot_mat1 and noised_rot_mat2
         noised_rot_mats = slerp_rotation_matrices(
@@ -574,13 +630,26 @@ class MainModel(BaseModel):
 
         all_trs = all_trs.reshape(-1, path_length, n_atoms, 3)
         all_rot_mats = all_rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
+        # assert rotation_aligned(all_trs[0, -1], all_trs[0, 0])
 
-        # resetting the endpoints is not necessary, since the mapping between data and latent is deterministic
+        # resetting the endpoints is not necessary, since the mapping between data and latent is deterministic??
         # all_trs[:, 0], all_trs[:, -1] = original_tr1, original_tr2
         # all_rot_mats[:, 0], all_rot_mats[:, -1] = original_rot_mat1, original_rot_mat2
 
+        # assert that the endpoints are the same
+        # import pdb; pdb.set_trace()
+        # assert np.allclose(all_trs[:, 0].cpu().numpy(), original_tr1.cpu().numpy(), atol = 1e-2), "endpoint 1 should be the same as original tr1"
+        # assert np.allclose(all_trs[:, -1].cpu().numpy(), original_tr2.cpu().numpy(), atol = 1e-2), "endpoint 2 should be the same as original tr2"
+
+        # same for rot_mats
+        # assert np.allclose(all_rot_mats[:, 0].cpu().numpy(), original_rot_mat1.cpu().numpy(), atol = 1e-2), "endpoint 1 should be the same as original rot_mat1"
+        # assert np.allclose(all_rot_mats[:, -1].cpu().numpy(), original_rot_mat2.cpu().numpy(), atol = 1e-2), "endpoint 2 should be the same as original rot_mat2"
+
         all_trs = all_trs.reshape(-1, n_atoms, 3)
         all_rot_mats = all_rot_mats.reshape(-1, n_atoms, 3, 3)
+
+        all_trs = center_zero(all_trs)
+        # assert np.allclose(all_trs[-1].cpu().numpy(), kabsch_rotate(all_trs[-1].cpu(), all_trs[0].cpu()), atol = 1e-3), "tr1 and tr2 should be the same after rotation"
 
         return all_trs, all_rot_mats
 
@@ -612,14 +681,22 @@ class MainModel(BaseModel):
         """
         OM interpolation between two conformations.
         """
-        device = tr1.device
+        device = single_repr.device
 
         num_paths, n_atoms = tr1.shape[0], tr1.shape[1]
+
+        assert not rotation_aligned(tr2[0], tr1[0])
+        tr1 = center_zero(tr1)
+        tr2 = center_zero(tr2)
+
         for i in range(num_paths):
-            pass
             # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
             tr2[i] = torch.tensor(kabsch_rotate(tr2[i].cpu(), tr1[i].cpu())).to(device)
             # TODO: do we need to rotate rot_mat2 to match rot_mat1?
+            # TODO: still seems like there is some global rotation in the interpolated paths
+
+        # At this point, tr2 is rotated to match tr1
+        assert rotation_aligned(tr2[0], tr1[0])
 
         original_tr1 = tr1.clone()
         original_tr2 = tr2.clone()
@@ -708,6 +785,13 @@ class MainModel(BaseModel):
                 noised_xs = [
                     (tr, rot_mat) for tr, rot_mat in zip(noised_trs, noised_rot_mats)
                 ]
+                forces = [
+                    (force_func(x)[0],) for x in noised_xs
+                ]  # only need translation for now
+                noised_xs = [
+                    (x[0],) for x in noised_xs
+                ]  # only need translation for now
+
                 terms = [action_func(x, force) for x, force in zip(noised_xs, forces)]
                 first_term = torch.cat([term[0].unsqueeze(0) for term in terms]).mean()
                 second_term = torch.cat([term[1].unsqueeze(0) for term in terms]).mean()
@@ -812,8 +896,8 @@ class MainModel(BaseModel):
             _tr = _tr.reshape(-1, path_length, n_atoms, 3)
             _rot_mats = _rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
             # reset the endpoints
-            _tr[:, 0], _tr[:, -1] = original_tr1, original_tr2
-            _rot_mats[:, 0], _rot_mats[:, -1] = original_rot_mat1, original_rot_mat2
+            # _tr[:, 0], _tr[:, -1] = original_tr1, original_tr2
+            # _rot_mats[:, 0], _rot_mats[:, -1] = original_rot_mat1, original_rot_mat2
 
             all_trs.append(_tr.reshape(-1, n_atoms, 3))
             all_rot_mats.append(_rot_mats.reshape(-1, n_atoms, 3, 3))
