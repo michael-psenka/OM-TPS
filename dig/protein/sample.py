@@ -320,7 +320,7 @@ def main(args):
                     endpoint_2_samples = endpoint_2.repeat(
                         args.num_samples // len(endpoint_2) + 1, 1, 1
                     )[: args.num_samples]
-                    # need to convert to tr and rot_mat
+                    # convert to tr and rot_mat
                     tr1 = endpoint_1_samples
                     tr2 = endpoint_2_samples
                     rot_mat1 = torch.zeros(args.num_samples, tr1.shape[1], 3, 3)

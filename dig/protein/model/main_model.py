@@ -575,8 +575,8 @@ class MainModel(BaseModel):
             mask2 = torch.isnan((rot_mat2.sum(-1) + tr2).sum(-1))
             t = min(max(0, latent_time - 1), self.n_time_step - 1)
             noised_tr1, noised_rot_mat1 = self.forward_diffusion(
-                tr1.reshape(-1, n_atoms, 3),
-                rot_mat1.reshape(-1, n_atoms, 3, 3),
+                tr1,
+                rot_mat1,
                 mask1,
                 t,
                 single_repr,
@@ -584,8 +584,8 @@ class MainModel(BaseModel):
                 deterministic=True,
             )
             noised_tr2, noised_rot_mat2 = self.forward_diffusion(
-                tr2.reshape(-1, n_atoms, 3),
-                rot_mat2.reshape(-1, n_atoms, 3, 3),
+                tr2,
+                rot_mat2,
                 mask2,
                 t,
                 single_repr,
@@ -609,7 +609,15 @@ class MainModel(BaseModel):
             noised_rot_mat1, noised_rot_mat2, path_length
         )
 
+        noised_trs = noised_trs.permute(
+            (1, 0, 2, 3)
+        )  # make batch dimension come first [B, path_length, n_atoms, 3]
+        noised_rot_mats = noised_rot_mats.permute(
+            (1, 0, 2, 3, 4)
+        )  # make batch dimension come first [B, path_length, n_atoms, 3, 3]
+
         # decode the interpolated paths with reverse ODE
+
         with torch.no_grad():
             all_trs, all_rot_mats = self.sample_from_t(
                 noised_trs.reshape(-1, n_atoms, 3).shape[0],
