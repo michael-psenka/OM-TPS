@@ -551,6 +551,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
         endpoints=clusters if "interpolate" in samp_args.gen_mode else None,
         log=not samp_args.disable_logging,
     )
+    print("Evaluation complete.")
 
     return sampled_mol
 

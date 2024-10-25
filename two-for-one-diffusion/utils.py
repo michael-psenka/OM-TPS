@@ -7,7 +7,7 @@ import mdtraj as md
 import random
 from git import Repo
 from actions import SimpleAction, TruncatedAction
-from rmsd import kabsch_rmsd
+from rmsd import kabsch_rmsd, kabsch_rotate
 from scipy.linalg import svd
 
 NUM_RESIDUES_TO_PROTEIN = {
@@ -116,6 +116,16 @@ def assert_center_zero(x, eps=1e-3):
         raise AssertionError(
             f"Center not at zero: abs max at {center_max} for molecule with max pairwise distance {max_dist}"
         )
+
+
+def rotation_aligned(x, y, atol=1e-2):
+    y = y.cpu()
+    x = x.cpu()
+    if not isinstance(x, np.ndarray):
+        x = x.numpy()
+    if not isinstance(y, np.ndarray):
+        y = y.numpy()
+    return np.allclose(y, kabsch_rotate(y, x), atol=atol)
 
 
 def random_rotation(x, return_rotation_matrices=False):

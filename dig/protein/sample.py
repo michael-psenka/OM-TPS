@@ -14,11 +14,24 @@ from model import geometry, so3
 from model.main_model import MainModel as model_fn
 from tqdm import tqdm
 import mdtraj as md
+from pathlib import Path
 
 # Two for One repo imports
 from actions import SimpleAction, TruncatedAction, S2Action
 from logging_utils import save_ovito_traj
-from evaluate.evaluate_fastfolders import PDB_ID_TO_NAME, evaluate_fastfolders
+from datasets.dataset_utils_empty import (
+    DEShawDataset,
+    Molecules,
+    AtomSelection,
+    to_angstrom,
+)
+from evaluate.evaluators import TicEvaluator
+from evaluate.msm_utils import discretize_trajectory
+from evaluate.evaluate_fastfolders import (
+    PDB_ID_TO_NAME,
+    evaluate_fastfolders,
+    CLUSTER_ENDPOINTS,
+)
 from models import CommittorNN
 from dig_utils import pdb_to_tr_rots
 
@@ -230,6 +243,89 @@ def main(args):
                         tr2 = tr2[: single_repr.shape[0]]
                         rot_mat2 = rot_mat2[: single_repr.shape[0]]
 
+                        # repeat tr and rot_mat to num_samples
+                        tr1 = tr1.unsqueeze(0).repeat(args.num_samples, 1, 1)
+                        tr2 = tr2.unsqueeze(0).repeat(args.num_samples, 1, 1)
+                        rot_mat1 = rot_mat1.unsqueeze(0).repeat(
+                            args.num_samples, 1, 1, 1
+                        )
+                        rot_mat2 = rot_mat2.unsqueeze(0).repeat(
+                            args.num_samples, 1, 1, 1
+                        )
+
+                elif args.pdb_id in PDB_ID_TO_NAME:
+                    protein_name = PDB_ID_TO_NAME[args.pdb_id]
+
+                    # choose two endpoints as cluster centers (calculated from min flux paths)
+                    cluster_endpoints_path = Path(
+                        os.path.join(
+                            "/home/sanjeevr/om-diffusion/two-for-one-diffusion/evaluate",
+                            "saved_references",
+                            f"saved_cluster_endpoints_{protein_name.upper()}.npy",
+                        )
+                    )
+
+                    # clusters = np.load(cluster_endpoints_path)
+                    # use pre-defined cluster centers (min flux endpoints aren't always reasonable)
+                    clusters = CLUSTER_ENDPOINTS[protein_name]
+
+                    cluster_centers_path = Path(
+                        os.path.join(
+                            "/home/sanjeevr/om-diffusion/two-for-one-diffusion/evaluate",
+                            "saved_references",
+                            f"saved_cluster_centers_{protein_name.upper()}.npy",
+                        )
+                    )
+                    cluster_coords = np.load(cluster_centers_path)
+
+                    # Load samples from the ground truth simulations to serve as endpoints for interpolation
+                    dataset = DEShawDataset(
+                        data_root="/data/sanjeevr/Reference_MD_Sims",
+                        molecule=Molecules[protein_name.upper()],
+                        simulation_id=0,
+                        atom_selection=AtomSelection.A_CARBON,
+                        return_bond_graph=False,
+                        transform=to_angstrom,
+                        align=False,
+                    )
+
+                    gt_traj = 10 * torch.tensor(
+                        dataset.traj.xyz
+                    )  # convert to angstroms
+                    gt_traj -= gt_traj.mean(1, keepdims=True)  # center
+
+                    # Get TICA
+                    tic_evaluator = TicEvaluator(
+                        val_data=None,
+                        mol_name=protein_name,
+                        eval_folder=eval_folder,
+                        data_folder="/home/sanjeevr/om-diffusion/two-for-one-diffusion/datasets",
+                        folded_pdb_folder="/home/sanjeevr/om-diffusion/two-for-one-diffusion/datasets/folded_pdbs",
+                        bins=101,
+                        evalset="testset",
+                    )
+                    # assign cluster centers to the iid samples
+                    cluster_assignments, _ = discretize_trajectory(
+                        gt_traj, tic_evaluator, cluster_coords
+                    )
+
+                    # Sample endpoints from the cluster centers
+                    endpoint_1 = gt_traj[cluster_assignments == clusters[0]]
+                    endpoint_2 = gt_traj[cluster_assignments == clusters[1]]
+
+                    # # Replicate the endpoints to have args.num_samples samples
+                    endpoint_1_samples = endpoint_1.repeat(
+                        args.num_samples // len(endpoint_1) + 1, 1, 1
+                    )[: args.num_samples]
+                    endpoint_2_samples = endpoint_2.repeat(
+                        args.num_samples // len(endpoint_2) + 1, 1, 1
+                    )[: args.num_samples]
+                    # need to convert to tr and rot_mat
+                    tr1 = endpoint_1_samples
+                    tr2 = endpoint_2_samples
+                    rot_mat1 = torch.zeros(args.num_samples, tr1.shape[1], 3, 3)
+                    rot_mat2 = torch.zeros(args.num_samples, tr2.shape[1], 3, 3)
+
                 elif os.path.exists(
                     os.path.join(
                         original_output_prefix,
@@ -253,16 +349,16 @@ def main(args):
                     tr1, tr2 = tr[idx1], tr[idx2]
                     rot_mat1, rot_mat2 = rot_mat[idx1], rot_mat[idx2]
 
+                    # repeat tr and rot_mat to num_samples
+                    tr1 = tr1.unsqueeze(0).repeat(args.num_samples, 1, 1)
+                    tr2 = tr2.unsqueeze(0).repeat(args.num_samples, 1, 1)
+                    rot_mat1 = rot_mat1.unsqueeze(0).repeat(args.num_samples, 1, 1, 1)
+                    rot_mat2 = rot_mat2.unsqueeze(0).repeat(args.num_samples, 1, 1, 1)
+
                 else:
                     raise ValueError(
                         "Please generate i.i.d samples or provide PDB paths for endpoints before generating interpolations."
                     )
-
-                # repeat tr and rot_mat to num_samples
-                tr1 = tr1.unsqueeze(0).repeat(args.num_samples, 1, 1)
-                tr2 = tr2.unsqueeze(0).repeat(args.num_samples, 1, 1)
-                rot_mat1 = rot_mat1.unsqueeze(0).repeat(args.num_samples, 1, 1, 1)
-                rot_mat2 = rot_mat2.unsqueeze(0).repeat(args.num_samples, 1, 1, 1)
 
                 if args.gen_mode == "interpolate":
                     # generate interpolated samples
@@ -373,17 +469,18 @@ def main(args):
             evaluate_fastfolders(
                 protein_name,
                 args.gen_mode,
-                None,
+                args.append_exp_name,
                 checkpoint_folder="/home/sanjeevr/om-diffusion/dig/protein/output",
                 reference_folder="/home/sanjeevr/om-diffusion/two-for-one-diffusion/evaluate/saved_references",
                 pdb_folder="/home/sanjeevr/om-diffusion/two-for-one-diffusion/datasets",
+                num_paths=args.num_samples,
+                endpoints=clusters if "interpolate" in args.gen_mode else None,
                 log=not args.disable_logging,
             )
+            print("Evaluation complete.")
 
         else:
-            raise NotImplementedError(
-                "Evaluation not yet implemented for non-fast folder proteins"
-            )
+            print("Evaluation not yet implemented for non-fast folder proteins")
 
 
 if __name__ == "__main__":
