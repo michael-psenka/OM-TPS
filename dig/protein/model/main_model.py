@@ -444,7 +444,7 @@ class MainModel(BaseModel):
         x = torch.norm(tr_mean[:, 1:] - tr_mean[:, :-1], dim=-1)
         if not forward:
             print(
-                f"CA-CA distance: {x.mean():.3f} +- {x.std():.3f} max: {x.max():.3f} min: {x.min():.3f}, len: {tr.shape[1]}, time: {time.time() - start_time:.3f}"
+                f"CA-CA distance: {x.mean():.3f} +- {x.std():.3f}, max: {x.max():.3f}, min: {x.min():.3f}, len: {tr.shape[1]}, time: {time.time() - start_time:.3f}"
             )
         return tr_mean, rot_mat_mean
 
@@ -485,6 +485,7 @@ class MainModel(BaseModel):
         single_repr,
         pair_repr,
         t,
+        save=False,
     ):
         """
         Reconstruct the input conformations.
@@ -496,6 +497,7 @@ class MainModel(BaseModel):
             use_tqdm: use tqdm for progress bar
         """
         natoms = tr.shape[1]
+
         encoded_tr, encoded_rot_mat = self.forward_diffusion(
             tr,
             rot_mat,
@@ -504,6 +506,11 @@ class MainModel(BaseModel):
             single_repr,
             pair_repr,
             deterministic=True,
+        )
+
+        return_encoded_tr, return_encoded_rot_mat = (
+            encoded_tr.clone(),
+            encoded_rot_mat.clone(),
         )
 
         reconstructed_tr, reconstructed_rot_mat = self.sample_from_t(
@@ -515,7 +522,12 @@ class MainModel(BaseModel):
             t,
         )
 
-        return reconstructed_tr, reconstructed_rot_mat
+        return (
+            reconstructed_tr,
+            reconstructed_rot_mat,
+            return_encoded_tr,
+            return_encoded_rot_mat,
+        )
 
     def interpolate(
         self,
@@ -556,11 +568,18 @@ class MainModel(BaseModel):
         # At this point, tr2 is rotated to match tr1
         assert rotation_aligned(tr2[0], tr1[0])
 
-        # recon_tr1, recon_rot_mat1 = self.reconstruct(
-        #     tr1, rot_mat1, single_repr, pair_repr, latent_time
+        # recon_tr1, recon_rot_mat1, encoded_tr1, encoded_rot_mat1 = self.reconstruct(
+        #     tr1, rot_mat1, single_repr, pair_repr, latent_time, save=True
         # )
         # print(
         #     f"RMSD of recon_tr1 and tr1: {kabsch_rmsd(recon_tr1[0].cpu().numpy(), tr1[0].numpy())} A"
+        # )
+
+        # recon_tr2, recon_rot_mat2, encoded_tr2, encoded_rot_mat2 = self.reconstruct(
+        #     tr2, rot_mat2, single_repr, pair_repr, latent_time
+        # )
+        # print(
+        #     f"RMSD of recon_tr2 and tr2: {kabsch_rmsd(recon_tr2[0].cpu().numpy(), tr2[0].numpy())} A"
         # )
 
         original_tr1 = tr1.clone()
@@ -573,21 +592,22 @@ class MainModel(BaseModel):
         with torch.no_grad():
             mask1 = torch.isnan((rot_mat1.sum(-1) + tr1).sum(-1))
             mask2 = torch.isnan((rot_mat2.sum(-1) + tr2).sum(-1))
-            t = min(max(0, latent_time - 1), self.n_time_step - 1)
+
             noised_tr1, noised_rot_mat1 = self.forward_diffusion(
                 tr1,
                 rot_mat1,
                 mask1,
-                t,
+                latent_time,
                 single_repr,
                 pair_repr,
                 deterministic=True,
             )
+
             noised_tr2, noised_rot_mat2 = self.forward_diffusion(
                 tr2,
                 rot_mat2,
                 mask2,
-                t,
+                latent_time,
                 single_repr,
                 pair_repr,
                 deterministic=True,
@@ -617,7 +637,6 @@ class MainModel(BaseModel):
         )  # make batch dimension come first [B, path_length, n_atoms, 3, 3]
 
         # decode the interpolated paths with reverse ODE
-
         with torch.no_grad():
             all_trs, all_rot_mats = self.sample_from_t(
                 noised_trs.reshape(-1, n_atoms, 3).shape[0],
@@ -631,7 +650,7 @@ class MainModel(BaseModel):
         all_trs = all_trs.reshape(-1, path_length, n_atoms, 3)
         all_rot_mats = all_rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
 
-        # resetting the endpoints is still necessary: due to finite number of diffusion steps, the endpoints are not exactly the same
+        # resetting the endpoints is still necessary: due to finite number of diffusion steps, the endpoints are not exactly the same after decoding
         all_trs[:, 0], all_trs[:, -1] = original_tr1, original_tr2
         all_rot_mats[:, 0], all_rot_mats[:, -1] = original_rot_mat1, original_rot_mat2
 

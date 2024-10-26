@@ -254,6 +254,7 @@ def main(args):
                         )
 
                 elif args.pdb_id in PDB_ID_TO_NAME:
+                    print("Using samples from ground truth simulations as endpoints")
                     protein_name = PDB_ID_TO_NAME[args.pdb_id]
 
                     # choose two endpoints as cluster centers (calculated from min flux paths)
@@ -323,8 +324,19 @@ def main(args):
                     # convert to tr and rot_mat
                     tr1 = endpoint_1_samples
                     tr2 = endpoint_2_samples
-                    rot_mat1 = torch.zeros(args.num_samples, tr1.shape[1], 3, 3)
-                    rot_mat2 = torch.zeros(args.num_samples, tr2.shape[1], 3, 3)
+                    # TODO: currentl using identity matrices as rot_mat, not sure if this is physically reasonable
+                    rot_mat1 = (
+                        torch.eye(3)
+                        .unsqueeze(0)
+                        .unsqueeze(0)
+                        .repeat(args.num_samples, tr1.shape[1], 1, 1)
+                    )
+                    rot_mat2 = (
+                        torch.eye(3)
+                        .unsqueeze(0)
+                        .unsqueeze(0)
+                        .repeat(args.num_samples, tr2.shape[1], 1, 1)
+                    )
 
                 elif os.path.exists(
                     os.path.join(
