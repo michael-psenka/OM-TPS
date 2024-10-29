@@ -2,6 +2,7 @@ import wandb
 
 wandb.require("core")
 import math
+import os
 import numpy as np
 import time
 from tqdm import tqdm
@@ -663,6 +664,7 @@ class MainModel(BaseModel):
 
     def om_interpolate(
         self,
+        eval_folder,
         tr1,
         rot_mat1,
         tr2,
@@ -711,18 +713,41 @@ class MainModel(BaseModel):
         original_rot_mat1 = rot_mat1.clone()
         original_rot_mat2 = rot_mat2.clone()
 
-        # Initial guess is from linear interpolation
-        noised_trs, noised_rot_mats = self.interpolate(
-            tr1,
-            rot_mat1,
-            tr2,
-            rot_mat2,
-            single_repr,
-            pair_repr,
-            path_length,
-            initial_guess_level,
-            temperature,
+        noised_trs = None
+        noised_rot_mats = None
+        interp_folder = os.path.join(
+            os.path.dirname(eval_folder),
+            f"main_eval_output_interpolate_t={initial_guess_level}",
         )
+        if os.path.exists(interp_folder):
+            samples = torch.load(
+                os.path.join(interp_folder, "sample-interpolate-all.pt")
+            )
+            noised_trs = samples["tr"]
+            noised_rot_mats = samples["rot_mat"]
+
+            if noised_trs.shape[0] != num_paths * path_length:
+                noised_trs = None
+                noised_rot_mats = None
+
+        if noised_trs is None:
+            # Initial guess is from linear interpolation in latent space
+            print("Generating initial guess with linear interpolation in latent space")
+            noised_trs, noised_rot_mats = self.interpolate(
+                tr1,
+                rot_mat1,
+                tr2,
+                rot_mat2,
+                single_repr,
+                pair_repr,
+                path_length,
+                initial_guess_level,
+                temperature,
+            )
+
+        else:
+            print(f"Using precomputed initial guess in {interp_folder}")
+
         noised_trs = noised_trs.reshape(-1, path_length, n_atoms, 3)
         noised_rot_mats = noised_rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
 
@@ -745,11 +770,10 @@ class MainModel(BaseModel):
             for step in pbar:
                 # optimize the path using Onsager Machlup action
                 if anneal:
-                    # diff_time = max(
-                    #     0,
-                    #     self.num_timesteps - int(self.num_timesteps / om_steps) * i - 1,
-                    # )  # anneal the time from T to 0
-                    diff_time = anneal_schedule[i].item()
+                    diff_time = max(
+                        0,
+                        self.num_timesteps - int(self.num_timesteps / om_steps) * i - 1,
+                    )  # anneal the time from T to 0
                 else:
                     diff_time = latent_time
 
@@ -793,12 +817,12 @@ class MainModel(BaseModel):
                 noised_xs = [
                     (tr, rot_mat) for tr, rot_mat in zip(noised_trs, noised_rot_mats)
                 ]
-                forces = [
-                    (force_func(x)[0],) for x in noised_xs
-                ]  # only need translation for now
-                noised_xs = [
-                    (x[0],) for x in noised_xs
-                ]  # only need translation for now
+                # forces = [
+                #     (force_func(x)[0],) for x in noised_xs
+                # ]  # only need translation for now
+                # noised_xs = [
+                #     (x[0],) for x in noised_xs
+                # ]  # only need translation for now
 
                 terms = [action_func(x, force) for x, force in zip(noised_xs, forces)]
                 first_term = torch.cat([term[0].unsqueeze(0) for term in terms]).mean()
@@ -912,5 +936,18 @@ class MainModel(BaseModel):
 
         all_trs = torch.stack(all_trs, dim=0)
         all_rot_mats = torch.stack(all_rot_mats, dim=0)
+
+        # Print improvement in action
+        print(
+            f"Initial action: {actions[0]}, Final action: {actions[-1]}, Percent improvement: {(actions[0] - actions[-1]) / actions[0] * 100}%"
+        )
+        # Print improvement in path term
+        print(
+            f"Initial path norm: {path_terms[0]}, Final path norm: {path_terms[-1]}, Percent improvement: {(path_terms[0] - path_terms[-1]) / path_terms[0] * 100}%"
+        )
+        # Print improvement in force term
+        print(
+            f"Initial force norm: {force_terms[0]}, Final force norm: {force_terms[-1]}, Percent improvement: {(force_terms[0] - force_terms[-1]) / force_terms[0] * 100}%"
+        )
 
         return all_trs, all_rot_mats

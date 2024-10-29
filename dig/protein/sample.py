@@ -395,6 +395,7 @@ def main(args):
                         action_cls = SimpleAction
                     # generate Onsager-Machlup interpolated samples
                     tr_progress, rot_mat_progress = model.om_interpolate(
+                        eval_folder,
                         tr1,
                         rot_mat1,
                         tr2,

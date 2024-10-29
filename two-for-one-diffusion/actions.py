@@ -64,7 +64,6 @@ class TruncatedAction(torch.nn.Module):
         """
         first_term_all = 0
         second_term_all = 0
-
         if not isinstance(_path, tuple):
             _path = (_path,)
         if _forces is None or None in _forces:
@@ -73,7 +72,9 @@ class TruncatedAction(torch.nn.Module):
         if not isinstance(_forces, tuple):
             _forces = (_forces,)
 
-        for i, (path, forces) in enumerate(zip(_path, _forces)):
+        for i, (path, forces) in enumerate(
+            zip(_path[:1], _forces[:1])
+        ):  # only considering translations for now, not rotations
             # TODO: is a per-element square the correct distance metric for SO(3) rotation matrices?
             first_term = torch.square((path[1:] - path[:-1])) * (
                 self.gamma / 4 / self.dt
