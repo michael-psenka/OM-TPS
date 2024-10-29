@@ -1,6 +1,17 @@
 import torch
 import numpy as np
 from numpy.linalg import svd
+from rmsd import kabsch_rmsd
+
+
+def convert_to_CANC(tr, rot_mat):
+    tr, rot_mat = tr.cpu(), rot_mat.cpu()
+    CA = tr
+    N_ref = torch.tensor([1.45597958, 0.0, 0.0])
+    C_ref = torch.tensor([-0.533655602, 1.42752619, 0.0])
+    N = torch.matmul(rot_mat.transpose(-1, -2), N_ref) + CA
+    C = torch.matmul(rot_mat.transpose(-1, -2), C_ref) + CA
+    return CA, N, C
 
 
 def rotation_matrix_to_axis_angle(rot_mat):
@@ -171,21 +182,11 @@ def pdb_to_tr_rots(pdb_file):
             C_rel = C - CA
 
             # Reference vectors
-            A = np.stack([N_ref, C_ref], axis=1)  # Shape: (3, 2)
-            B = np.stack([N_rel, C_rel], axis=1)  # Shape: (3, 2)
+            A = np.stack([N_ref, C_ref], axis=0)  # Shape: (2, 3)
+            B = np.stack([N_rel, C_rel], axis=0)  # Shape: (2, 3)
 
-            # Compute covariance matrix
-            H = np.dot(A, B.T)  # Shape: (3, 3)
-
-            # Singular Value Decomposition
-            U, S, Vt = svd(H)
-            R_matrix = np.dot(Vt.T, U.T)
-
-            # Ensure a proper rotation (determinant = 1)
-            if np.linalg.det(R_matrix) < 0:
-                Vt[2, :] *= -1
-                R_matrix = np.dot(Vt.T, U.T)
-
+            # compute rotation matrix corresponding to the N and C coordinates
+            R_matrix, _, _, _ = np.linalg.lstsq(A, B, rcond=None)
             rot_mat_list.append(R_matrix)
         else:
             # If any backbone atom is missing, skip this residue
@@ -200,4 +201,13 @@ def pdb_to_tr_rots(pdb_file):
     all_N = np.stack(all_N)
     all_C = np.stack(all_C)
 
-    return tr, rot_mats
+    recon_CA, recon_N, recon_C = convert_to_CANC(tr, rot_mats)
+
+    mol = torch.from_numpy(np.concatenate([all_CA, all_N, all_C], axis=0))
+    recon_mol = torch.cat([recon_CA, recon_N, recon_C], axis=0)
+
+    print(
+        f"RMSD between original and reconstructed PDB endpoint: {kabsch_rmsd(mol.numpy(), recon_mol.numpy())} A)"
+    )
+
+    return tr, rot_mats, mol

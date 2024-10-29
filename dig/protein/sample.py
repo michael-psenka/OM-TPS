@@ -33,7 +33,7 @@ from evaluate.evaluate_fastfolders import (
     CLUSTER_ENDPOINTS,
 )
 from models import CommittorNN
-from dig_utils import pdb_to_tr_rots
+from dig_utils import pdb_to_tr_rots, convert_to_CANC
 
 
 def xyz2pdb(seq, CA, N, C):
@@ -107,16 +107,6 @@ def load_model(step):
         parsed_dict[k] = v
     model.load_state_dict(parsed_dict)
     return model
-
-
-def convert_to_CANC(tr, rot_mat):
-    tr, rot_mat = tr.cpu(), rot_mat.cpu()
-    CA = tr
-    N_ref = torch.tensor([1.45597958, 0.0, 0.0])
-    C_ref = torch.tensor([-0.533655602, 1.42752619, 0.0])
-    N = torch.matmul(rot_mat.transpose(-1, -2), N_ref) + CA
-    C = torch.matmul(rot_mat.transpose(-1, -2), C_ref) + CA
-    return CA, N, C
 
 
 def write_to_pdb(seq, tr, rot_mat, file):
@@ -220,18 +210,48 @@ def main(args):
             elif "interpolate" in args.gen_mode:
                 if args.endpoint_pdbs is not None:
                     print("Using provided PDBs as endpoints")
-                    tr1, rot_mat1 = pdb_to_tr_rots(
+                    tr1, rot_mat1, mol1 = pdb_to_tr_rots(
                         os.path.join(args.data, f"{args.endpoint_pdbs[0]}.pdb")
                     )
-                    tr2, rot_mat2 = pdb_to_tr_rots(
+                    tr2, rot_mat2, mol2 = pdb_to_tr_rots(
                         os.path.join(args.data, f"{args.endpoint_pdbs[1]}.pdb")
                     )
 
-                    assert (
-                        tr1.shape == tr2.shape and rot_mat1.shape == rot_mat2.shape
-                    ), "Endpoint PDBs must have the same number of residues"
+                    # save backbone coordinates of endpoint PDBs for reference
+
+                    save_ovito_traj(
+                        mol1.unsqueeze(0),
+                        eval_folder + f"/endpoint1.gsd",
+                        alpha_carbon_lim=tr1.shape[0],
+                        all_backbone=True,
+                    )
+                    save_ovito_traj(
+                        mol2.unsqueeze(0),
+                        eval_folder + f"/endpoint2.gsd",
+                        alpha_carbon_lim=tr2.shape[0],
+                        all_backbone=True,
+                    )
+
+                    if tr1.shape != tr2.shape:
+
+                        assert (
+                            tr1.shape[0] % tr2.shape[0] == 0
+                        ), "Number of residues in endpoint PDBs must be a multiple of each other"
+                        warnings.warn(
+                            "Mismatch in number of chains between endpoint PDBs, taking the first chain"
+                        )
+                        if tr1.shape[0] > tr2.shape[0]:
+                            tr1 = tr1[: tr2.shape[0]]
+                            rot_mat1 = rot_mat1[: tr2.shape[0]]
+                        else:
+                            tr2 = tr2[: tr1.shape[0]]
+                            rot_mat2 = rot_mat2[: tr1.shape[0]]
+
                     if tr1.shape[0] != single_repr.shape[0]:
                         # make sure it's an integer multiple of the number of residues
+                        import pdb
+
+                        pdb.set_trace()
                         assert (
                             tr1.shape[0] % single_repr.shape[0] == 0
                         ), "Number of residues in endpoint PDBs must be a multiple of the number of residues in the protein representation"
@@ -242,16 +262,11 @@ def main(args):
                         rot_mat1 = rot_mat1[: single_repr.shape[0]]
                         tr2 = tr2[: single_repr.shape[0]]
                         rot_mat2 = rot_mat2[: single_repr.shape[0]]
-
-                        # repeat tr and rot_mat to num_samples
-                        tr1 = tr1.unsqueeze(0).repeat(args.num_samples, 1, 1)
-                        tr2 = tr2.unsqueeze(0).repeat(args.num_samples, 1, 1)
-                        rot_mat1 = rot_mat1.unsqueeze(0).repeat(
-                            args.num_samples, 1, 1, 1
-                        )
-                        rot_mat2 = rot_mat2.unsqueeze(0).repeat(
-                            args.num_samples, 1, 1, 1
-                        )
+                    # repeat tr and rot_mat to num_samples
+                    tr1 = tr1.unsqueeze(0).repeat(args.num_samples, 1, 1)
+                    tr2 = tr2.unsqueeze(0).repeat(args.num_samples, 1, 1)
+                    rot_mat1 = rot_mat1.unsqueeze(0).repeat(args.num_samples, 1, 1, 1)
+                    rot_mat2 = rot_mat2.unsqueeze(0).repeat(args.num_samples, 1, 1, 1)
 
                 elif args.pdb_id in PDB_ID_TO_NAME:
                     print("Using samples from ground truth simulations as endpoints")
@@ -465,7 +480,7 @@ def main(args):
         torch.save(all_CA, sampled_CA_file)
         gsd_file = eval_folder + f"/sample-{args.gen_mode}.gsd"
         save_ovito_traj(
-            sampled_mol, gsd_file, alpha_carbon_lim=all_CA.shape[1], all_backbone=False
+            sampled_mol, gsd_file, alpha_carbon_lim=all_CA.shape[1], all_backbone=True
         )
 
         if args.gen_mode == "om_interpolate":

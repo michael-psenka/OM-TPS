@@ -637,6 +637,13 @@ class MainModel(BaseModel):
             (1, 0, 2, 3, 4)
         )  # make batch dimension come first [B, path_length, n_atoms, 3, 3]
 
+        # loop through rot mats, and if any entries have NaN, replace with identity matrix
+        for i in range(noised_rot_mats.shape[0]):
+            for j in range(noised_rot_mats.shape[1]):
+                for k in range(noised_rot_mats.shape[2]):
+                    if torch.isnan(noised_rot_mats[i, j, k]).any():
+                        noised_rot_mats[i, j, k] = torch.eye(3).to(device)
+
         # decode the interpolated paths with reverse ODE
         with torch.no_grad():
             all_trs, all_rot_mats = self.sample_from_t(
@@ -713,8 +720,8 @@ class MainModel(BaseModel):
         original_rot_mat1 = rot_mat1.clone()
         original_rot_mat2 = rot_mat2.clone()
 
-        noised_trs = None
-        noised_rot_mats = None
+        initial_trs = None
+        initial_rot_mats = None
         interp_folder = os.path.join(
             os.path.dirname(eval_folder),
             f"main_eval_output_interpolate_t={initial_guess_level}",
@@ -723,17 +730,17 @@ class MainModel(BaseModel):
             samples = torch.load(
                 os.path.join(interp_folder, "sample-interpolate-all.pt")
             )
-            noised_trs = samples["tr"]
-            noised_rot_mats = samples["rot_mat"]
+            initial_trs = samples["tr"]
+            initial_rot_mats = samples["rot_mat"]
 
-            if noised_trs.shape[0] != num_paths * path_length:
-                noised_trs = None
-                noised_rot_mats = None
+            if initial_trs.shape[0] != num_paths * path_length:
+                initial_trs = None
+                initial_rot_mats = None
 
-        if noised_trs is None:
+        if initial_trs is None:
             # Initial guess is from linear interpolation in latent space
             print("Generating initial guess with linear interpolation in latent space")
-            noised_trs, noised_rot_mats = self.interpolate(
+            initial_trs, initial_rot_mats = self.interpolate(
                 tr1,
                 rot_mat1,
                 tr2,
@@ -748,8 +755,8 @@ class MainModel(BaseModel):
         else:
             print(f"Using precomputed initial guess in {interp_folder}")
 
-        noised_trs = noised_trs.reshape(-1, path_length, n_atoms, 3)
-        noised_rot_mats = noised_rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
+        noised_trs = initial_trs.reshape(-1, path_length, n_atoms, 3)
+        noised_rot_mats = initial_rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
 
         # Now refine the initial guess with OM optimization
         optimizer = torch.optim.Adam([noised_trs, noised_rot_mats], lr=lr)
@@ -812,11 +819,11 @@ class MainModel(BaseModel):
                 )  # (D is only used for HessianAction)
 
                 # TODO: vmap over batch dimension
-                # (currently not possible because of calling requires_grad on x in GraphTransformer)
 
                 noised_xs = [
                     (tr, rot_mat) for tr, rot_mat in zip(noised_trs, noised_rot_mats)
                 ]
+
                 # forces = [
                 #     (force_func(x)[0],) for x in noised_xs
                 # ]  # only need translation for now
@@ -949,5 +956,15 @@ class MainModel(BaseModel):
         print(
             f"Initial force norm: {force_terms[0]}, Final force norm: {force_terms[-1]}, Percent improvement: {(force_terms[0] - force_terms[-1]) / force_terms[0] * 100}%"
         )
+
+        # Print change in translations from initial to final
+        initial_trs = initial_trs.reshape(-1, path_length, n_atoms, 3)
+        initial_rot_mats = initial_rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
+
+        change_in_tr = torch.norm(all_trs - initial_trs, dim=-1).mean()
+        print(f"Change in alpha carbon coordinates: {change_in_tr} A")
+
+        change_in_rot_mats = torch.norm(all_rot_mats - initial_rot_mats, dim=-1).mean()
+        print(f"Change in rotation matrices: {change_in_rot_mats}")
 
         return all_trs, all_rot_mats
