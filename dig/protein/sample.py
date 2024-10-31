@@ -249,9 +249,7 @@ def main(args):
 
                     if tr1.shape[0] != single_repr.shape[0]:
                         # make sure it's an integer multiple of the number of residues
-                        import pdb
 
-                        pdb.set_trace()
                         assert (
                             tr1.shape[0] % single_repr.shape[0] == 0
                         ), "Number of residues in endpoint PDBs must be a multiple of the number of residues in the protein representation"
@@ -432,6 +430,7 @@ def main(args):
                         args.add_noise,
                         args.truncated_gradient,
                         args.interpolation_temp,
+                        args.minibatch_size,
                         log=not args.disable_logging,
                     )
 
@@ -560,12 +559,19 @@ if __name__ == "__main__":
         "-n",
         "--num_samples",
         type=int,
-        default=50,
+        default=1,
         help="Number of samples to generate",
     )
 
     parser.add_argument(
         "-b", "--batch_size", type=int, default=50, help="Number of samples to generate"
+    )
+
+    parser.add_argument(
+        "--minibatch_size",
+        type=int,
+        default=10,
+        help="Number of configurations to pass through the model at once during OM optimization",
     )
 
     parser.add_argument(
@@ -608,22 +614,20 @@ if __name__ == "__main__":
         help="whether to anneal temperature during interpolation",
     )
     parser.add_argument(
-        "--path_length", type=int, help="length of interpolation path", default=200
+        "--path_length", type=int, help="length of interpolation path", default=10
     )
 
     parser.add_argument(
-        "--steps", type=int, help="number of OM optimization steps", default=1000
+        "--steps", type=int, help="number of OM optimization steps", default=100
     )
 
     parser.add_argument(
         "--lr", type=float, help="learning rate for OM optimization", default=2e-1
     )
-    parser.add_argument(
-        "--om_dt", type=float, help="dt for OM optimization", default=0.1
-    )
+    parser.add_argument("--om_dt", type=float, help="dt for OM optimization", default=1)
 
     parser.add_argument(
-        "--om_gamma", type=float, help="gamma for OM optimization", default=10
+        "--om_gamma", type=float, help="gamma for OM optimization", default=1
     )
 
     parser.add_argument(
