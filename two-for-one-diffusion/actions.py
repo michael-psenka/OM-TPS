@@ -1,4 +1,5 @@
 import torch
+from tqdm import tqdm
 
 
 class S2Action(torch.nn.Module):
@@ -52,7 +53,13 @@ class TruncatedAction(torch.nn.Module):
         self.dt = dt
         self.gamma = gamma
 
-    def forward(self, _path: torch.Tensor, _forces: torch.Tensor = None):
+    def forward(
+        self,
+        _path: torch.Tensor,
+        _forces: torch.Tensor = None,
+        path_term_only=False,
+        force_term_only=False,
+    ):
         """
         Args:
             path: tuple consisting of one or more elements of shape [P, N, 3]
@@ -62,28 +69,34 @@ class TruncatedAction(torch.nn.Module):
         For DiG, the path and forces are tuples of length 2 (alpha-Carbon and residue rotation values and scores)
 
         """
-        first_term_all = 0
-        second_term_all = 0
+        path_term_all = 0
+        force_term_all = 0
         if not isinstance(_path, tuple):
             _path = (_path,)
         if _forces is None or None in _forces:
-            _forces = self.force_func(_path)
+            if not path_term_only:
+                _forces = self.force_func(_path)
+            else:
+                _forces = (None,) * len(_path)
 
         if not isinstance(_forces, tuple):
             _forces = (_forces,)
 
-        for i, (path, forces) in enumerate(
-            zip(_path[:1], _forces[:1])
-        ):  # only considering translations for now, not rotations
-            # TODO: is a per-element square the correct distance metric for SO(3) rotation matrices?
-            first_term = torch.square((path[1:] - path[:-1])) * (
-                self.gamma / 4 / self.dt
-            )
-            second_term = torch.square(forces) * (self.dt / 4 / self.gamma)
-            first_term_all += first_term.sum()
-            second_term_all += second_term.sum()
+        for i, (path, forces) in enumerate(zip(_path, _forces)):
+            path_term = torch.zeros_like(path)
+            force_term = torch.zeros_like(path)
 
-        return first_term_all, second_term_all
+            if not force_term_only:
+                # TODO: is a per-element square the correct distance metric for SO(3) rotation matrices?
+                path_term = torch.square((path[1:] - path[:-1])) * (
+                    self.gamma / 4 / self.dt
+                )
+            if not path_term_only:
+                force_term = torch.square(forces) * (self.dt / 4 / self.gamma)
+            path_term_all += path_term.sum()
+            force_term_all += force_term.sum()
+
+        return path_term_all, force_term_all
 
 
 class SimpleAction(torch.nn.Module):
