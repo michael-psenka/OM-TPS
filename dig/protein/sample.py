@@ -622,7 +622,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--lr", type=float, help="learning rate for OM optimization", default=2e-1
+        "--lr", type=float, help="learning rate for OM optimization", default=1e-2
     )
     parser.add_argument("--om_dt", type=float, help="dt for OM optimization", default=1)
 
