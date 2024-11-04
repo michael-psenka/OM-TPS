@@ -206,8 +206,8 @@ def pdb_to_tr_rots(pdb_file):
     mol = torch.from_numpy(np.concatenate([all_CA, all_N, all_C], axis=0))
     recon_mol = torch.cat([recon_CA, recon_N, recon_C], axis=0)
 
-    print(
-        f"RMSD between original and reconstructed PDB endpoint: {kabsch_rmsd(mol.numpy(), recon_mol.numpy())} A)"
-    )
+    # print(
+    #     f"RMSD between original and reconstructed PDB endpoint: {kabsch_rmsd(mol.numpy(), recon_mol.numpy())} A)"
+    # )
 
     return tr, rot_mats, mol

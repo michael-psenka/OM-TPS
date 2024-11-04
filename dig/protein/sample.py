@@ -200,7 +200,7 @@ def main(args):
             if args.gen_mode == "iid":
                 # generate i.i.d samples
                 tr, rot_mat = model.sample(
-                    args.batch_size,
+                    args.num_samples,
                     single_repr,
                     pair_repr,
                     tr_init,
@@ -337,7 +337,7 @@ def main(args):
                     # convert to tr and rot_mat
                     tr1 = endpoint_1_samples
                     tr2 = endpoint_2_samples
-                    # TODO: currentl using identity matrices as rot_mat, not sure if this is physically reasonable
+                    # TODO: currently using identity matrices as rot_mat, not sure if this is physically reasonable
                     rot_mat1 = (
                         torch.eye(3)
                         .unsqueeze(0)
@@ -479,7 +479,7 @@ def main(args):
         torch.save(all_CA, sampled_CA_file)
         gsd_file = eval_folder + f"/sample-{args.gen_mode}.gsd"
         save_ovito_traj(
-            sampled_mol, gsd_file, alpha_carbon_lim=all_CA.shape[1], all_backbone=True
+            sampled_mol, gsd_file, alpha_carbon_lim=all_CA.shape[1], all_backbone=True, align= args.gen_mode == "iid"
         )
 
         if args.gen_mode == "om_interpolate":

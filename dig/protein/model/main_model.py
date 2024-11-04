@@ -396,7 +396,6 @@ class MainModel(BaseModel):
 
             # predict score update from diffusion model
             with torch.no_grad():
-
                 tr_score, rot_score = self.forward_step(
                     (tr, rot_mat),
                     torch.zeros(
@@ -409,7 +408,7 @@ class MainModel(BaseModel):
 
                 tr_score /= tr_sigma
                 rot_score *= so3.score_norm(torch.tensor([rot_sigma]))[0]
-            # tr_score: (N, L, 3), rot_score: (N, L, 3)
+            # tr_score: (N, L, 3), rot_score: (N, L, 3, 3)
 
             tr_g = tr_sigma * torch.sqrt(
                 torch.tensor(2 * np.log(self.tr_sigma_max / self.tr_sigma_min))
@@ -819,15 +818,7 @@ class MainModel(BaseModel):
                     gamma=gamma,
                     D=100,
                 )  # (D is only used for HessianAction)
-
-                # TODO: vmap over batch dimension
-
-                # forces = [
-                #     (force_func(x)[0],) for x in noised_xs
-                # ]  # only need translation for now
-                # noised_xs = [
-                #     (x[0],) for x in noised_xs
-                # ]  # only need translation for now
+                
 
                 optimizer.zero_grad()
                 # Compute path term gradients all at once (low memory)
@@ -940,7 +931,7 @@ class MainModel(BaseModel):
                         {
                             "OM Action": action.item(),
                             "Path Norm": path_action.item(),
-                            "Force Norm": force_action.item(),
+                            "Force Norm": force_action,
                             "Path Contribution": path_contribution,
                             "Force Contribution": force_contribution,
                         }
