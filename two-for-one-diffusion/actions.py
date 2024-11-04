@@ -69,6 +69,10 @@ class TruncatedAction(torch.nn.Module):
         For DiG, the path and forces are tuples of length 2 (alpha-Carbon and residue rotation values and scores)
 
         """
+        N_ref = torch.tensor([1.45597958, 0.0, 0.0])
+        C_ref = torch.tensor([-0.533655602, 1.42752619, 0.0])
+        ref = torch.stack([N_ref, C_ref], dim=0)
+
         path_term_all = 0
         force_term_all = 0
         if not isinstance(_path, tuple):
@@ -87,7 +91,10 @@ class TruncatedAction(torch.nn.Module):
             force_term = torch.zeros_like(path)
 
             if not force_term_only:
-                # TODO: is a per-element square the correct distance metric for SO(3) rotation matrices?
+
+                if len(path_term.shape) == 4:
+                    path_term = torch.matmul(ref.to(path_term.device), path_term)
+
                 path_term = torch.square((path[1:] - path[:-1])) * (
                     self.gamma / 4 / self.dt
                 )

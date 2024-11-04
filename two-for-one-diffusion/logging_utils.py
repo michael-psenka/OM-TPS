@@ -13,7 +13,9 @@ from utils import center_zero
 from rmsd import kabsch_rotate
 
 
-def save_ovito_traj(positions, filename, alpha_carbon_lim=100000, all_backbone=False, align=False):
+def save_ovito_traj(
+    positions, filename, alpha_carbon_lim=100000, all_backbone=False, align=False
+):
     """
     Save the given positions to a GSD file using Ovito.
     """
@@ -23,7 +25,6 @@ def save_ovito_traj(positions, filename, alpha_carbon_lim=100000, all_backbone=F
 
     if align:
         positions = center_zero(positions)
-        
 
     if not all_backbone:
         positions = positions[:, :alpha_carbon_lim]

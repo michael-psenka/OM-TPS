@@ -3,6 +3,10 @@ import numpy as np
 from numpy.linalg import svd
 from rmsd import kabsch_rmsd, kabsch
 
+# Reference vectors in the standard residue coordinate system
+N_ref = np.array([1.45597958, 0.0, 0.0])
+C_ref = np.array([-0.533655602, 1.42752619, 0.0])
+
 
 def convert_to_CANC(tr, rot_mat):
     tr, rot_mat = tr.cpu(), rot_mat.cpu()
@@ -133,9 +137,6 @@ def pdb_to_tr_rots(pdb_file):
         rot_mats (torch.Tensor): Tensor of shape (L, 3, 3), containing the rotation
                                  matrices for each residue.
     """
-    # Reference vectors in the standard residue coordinate system
-    N_ref = np.array([1.45597958, 0.0, 0.0])
-    C_ref = np.array([-0.533655602, 1.42752619, 0.0])
 
     # Dictionaries to hold atom coordinates
     residues = {}

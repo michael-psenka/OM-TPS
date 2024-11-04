@@ -569,20 +569,6 @@ class MainModel(BaseModel):
         # At this point, tr2 is rotated to match tr1
         assert rotation_aligned(tr2[0], tr1[0])
 
-        # recon_tr1, recon_rot_mat1, encoded_tr1, encoded_rot_mat1 = self.reconstruct(
-        #     tr1, rot_mat1, single_repr, pair_repr, latent_time, save=True
-        # )
-        # print(
-        #     f"RMSD of recon_tr1 and tr1: {kabsch_rmsd(recon_tr1[0].cpu().numpy(), tr1[0].numpy())} A"
-        # )
-
-        # recon_tr2, recon_rot_mat2, encoded_tr2, encoded_rot_mat2 = self.reconstruct(
-        #     tr2, rot_mat2, single_repr, pair_repr, latent_time
-        # )
-        # print(
-        #     f"RMSD of recon_tr2 and tr2: {kabsch_rmsd(recon_tr2[0].cpu().numpy(), tr2[0].numpy())} A"
-        # )
-
         original_tr1 = tr1.clone()
         original_tr2 = tr2.clone()
         original_rot_mat1 = rot_mat1.clone()
@@ -814,59 +800,86 @@ class MainModel(BaseModel):
 
                 optimizer.zero_grad()
                 # Compute path term gradients all at once (low memory)
-                path_actions = [
-                    action_func((T, IR), _forces=None, path_term_only=True)[0]
-                    for T, IR in zip(noised_trs, noised_rot_mats)
+                # path_actions = [
+                #     action_func((T, IR), _forces=None, path_term_only=True)[0]
+                #     for T, IR in zip(noised_trs, noised_rot_mats)
+                # ]
+                # path_action = torch.cat(
+                #     [term.unsqueeze(0) for term in path_actions]
+                # ).mean()
+
+                # # compute grads
+                # tr_grads, rot_mat_grads = torch.autograd.grad(
+                #     path_action, (noised_trs, noised_rot_mats)
+                # )
+
+                # # set grads
+                # for p, g in zip(
+                #     [noised_trs, noised_rot_mats], [tr_grads, rot_mat_grads]
+                # ):
+                #     assert p.grad is None
+                #     p.grad = g
+
+                # path_terms.append(path_action.detach().item())
+
+                # # Compute force term gradients in batches to save memory
+                # force_action = 0
+                # batches = zip(
+                #     noised_trs.reshape(-1, n_atoms, 3).split(minibatch_size),
+                #     noised_rot_mats.reshape(-1, n_atoms, 3, 3).split(minibatch_size),
+                # )
+                # for T, IR in batches:
+                #     # Compute terms for the current x and force
+
+                #     _, force_act = action_func(
+                #         (T, IR), _forces=None, force_term_only=True
+                #     )
+
+                #     # Accumulate gradients for the current action term
+                #     tr_grads, rot_mat_grads = torch.autograd.grad(
+                #         force_act, (noised_trs, noised_rot_mats), retain_graph=True
+                #     )
+
+                #     # Manually accumulate gradients
+                #     for p, g in zip(
+                #         [noised_trs, noised_rot_mats], [tr_grads, rot_mat_grads]
+                #     ):
+                #         assert p.grad is not None
+                #         p.grad += g  # / len(noised_trs.reshape(-1, n_atoms, 3))
+
+                #     force_action += force_act.detach().item()
+
+                # # Store the detached values (TODO fix positioning of this)
+
+                # force_terms.append(force_action)
+                # action = path_action + force_action
+                # actions.append(action.detach().item())
+
+                noised_xs = [
+                    (tr, rot_mat) for tr, rot_mat in zip(noised_trs, noised_rot_mats)
                 ]
-                path_action = torch.cat(
-                    [term.unsqueeze(0) for term in path_actions]
+
+                # forces = [
+                #     (force_func(x)[0],) for x in noised_xs
+                # ]  # only need translation for now
+                # noised_xs = [
+                #     (x[0],) for x in noised_xs
+                # ]  # only need translation for now
+
+                terms = [action_func(x, force) for x, force in zip(noised_xs, forces)]
+                first_term = torch.cat([term[0].unsqueeze(0) for term in terms]).mean()
+                second_term = torch.cat([term[1].unsqueeze(0) for term in terms]).mean()
+                action = torch.cat(
+                    [(term[0] + term[1]).unsqueeze(0) for term in terms]
                 ).mean()
 
-                # compute grads
+                actions.append(action.item())
+                path_terms.append(first_term.item())
+                force_terms.append(second_term.item())
+
                 tr_grads, rot_mat_grads = torch.autograd.grad(
-                    path_action, (noised_trs, noised_rot_mats)
+                    action, (noised_trs, noised_rot_mats)
                 )
-
-                # set grads
-                for p, g in zip(
-                    [noised_trs, noised_rot_mats], [tr_grads, rot_mat_grads]
-                ):
-                    assert p.grad is None
-                    p.grad = g
-
-                path_terms.append(path_action.detach().item())
-
-                # Compute force term gradients in batches to save memory
-                force_action = 0
-                batches = zip(
-                    noised_trs.reshape(-1, n_atoms, 3).split(minibatch_size),
-                    noised_rot_mats.reshape(-1, n_atoms, 3, 3).split(minibatch_size),
-                )
-                for T, IR in batches:
-                    # Compute terms for the current x and force
-
-                    _, force_act = action_func(
-                        (T, IR), _forces=None, force_term_only=True
-                    )
-
-                    # Accumulate gradients for the current action term
-                    tr_grads, rot_mat_grads = torch.autograd.grad(
-                        force_act, (noised_trs, noised_rot_mats), retain_graph=True
-                    )
-
-                    # Manually accumulate gradients
-                    for p, g in zip(
-                        [noised_trs, noised_rot_mats], [tr_grads, rot_mat_grads]
-                    ):
-                        assert p.grad is not None
-                        p.grad += g  # / len(noised_trs.reshape(-1, n_atoms, 3))
-
-                    force_action += force_act.detach().item()
-
-                # Store the detached values (TODO fix positioning of this)
-                force_terms.append(force_action)
-                action = path_action + force_action
-                actions.append(action.detach().item())
 
                 if add_noise:
                     # add noise to gradients, since adding directly to path yields optimization problems with Adam
@@ -897,6 +910,8 @@ class MainModel(BaseModel):
                     noised_rot_mats.grad = rot_mat_grads
                     optimizer.step()
 
+                path_action = first_term
+                force_action = second_term.item()
                 all_noised_trs.append(noised_trs.clone().detach())
                 all_noised_rot_mats.append(noised_rot_mats.clone().detach())
                 path_contribution = path_action.item() / action.item()
@@ -955,9 +970,10 @@ class MainModel(BaseModel):
 
             _tr = _tr.reshape(-1, path_length, n_atoms, 3)
             _rot_mats = _rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
+
             # reset the endpoints
-            # _tr[:, 0], _tr[:, -1] = original_tr1, original_tr2
-            # _rot_mats[:, 0], _rot_mats[:, -1] = original_rot_mat1, original_rot_mat2
+            _tr[:, 0], _tr[:, -1] = original_tr1, original_tr2
+            _rot_mats[:, 0], _rot_mats[:, -1] = original_rot_mat1, original_rot_mat2
 
             all_trs.append(_tr.reshape(-1, n_atoms, 3))
             all_rot_mats.append(_rot_mats.reshape(-1, n_atoms, 3, 3))
