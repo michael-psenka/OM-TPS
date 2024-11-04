@@ -536,7 +536,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
     all_mol_traj.save_pdb(str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb"))
 
     # Also save as gsd
-    save_ovito_traj(sampled_mol, str(eval_folder) + f"/sample-{samp_args.gen_mode}.gsd")
+    save_ovito_traj(sampled_mol, str(eval_folder) + f"/sample-{samp_args.gen_mode}.gsd", align = samp_args.gen_mode == "iid")
 
     # Perform final evaluations (producing plots, GIFs, etc.)
     evaluate_fastfolders(

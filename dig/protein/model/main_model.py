@@ -818,7 +818,6 @@ class MainModel(BaseModel):
                     gamma=gamma,
                     D=100,
                 )  # (D is only used for HessianAction)
-                
 
                 optimizer.zero_grad()
                 # Compute path term gradients all at once (low memory)

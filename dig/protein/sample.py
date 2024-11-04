@@ -479,7 +479,11 @@ def main(args):
         torch.save(all_CA, sampled_CA_file)
         gsd_file = eval_folder + f"/sample-{args.gen_mode}.gsd"
         save_ovito_traj(
-            sampled_mol, gsd_file, alpha_carbon_lim=all_CA.shape[1], all_backbone=True, align= args.gen_mode == "iid"
+            sampled_mol,
+            gsd_file,
+            alpha_carbon_lim=all_CA.shape[1],
+            all_backbone=True,
+            align=args.gen_mode == "iid",
         )
 
         if args.gen_mode == "om_interpolate":

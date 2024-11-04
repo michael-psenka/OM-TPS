@@ -13,7 +13,7 @@ from utils import center_zero
 from rmsd import kabsch_rotate
 
 
-def save_ovito_traj(positions, filename, alpha_carbon_lim=100000, all_backbone=False):
+def save_ovito_traj(positions, filename, alpha_carbon_lim=100000, all_backbone=False, align=False):
     """
     Save the given positions to a GSD file using Ovito.
     """
@@ -21,9 +21,15 @@ def save_ovito_traj(positions, filename, alpha_carbon_lim=100000, all_backbone=F
     t = gsd.hoomd.open(name=filename, mode="w")
     cell = 1.5 * torch.eye(3) * positions.cpu().abs().max()
 
+    if align:
+        positions = center_zero(positions)
+        
+
     if not all_backbone:
         positions = positions[:, :alpha_carbon_lim]
     for i, pos in enumerate(positions):
+        if align:
+            pos = kabsch_rotate(pos, positions[0])
         t.append(create_frame(i, pos, cell, alpha_carbon_lim, all_backbone))
 
     t.close()

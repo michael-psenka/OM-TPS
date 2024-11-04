@@ -200,7 +200,7 @@ class GaussianDiffusion(nn.Module):
 
     def predict_start_from_noise(self, x_t, t, noise):
         """
-        Predict input molecule form noisy molecule.
+        Predict input molecule from noisy molecule.
         """
         return (
             extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t
