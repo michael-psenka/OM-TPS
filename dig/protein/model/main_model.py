@@ -637,13 +637,6 @@ class MainModel(BaseModel):
             (1, 0, 2, 3, 4)
         )  # make batch dimension come first [B, path_length, n_atoms, 3, 3]
 
-        # loop through rot mats, and if any entries have NaN, replace with identity matrix
-        for i in range(noised_rot_mats.shape[0]):
-            for j in range(noised_rot_mats.shape[1]):
-                for k in range(noised_rot_mats.shape[2]):
-                    if torch.isnan(noised_rot_mats[i, j, k]).any():
-                        noised_rot_mats[i, j, k] = torch.eye(3).to(device)
-
         # decode the interpolated paths with reverse ODE
         with torch.no_grad():
             all_trs, all_rot_mats = self.sample_from_t(

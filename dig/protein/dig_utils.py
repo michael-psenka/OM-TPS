@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from numpy.linalg import svd
-from rmsd import kabsch_rmsd
+from rmsd import kabsch_rmsd, kabsch
 
 
 def convert_to_CANC(tr, rot_mat):
@@ -184,9 +184,7 @@ def pdb_to_tr_rots(pdb_file):
             # Reference vectors
             A = np.stack([N_ref, C_ref], axis=0)  # Shape: (2, 3)
             B = np.stack([N_rel, C_rel], axis=0)  # Shape: (2, 3)
-
-            # compute rotation matrix corresponding to the N and C coordinates
-            R_matrix, _, _, _ = np.linalg.lstsq(A, B, rcond=None)
+            R_matrix = kabsch(A, B)  # Compute rotation matrix
             rot_mat_list.append(R_matrix)
         else:
             # If any backbone atom is missing, skip this residue
@@ -206,8 +204,8 @@ def pdb_to_tr_rots(pdb_file):
     mol = torch.from_numpy(np.concatenate([all_CA, all_N, all_C], axis=0))
     recon_mol = torch.cat([recon_CA, recon_N, recon_C], axis=0)
 
-    # print(
-    #     f"RMSD between original and reconstructed PDB endpoint: {kabsch_rmsd(mol.numpy(), recon_mol.numpy())} A)"
-    # )
+    print(
+        f"RMSD between original and reconstructed PDB endpoint: {kabsch_rmsd(mol.numpy(), recon_mol.numpy())} A)"
+    )
 
     return tr, rot_mats, mol
