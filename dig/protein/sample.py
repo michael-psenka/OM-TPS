@@ -15,6 +15,8 @@ from model.main_model import MainModel as model_fn
 from tqdm import tqdm
 import mdtraj as md
 from pathlib import Path
+from rmsd import kabsch_rotate
+from utils import center_zero
 
 # Two for One repo imports
 from actions import SimpleAction, TruncatedAction, S2Action
@@ -450,13 +452,39 @@ def main(args):
         all_CA = []
         all_N = []
         all_C = []
+
+        for idx, tr_rot_mat in enumerate(zip(all_tr, all_rot_mat)):
+            tr, rot_mat = tr_rot_mat
+            CA, N, C = convert_to_CANC(tr, rot_mat)
+            all_CA.append(CA)
+            all_N.append(N)
+            all_C.append(C)
+
         with open(pdb_file, "w") as fp:
-            for idx, tr_rot_mat in enumerate(zip(all_tr, all_rot_mat)):
-                tr, rot_mat = tr_rot_mat
-                CA, N, C = convert_to_CANC(tr, rot_mat)
-                all_CA.append(CA)
-                all_N.append(N)
-                all_C.append(C)
+            for idx, (CA, N, C) in enumerate(zip(all_CA, all_N, all_C)):
+                # align to first sample
+                CA_shape = CA.shape[0]
+                N_shape = N.shape[0]
+                C_shape = C.shape[0]
+
+                centered = center_zero(
+                    torch.cat([CA, N, C], dim=0).unsqueeze(0)
+                ).squeeze()
+
+                if idx == 0:
+                    ref_centered = centered
+                else:
+                    # extract shapes so we can reshape back after kabsch_rotate
+
+                    aligned = torch.tensor(
+                        kabsch_rotate(centered.numpy(), ref_centered.numpy())
+                    )
+                    CA, N, C = (
+                        aligned[:CA_shape],
+                        aligned[CA_shape : CA_shape + N_shape],
+                        aligned[CA_shape + N_shape :],
+                    )
+
                 lines = xyz2pdb(seq, CA, N, C)
                 prefix = f"MODEL        {idx}\n"
                 fp.write(prefix)

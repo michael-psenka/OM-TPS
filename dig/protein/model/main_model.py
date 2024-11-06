@@ -262,7 +262,7 @@ class MainModel(BaseModel):
 
         T_perturbed.masked_fill_(mask[..., None], 0.0)
         IR_perturbed.masked_fill_(mask[..., None, None], 0.0)
-        return T_perturbed, IR_perturbed, T_score, so3_rot_score
+        return T_perturbed, IR_perturbed  # , T_score, so3_rot_score
 
     def forward(self, data, compute_loss=True):
         """
@@ -318,6 +318,7 @@ class MainModel(BaseModel):
         tr_init,  # option to provide initial translation
         rot_mat_init,  # option to provide initial rotation
         t,
+        temperature,
         use_tqdm=True,
         forward=False,
     ):
@@ -429,11 +430,21 @@ class MainModel(BaseModel):
                 tr_perturb_nr = -tr_perturb_nr
                 rot_perturb_nr = -rot_perturb_nr
 
-            tr_perturb = tr_perturb_nr
-            rot_perturb = rot_perturb_nr
+            tr_perturb = (
+                tr_perturb_nr + torch.randn_like(tr_perturb_nr) * tr_sigma * temperature
+            )
+            rot_perturb = (
+                rot_perturb_nr + torch.randn_like(rot_perturb_nr) * rot_sigma * temperature
+            )  # TODO: this doesn't seem correct
 
             rot_mat_perturb_nr = geometry.axis_angle_to_matrix(rot_perturb_nr)
             rot_mat_perturb = geometry.axis_angle_to_matrix(rot_perturb)
+
+            # TODO: this yields NaN samples even though it seems more correct
+            # noises = []
+            # for i in range(rot_mat_perturb_nr.shape[0]):
+            #     noises.append(torch.tensor(0.25 * so3.batch_sample_vec(rot_mat_perturb_nr.shape[1], eps=rot_sigma)))
+            # rot_mat_perturb = rot_mat_perturb_nr + geometry.axis_angle_to_matrix(torch.stack(noises).to(torch.float32).to(device))
 
             # update conformer
             tr_mean = tr + tr_perturb_nr
@@ -457,6 +468,7 @@ class MainModel(BaseModel):
         tr_init,  # option to provide initial translation
         rot_mat_init,  # option to provide initial rotation
         use_tqdm=True,
+        temperature=0.25,
     ):
         """
         Sample i.i.d conformations from the model.
@@ -476,6 +488,7 @@ class MainModel(BaseModel):
             tr_init,
             rot_mat_init,
             t=self.n_time_step,
+            temperature=temperature,
             use_tqdm=use_tqdm,
         )
 
@@ -587,7 +600,7 @@ class MainModel(BaseModel):
                 latent_time,
                 single_repr,
                 pair_repr,
-                deterministic=True,
+                deterministic=False,
             )
 
             noised_tr2, noised_rot_mat2 = self.forward_diffusion(
@@ -597,7 +610,7 @@ class MainModel(BaseModel):
                 latent_time,
                 single_repr,
                 pair_repr,
-                deterministic=True,
+                deterministic=False,
             )
 
         noised_tr1 = center_zero(noised_tr1)
