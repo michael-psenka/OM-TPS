@@ -434,7 +434,8 @@ class MainModel(BaseModel):
                 tr_perturb_nr + torch.randn_like(tr_perturb_nr) * tr_sigma * temperature
             )
             rot_perturb = (
-                rot_perturb_nr + torch.randn_like(rot_perturb_nr) * rot_sigma * temperature
+                rot_perturb_nr
+                + torch.randn_like(rot_perturb_nr) * rot_sigma * temperature
             )  # TODO: this doesn't seem correct
 
             rot_mat_perturb_nr = geometry.axis_angle_to_matrix(rot_perturb_nr)
@@ -553,7 +554,7 @@ class MainModel(BaseModel):
         pair_repr,
         path_length,
         latent_time,
-        temperature=1.0,
+        temperature=0.25,
     ):
         """
         Interpolate between two conformations.
@@ -645,6 +646,7 @@ class MainModel(BaseModel):
                 tr_init=noised_trs.reshape(-1, n_atoms, 3),
                 rot_mat_init=noised_rot_mats.reshape(-1, n_atoms, 3, 3),
                 t=latent_time,
+                temperature=temperature,
             )
 
         all_trs = all_trs.reshape(-1, path_length, n_atoms, 3)
@@ -684,7 +686,7 @@ class MainModel(BaseModel):
         anneal=False,
         add_noise=False,
         truncated_gradient=False,
-        temperature=1.0,
+        temperature=0.25,
         minibatch_size=10,
         log=False,
     ):
@@ -719,6 +721,7 @@ class MainModel(BaseModel):
             os.path.dirname(eval_folder),
             f"main_eval_output_interpolate_t={initial_guess_level}",
         )
+
         if os.path.exists(interp_folder):
             samples = torch.load(
                 os.path.join(interp_folder, "sample-interpolate-all.pt")
@@ -1011,10 +1014,10 @@ class MainModel(BaseModel):
         initial_trs = initial_trs.reshape(-1, path_length, n_atoms, 3)
         initial_rot_mats = initial_rot_mats.reshape(-1, path_length, n_atoms, 3, 3)
 
-        change_in_tr = torch.norm(all_trs - initial_trs, dim=-1).mean()
-        print(f"Change in alpha carbon coordinates: {change_in_tr} A")
+        # change_in_tr = torch.norm(all_trs - initial_trs, dim=-1).mean()
+        # print(f"Change in alpha carbon coordinates: {change_in_tr} A")
 
-        change_in_rot_mats = torch.norm(all_rot_mats - initial_rot_mats, dim=-1).mean()
-        print(f"Change in rotation matrices: {change_in_rot_mats}")
+        # change_in_rot_mats = torch.norm(all_rot_mats - initial_rot_mats, dim=-1).mean()
+        # print(f"Change in rotation matrices: {change_in_rot_mats}")
 
         return all_trs, all_rot_mats

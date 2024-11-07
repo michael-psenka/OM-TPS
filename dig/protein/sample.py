@@ -4,6 +4,7 @@ import pickle
 import time
 import sys
 import warnings
+import wandb
 
 import argparse
 import numpy as np
@@ -148,6 +149,18 @@ def main(args):
     )
     os.makedirs(eval_folder, exist_ok=True)
 
+    protein_name = (
+        PDB_ID_TO_NAME[args.pdb_id] if args.pdb_id in PDB_ID_TO_NAME else args.pdb_id
+    )
+
+    if not args.disable_logging:
+        wandb.login()
+        wandb.init(
+            project="fastfolders",
+            name="DiG_" + protein_name + append_exp_name,
+            config=args,
+        )
+
     pkl = os.path.join(args.data, args.pdb_id + ".pkl")
     fasta = os.path.join(args.data, args.pdb_id + ".fasta")
 
@@ -202,7 +215,7 @@ def main(args):
             if args.gen_mode == "iid":
                 # generate i.i.d samples
                 tr, rot_mat = model.sample(
-                    args.num_samples,
+                    args.batch_size,
                     single_repr,
                     pair_repr,
                     tr_init,
@@ -510,7 +523,7 @@ def main(args):
             sampled_mol,
             gsd_file,
             alpha_carbon_lim=all_CA.shape[1],
-            all_backbone=True,
+            all_backbone=not protein_name in PDB_ID_TO_NAME,
             align=args.gen_mode == "iid",
         )
 
@@ -666,7 +679,7 @@ if __name__ == "__main__":
         "--interpolation_temp",
         type=float,
         help="temperature for sampling during OM optimization",
-        default=1.0,
+        default=0.25,
     )
 
     parser.add_argument(
