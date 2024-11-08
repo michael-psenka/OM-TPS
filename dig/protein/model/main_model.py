@@ -722,16 +722,17 @@ class MainModel(BaseModel):
             f"main_eval_output_interpolate_t={initial_guess_level}",
         )
 
-        if os.path.exists(interp_folder):
-            samples = torch.load(
-                os.path.join(interp_folder, "sample-interpolate-all.pt")
-            )
-            initial_trs = samples["tr"]
-            initial_rot_mats = samples["rot_mat"]
+        # if os.path.exists(interp_folder):
+        #     samples = torch.load(
+        #         os.path.join(interp_folder, "sample-interpolate-all.pt")
+        #     )
+        #     initial_trs = samples["tr"]
+        #     initial_rot_mats = samples["rot_mat"]
 
-            if initial_trs.shape[0] != num_paths * path_length:
-                initial_trs = None
-                initial_rot_mats = None
+        #     if initial_trs.shape[0] != num_paths * path_length:
+        #         initial_trs = None
+        #         initial_rot_mats = None
+        initial_trs = None
 
         if initial_trs is None:
             # Initial guess is from linear interpolation in latent space
@@ -1007,7 +1008,7 @@ class MainModel(BaseModel):
         )
         # Print improvement in force term
         print(
-            f"Initial force norm: {force_terms[0]}, Final force norm: {force_terms[-1]}, Percent improvement: {(force_terms[0] - force_terms[-1]) / force_terms[0] * 100}%"
+            f"Initial force norm: {force_terms[0]}, Final force norm: {force_terms[-1]}, Percent improvement: {(force_terms[0] - force_terms[-1]) / (force_terms[0] +1e-8) * 100}%"
         )
 
         # Print change in translations from initial to final

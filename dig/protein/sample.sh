@@ -4,6 +4,15 @@
 # "2f4k": "villin",
 # "1mi0": "protein_g",
 
+# python sample.py \
+#     --pdb_id  cln025 \
+#     --gen_mode interpolate \
+#     --num_samples 4 \
+#     --path_length 200 \
+#     --latent_time 150 \
+#     --append_exp_name "t=150_temp0" \
+#     --interpolation_temp 0
+
 
 python sample.py \
     --pdb_id  cln025 \
@@ -12,28 +21,46 @@ python sample.py \
     --path_length 200 \
     --initial_guess_level 150 \
     --latent_time 0 \
-    --steps 100
-
+    --append_exp_name "initial_latent_time=150_pathtermonly" \
+    --steps 2000
+    
 # python sample.py \
 #     --pdb_id  2jof \
-#     --gen_mode om_interpolate \
-#     --num_samples 8 \
-#     --disable_logging \
+#     --gen_mode interpolate \
+#     --num_samples 4 \
 #     --path_length 200 \
-#     --initial_guess_level 150 \
-#     --latent_time 0 \
-#     --steps 2000
+#     --latent_time 150 \
+#     --append_exp_name "t=150_temp0" \
+#     --interpolation_temp 0
 
-
+python sample.py \
+    --pdb_id  2jof \
+    --gen_mode om_interpolate \
+    --num_samples 4 \
+    --path_length 200 \
+    --initial_guess_level 150 \
+    --append_exp_name "initial_latent_time=150_pathtermonly" \
+    --latent_time 0 \
+    --steps 2000
 # python sample.py \
 #     --pdb_id  1fme \
-#     --gen_mode om_interpolate \
-#     --num_samples 8 \
-#     --disable_logging \
+#     --gen_mode interpolate \
+#     --num_samples 4 \
 #     --path_length 200 \
-#     --initial_guess_level 150 \
-#     --latent_time 0 \
-#     --steps 2000
+#     --latent_time 150 \
+#     --append_exp_name "t=150_temp0" \
+#     --interpolation_temp 0
+
+
+python sample.py \
+    --pdb_id  1fme \
+    --gen_mode om_interpolate \
+    --num_samples 4 \
+    --path_length 200 \
+    --initial_guess_level 150 \
+    --append_exp_name "initial_latent_time=150_pathtermonly" \
+    --latent_time 0 \
+    --steps 2000 \
 
   
 # python sample.py \

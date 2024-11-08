@@ -260,7 +260,7 @@ def main(args):
                             rot_mat1 = rot_mat1[: tr2.shape[0]]
                         else:
                             tr2 = tr2[: tr1.shape[0]]
-                            rot_mat2 = rot_mat2[: tr1.shape[0]]
+                            rot_mat2 = rot_mat2[:  tr1.shape[0]]
 
                     if tr1.shape[0] != single_repr.shape[0]:
                         # make sure it's an integer multiple of the number of residues
@@ -523,7 +523,7 @@ def main(args):
             sampled_mol,
             gsd_file,
             alpha_carbon_lim=all_CA.shape[1],
-            all_backbone=not protein_name in PDB_ID_TO_NAME,
+            all_backbone= not (args.pdb_id in PDB_ID_TO_NAME),
             align=args.gen_mode == "iid",
         )
 

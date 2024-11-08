@@ -101,7 +101,7 @@ class TruncatedAction(torch.nn.Module):
             if not path_term_only:
                 force_term = torch.square(forces) * (self.dt / 4 / self.gamma)
             path_term_all += path_term.sum()
-            force_term_all += force_term.sum()
+            force_term_all += torch.zeros_like(force_term.sum())
 
         return path_term_all, force_term_all
 
