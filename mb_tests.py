@@ -14,13 +14,11 @@ from tqdm import tqdm
 import imageio
 import wandb
 
-wandb.require("core")
+from mb_actions import SimpleAction, S2Action, HutchinsonAction, TruncatedAction
 
-from mb_actions import SimpleAction, S2Action
-from src.utils import validate_git_status
-
-validate_git_status()
+wandb.init(mode="disabled")
 wandb.login()
+#WANDB_MODE=disabledwandb.login()
 
 os.makedirs("MB_tests", exist_ok=True)
 
@@ -52,152 +50,161 @@ evaluation_action_cls = SimpleAction(
 )
 evaluation_action = lambda path: evaluation_action_cls(path)
 
-for action_f in [SimpleAction, S2Action]:
-    for gamma in torch.logspace(-2, 1, 5).to(device):
-        for dt in torch.logspace(-2, 0, 5):
+#for action_f in [SimpleAction, S2Action]:
 
-            if action_f == SimpleAction:
-                D_loop = [torch.tensor(0.0).to(device)]
-            else:
-                D_loop = torch.logspace(-1, 2, 5).to(device)
+#action_f = S2Action
+#action_str = "S2Action"
+#action_f = TruncatedAction
+#action_str = "TruncatedAction"
 
-            for D in D_loop:
-                config = {
-                    "gamma": gamma.item(),
-                    "dt": dt.item(),
-                    "D": D.item(),
-                    "action": action_f.__name__,
-                }
-                wandb.init(
-                    project="mb-tests-100points-fixedopt", config=config, name="MB_test"
-                )
+action_f = HutchinsonAction
+action_str = "Hutchinson"
 
-                action_str = "simple" if action_f == SimpleAction else "S2"
-                print(
-                    f"MB_{action_str}_gamma={round(gamma.item(), 1)}_dt={dt}_D={D.item()}"
-                )
-                action_func = lambda path: action_f(
-                    force_func=potential.force_func,
-                    laplace_func=potential.laplace,
-                    gamma=gamma,
-                    dt=dt,
-                    D=D,
-                )(path)
+#action_f = SimpleAction
 
-                line_x = torch.linspace(x0[0], xf[0], line_density)
-                line_y = torch.linspace(x0[1], xf[1], line_density)
-                line_points = torch.stack((line_x, line_y), axis=-1).to(device)
+gamma = torch.tensor(1.0).to(device)
+dt = torch.tensor(1.0).to(device)
+#for gamma in torch.logspace(-2, 1, 5).to(device):
+#    for dt in torch.logspace(-2, 0, 5):
 
-                optimizer = torch.optim.Adam([line_points], lr=alpha)
+D = torch.tensor(0.2)
+config = {
+    "gamma": gamma.item(),
+    "dt": dt.item(),
+    "D": D.item(),
+    "action": action_f.__name__,
+}
+print(config)
+wandb.init(
+    project="mb-tests-100points-fixedopt", config=config, name="MB_test"
+)
 
-                gif_data = []
+#action_str = "Hutch"
+print(
+    f"MB_{action_str}_gamma={round(gamma.item(), 1)}_dt={dt}_D={D.item()}"
+)
+action_func = lambda path: action_f(
+    sample_force_func=potential.sample_force_func,
+    laplace_func=potential.laplace,
+    dt=dt,
+    gamma=gamma,
+    D=D,
+)(path)
 
-                # Choose action
+line_x = torch.linspace(x0[0], xf[0], line_density)
+line_y = torch.linspace(x0[1], xf[1], line_density)
+line_points = torch.stack((line_x, line_y), axis=-1).to(device)
 
-                # plot the potential
-                num_points = 100
-                x_values = torch.linspace(potential.Lx, potential.Hx, num_points)
-                y_values = torch.linspace(potential.Ly, potential.Hy, num_points)
+optimizer = torch.optim.Adam([line_points], lr=alpha)
 
-                x, y = torch.meshgrid(x_values, y_values, indexing="xy")
-                z = potential.U_split(x.to(device), y.to(device)).cpu()
-                actions = []
-                for i in tqdm(range(iterations)):
-                    line_points.requires_grad = True
-                    action = action_func(line_points)
-                    reverse_action = action_func(torch.flip(line_points, dims=(0,)))
+gif_data = []
 
-                    # It seems likely that they are the same. It probably can be proven
-                    total_action = action + reverse_action
+# Choose action
 
-                    optimizer.zero_grad()
+# plot the potential
+num_points = 100
+x_values = torch.linspace(potential.Lx, potential.Hx, num_points)
+y_values = torch.linspace(potential.Ly, potential.Hy, num_points)
 
-                    (grads,) = torch.autograd.grad(total_action, line_points)
+x, y = torch.meshgrid(x_values, y_values, indexing="xy")
+z = potential.U_split(x.to(device), y.to(device)).cpu()
+actions = []
+for i in tqdm(range(iterations)):
+    line_points.requires_grad = True
+    action = action_func(line_points)
+    reverse_action = action_func(torch.flip(line_points, dims=(0,)))
 
-                    with torch.no_grad():
-                        grads[0, :], grads[-1, :] = torch.zeros(2), torch.zeros(2)
-                        line_points.grad = grads
-                        optimizer.step()
-                        grads = grads.cpu()
-                        draw_points = line_points.detach().cpu()
+    # It seems likely that they are the same. It probably can be proven
+    total_action = action + reverse_action
 
-                    if i % write_every == 0:
-                        # print(f"Total action for the step {i} is {(action+reverse_action).detach().numpy()}")
-                        fig, ax = plt.subplots()
-                        colorbar = ax.imshow(
-                            z,
-                            extent=(
-                                x_values.min(),
-                                x_values.max(),
-                                y_values.min(),
-                                y_values.max(),
-                            ),
-                            vmin=potential.U_min,
-                            vmax=potential.U_max,
-                            origin="lower",
-                            cmap="viridis",
-                            aspect="auto",
-                        )
-                        ax.set(xlabel="x-axis", ylabel="y-axis", title="Contour Plot")
-                        plt.colorbar(colorbar)
+    optimizer.zero_grad()
 
-                        scatter_plot = ax.scatter(
-                            draw_points[:, 0],
-                            draw_points[:, 1],
-                            s=1,
-                            c="red",
-                            label="Line",
-                        )
-                        quiver_plot = ax.quiver(
-                            draw_points[:, 0],
-                            draw_points[:, 1],
-                            -grads[:, 0],
-                            -grads[:, 1],
-                            scale_units="xy",
-                            angles="xy",
-                            color="blue",
-                            alpha=0.7,
-                        )
-                        ax.legend()
+    (grads,) = torch.autograd.grad(total_action, line_points)
 
-                        # plt.show()
+    with torch.no_grad():
+        grads[0, :], grads[-1, :] = torch.zeros(2), torch.zeros(2)
+        line_points.grad = grads
+        optimizer.step()
+        grads = grads.cpu()
+        draw_points = line_points.detach().cpu()
 
-                        # Save the frame to gif_data
+    if i % write_every == 0:
+        # print(f"Total action for the step {i} is {(action+reverse_action).detach().numpy()}")
+        fig, ax = plt.subplots()
+        colorbar = ax.imshow(
+            z,
+            extent=(
+                x_values.min(),
+                x_values.max(),
+                y_values.min(),
+                y_values.max(),
+            ),
+            vmin=potential.U_min,
+            vmax=potential.U_max,
+            origin="lower",
+            cmap="viridis",
+            aspect="auto",
+        )
+        ax.set(xlabel="x-axis", ylabel="y-axis", title="Contour Plot")
+        plt.colorbar(colorbar)
 
-                        fig.canvas.draw()
-                        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype="uint8")
-                        image = image.reshape(
-                            fig.canvas.get_width_height()[::-1] + (3,)
-                        )
-                        gif_data.append(image)
-                        actions.append(total_action.item())
+        scatter_plot = ax.scatter(
+            draw_points[:, 0],
+            draw_points[:, 1],
+            s=1,
+            c="red",
+            label="Line",
+        )
+        quiver_plot = ax.quiver(
+            draw_points[:, 0],
+            draw_points[:, 1],
+            -grads[:, 0],
+            -grads[:, 1],
+            scale_units="xy",
+            angles="xy",
+            color="blue",
+            alpha=0.7,
+        )
+        ax.legend()
 
-                action_str = "simple" if action_f == SimpleAction else "S2"
-                imageio.mimsave(
-                    f"MB_tests/MB_{action_str}_gamma={round(gamma.item(), 3)}_dt={round(dt.item(), 3)}_D={round(D.item(), 3)}.gif",
-                    gif_data,
-                    fps=3,
-                )
-                log_dict = {
-                    "gif": wandb.Video(
-                        f"MB_tests/MB_{action_str}_gamma={round(gamma.item(), 3)}_dt={round(dt.item(), 3)}_D={round(D.item(), 3)}.gif"
-                    )
-                }
-                plt.close(fig)
+        # plt.show()
 
-                # Plot gif of OM actions
-                plt.figure()
-                plt.plot(np.arange(len(actions)), actions)
-                plt.xlabel("Optimization Steps")
-                plt.ylabel("OM Action")
-                plt.title("OM Action vs Optimization Steps")
-                log_dict.update({"OM Action": wandb.Image(plt)})
-                plt.close()
+        # Save the frame to gif_data
 
-                eval_action = evaluation_action(line_points) + evaluation_action(
-                    torch.flip(line_points, dims=(0,))
-                )
-                log_dict.update({"final_eval_action": eval_action.item()})
-                wandb.log(log_dict, step=0)
-                wandb.run.summary.update(log_dict)
-                wandb.finish()
+        fig.canvas.draw()
+        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype="uint8")
+        image = image.reshape(
+            fig.canvas.get_width_height()[::-1] + (3,)
+        )
+        gif_data.append(image)
+        actions.append(total_action.item())
+
+imageio.mimsave(
+    f"MB_tests/MB_{action_str}_gamma={round(gamma.item(), 3)}_dt={round(dt.item(), 3)}_D={round(D.item(), 3)}.gif",
+    gif_data,
+    fps=3,
+)
+log_dict = {
+    "gif": wandb.Video(
+        f"MB_tests/MB_{action_str}_gamma={round(gamma.item(), 3)}_dt={round(dt.item(), 3)}_D={round(D.item(), 3)}.gif"
+    )
+}
+plt.close(fig)
+
+# Plot gif of OM actions
+plt.figure()
+plt.plot(np.arange(len(actions)), actions)
+plt.xlabel("Optimization Steps")
+plt.ylabel("OM Action")
+plt.title("OM Action vs Optimization Steps")
+log_dict.update({"OM Action": wandb.Image(plt)})
+plt.save("opt.gif")
+plt.close()
+
+eval_action = evaluation_action(line_points) + evaluation_action(
+    torch.flip(line_points, dims=(0,))
+)
+log_dict.update({"final_eval_action": eval_action.item()})
+wandb.log(log_dict, step=0)
+wandb.run.summary.update(log_dict)
+wandb.finish()
