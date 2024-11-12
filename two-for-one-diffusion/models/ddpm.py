@@ -639,7 +639,7 @@ class GaussianDiffusion(nn.Module):
 
                 # TODO: vmap over batch dimension
                 # (currently not possible because of calling requires_grad on x in GraphTransformer)
-                
+
                 terms = [action_func(x, force) for x, force in zip(noised_xs, forces)]
                 first_term = torch.cat([term[0].unsqueeze(0) for term in terms]).mean()
                 second_term = torch.cat([term[1].unsqueeze(0) for term in terms]).mean()

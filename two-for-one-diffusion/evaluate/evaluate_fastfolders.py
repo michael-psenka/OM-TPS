@@ -522,14 +522,14 @@ def get_tic_free_energy_plots(
     )  # The evalset is the set we'll compare to in the next evaluation steps
 
     loop = [sampled_mol]
-    
+
     # Load path along optimization if OM interpolation is used
     if gif and gen_mode == "om_interpolate":
         path_history = Path(eval_folder, f"path_history-{gen_mode}.pt")
         path_history = torch.load(path_history)
         loop = path_history
         if isinstance(loop, dict):
-            loop = loop['tr'].cpu() # keep only alpha carbon coords
+            loop = loop["tr"].cpu()  # keep only alpha carbon coords
 
     # Compute and save reference TIC plot
     ref_fig = tic_evaluator._plot_tic(
@@ -565,7 +565,7 @@ def get_tic_free_energy_plots(
 
     for i, path in tqdm(enumerate(loop)):
         # Get samples TIC free energy landscape
-        
+
         dihedrals, pwds = tic_evaluator.get_tic_features(
             path, tic_evaluator.folded, separate=True
         )

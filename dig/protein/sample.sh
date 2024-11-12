@@ -14,15 +14,15 @@
 #     --interpolation_temp 0
 
 
-python sample.py \
-    --pdb_id  cln025 \
-    --gen_mode om_interpolate \
-    --num_samples 4 \
-    --path_length 200 \
-    --initial_guess_level 150 \
-    --latent_time 0 \
-    --append_exp_name "initial_latent_time=150_pathtermonly" \
-    --steps 2000
+# python sample.py \
+#     --pdb_id  cln025 \
+#     --gen_mode om_interpolate \
+#     --num_samples 4 \
+#     --path_length 200 \
+#     --initial_guess_level 150 \
+#     --latent_time 0 \
+#     --append_exp_name "initial_latent_time=150_pathtermonly" \
+#     --steps 2000
     
 # python sample.py \
 #     --pdb_id  2jof \
@@ -39,9 +39,10 @@ python sample.py \
     --num_samples 4 \
     --path_length 200 \
     --initial_guess_level 150 \
-    --append_exp_name "initial_latent_time=150_pathtermonly" \
+    --append_exp_name "initial_latent_time=150" \
     --latent_time 0 \
     --steps 2000
+
 # python sample.py \
 #     --pdb_id  1fme \
 #     --gen_mode interpolate \
@@ -52,15 +53,15 @@ python sample.py \
 #     --interpolation_temp 0
 
 
-python sample.py \
-    --pdb_id  1fme \
-    --gen_mode om_interpolate \
-    --num_samples 4 \
-    --path_length 200 \
-    --initial_guess_level 150 \
-    --append_exp_name "initial_latent_time=150_pathtermonly" \
-    --latent_time 0 \
-    --steps 2000 \
+# python sample.py \
+#     --pdb_id  1fme \
+#     --gen_mode om_interpolate \
+#     --num_samples 4 \
+#     --path_length 200 \
+#     --initial_guess_level 150 \
+#     --append_exp_name "initial_latent_time=150_pathtermonly" \
+#     --latent_time 0 \
+#     --steps 2000 \
 
   
 # python sample.py \
