@@ -53,6 +53,11 @@ def get_log_mean(log):
 
 class ModelWrapper(pl.LightningModule):
     def _add_noise(self, batch):
+        """
+        Add noise to the Beta carbon positions. Analaogous to the forward diffusion
+        process in diffusion models.
+        # TODO: add option to pass in time as an argument
+        """
 
         device = batch["aatype"].device
         batch_dims = batch["seq_length"].shape
@@ -390,7 +395,44 @@ class ModelWrapper(pl.LightningModule):
                 if p.grad is None:
                     print(name)
 
-    def inference(
+    def sample_step(self, batch, noisy, prev_outputs, s, t):
+        """
+        One step of the flow sampling process.
+        """
+
+        output = self.model(batch, prev_outputs=prev_outputs)
+        pseudo_beta = pseudo_beta_fn(
+            batch["aatype"], output["final_atom_positions"], None
+        )
+        outputs.append({**output, **batch})
+        noisy = rmsdalign(pseudo_beta, noisy)
+        noisy = (s / t) * noisy + (1 - s / t) * pseudo_beta
+        batch["noised_pseudo_beta_dists"] = (
+            torch.sum((noisy.unsqueeze(-2) - noisy.unsqueeze(-3)) ** 2, dim=-1) ** 0.5
+        )
+        batch["t"] = (
+            torch.ones(1, device=noisy.device) * s
+        )  # first one doesn't get the time embedding, last one is ignored :)
+
+        return batch, noisy, output
+
+    def sample_from_t(
+        self,
+        batch,
+        t,
+        as_protein=False,
+        no_diffusion=False,
+        self_cond=True,
+        noisy_first=False,
+        schedule=None,
+    ):
+        """
+        Run sampling process starting at given time t.
+        """
+
+        raise NotImplementedError
+
+    def sample(
         self,
         batch,
         as_protein=False,
@@ -399,6 +441,9 @@ class ModelWrapper(pl.LightningModule):
         noisy_first=False,
         schedule=None,
     ):
+        """
+        Produce i.i.d. samples from the model
+        """
 
         N = batch["aatype"].shape[1]
         device = batch["aatype"].device
@@ -425,20 +470,22 @@ class ModelWrapper(pl.LightningModule):
         outputs = []
         prev_outputs = None
         for t, s in zip(schedule[:-1], schedule[1:]):
-            output = self.model(batch, prev_outputs=prev_outputs)
-            pseudo_beta = pseudo_beta_fn(
-                batch["aatype"], output["final_atom_positions"], None
-            )
-            outputs.append({**output, **batch})
-            noisy = rmsdalign(pseudo_beta, noisy)
-            noisy = (s / t) * noisy + (1 - s / t) * pseudo_beta
-            batch["noised_pseudo_beta_dists"] = (
-                torch.sum((noisy.unsqueeze(-2) - noisy.unsqueeze(-3)) ** 2, dim=-1)
-                ** 0.5
-            )
-            batch["t"] = (
-                torch.ones(1, device=noisy.device) * s
-            )  # first one doesn't get the time embedding, last one is ignored :)
+            # TODO: place the following in a function called sample_step
+            # output = self.model(batch, prev_outputs=prev_outputs)
+            # pseudo_beta = pseudo_beta_fn(
+            #     batch["aatype"], output["final_atom_positions"], None
+            # )
+            # outputs.append({**output, **batch})
+            # noisy = rmsdalign(pseudo_beta, noisy)
+            # noisy = (s / t) * noisy + (1 - s / t) * pseudo_beta
+            # batch["noised_pseudo_beta_dists"] = (
+            #     torch.sum((noisy.unsqueeze(-2) - noisy.unsqueeze(-3)) ** 2, dim=-1)
+            #     ** 0.5
+            # )
+            # batch["t"] = (
+            #     torch.ones(1, device=noisy.device) * s
+            # )  # first one doesn't get the time embedding, last one is ignored :)
+            batch, noisy, output = self.sample_step(batch, noisy, prev_outputs, s, t)
             if self_cond:
                 prev_outputs = output
 
@@ -450,6 +497,51 @@ class ModelWrapper(pl.LightningModule):
             return prots
         else:
             return outputs
+
+    def interpolate(
+        self,
+        x1,
+        x2,
+        path_length,
+        latent_time,
+        temperature,
+        as_protein=False,
+        no_diffusion=False,
+        self_cond=True,
+        noisy_first=False,
+        schedule=None,
+    ):
+
+        raise NotImplementedError
+
+    def om_interpolate(
+        self,
+        endpoint_1,
+        endpoint_2,
+        path_length,
+        latent_time,
+        encode_and_decode,
+        mlff,
+        action_cls,
+        initial_guess_method,
+        initial_guess_level,
+        steps,
+        lr,
+        dt,
+        gamma,
+        anneal,
+        add_noise,
+        truncated_gradient,
+        temperature,
+        log,
+        as_protein=False,
+        no_diffusion=False,
+        self_cond=True,
+        noisy_first=False,
+        schedule=None,
+    ):
+
+        raise NotImplementedError
 
     def _compute_validation_metrics(
         self, batch, outputs, superimposition_metrics=False

@@ -608,9 +608,7 @@ if __name__ == "__main__":
         help="Number of samples to generate",
     )
 
-    parser.add_argument(
-        "-b", "--batch_size", type=int, default=50, help="Number of samples to generate"
-    )
+    parser.add_argument("-b", "--batch_size", type=int, default=50, help="Batch size")
 
     parser.add_argument(
         "--minibatch_size",
