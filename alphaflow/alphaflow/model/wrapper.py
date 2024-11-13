@@ -395,7 +395,7 @@ class ModelWrapper(pl.LightningModule):
                 if p.grad is None:
                     print(name)
 
-    def sample_step(self, batch, noisy, prev_outputs, s, t):
+    def sample_step(self, batch, noisy, prev_outputs, outputs, s, t):
         """
         One step of the flow sampling process.
         """
@@ -414,7 +414,7 @@ class ModelWrapper(pl.LightningModule):
             torch.ones(1, device=noisy.device) * s
         )  # first one doesn't get the time embedding, last one is ignored :)
 
-        return batch, noisy, output
+        return batch, noisy, output, outputs
 
     def sample_from_t(
         self,
@@ -485,7 +485,9 @@ class ModelWrapper(pl.LightningModule):
             # batch["t"] = (
             #     torch.ones(1, device=noisy.device) * s
             # )  # first one doesn't get the time embedding, last one is ignored :)
-            batch, noisy, output = self.sample_step(batch, noisy, prev_outputs, s, t)
+            batch, noisy, output, outputs = self.sample_step(
+                batch, noisy, prev_outputs, outputs, s, t
+            )
             if self_cond:
                 prev_outputs = output
 

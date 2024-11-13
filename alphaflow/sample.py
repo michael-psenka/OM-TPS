@@ -23,8 +23,8 @@ parser.add_argument("--templates_dir", type=str, default=None)
 parser.add_argument("--msa_dir", type=str, default="./alignment_dir")
 parser.add_argument("--mode", choices=["alphafold", "esmfold"], default="alphafold")
 parser.add_argument("--num_samples", type=int, default=10)
-parser.add_argument("--steps", type=int, default=10)
-parser.add_argument("--outpdb", type=str, default="./output")
+parser.add_argument("--flow_steps", type=int, default=10)
+parser.add_argument("--output_path", type=str, default="./output")
 parser.add_argument("--weights", type=str, default=None)
 parser.add_argument("--ckpt", type=str, default=None)
 parser.add_argument("--original_weights", action="store_true")
@@ -136,7 +136,7 @@ logger = get_logger(__name__)
 torch.set_float32_matmul_precision("high")
 
 config = model_config("initial_training", train=True, low_prec=True)
-schedule = np.linspace(args.tmax, 0, args.steps + 1)
+schedule = np.linspace(args.tmax, 0, args.flow_steps + 1)
 if args.tmax != 1.0:
     schedule = np.array([1.0] + list(schedule))
 loss_cfg = config.loss
@@ -151,6 +151,13 @@ if args.subsample:  # https://elifesciences.org/articles/75751#s3
 
 @torch.no_grad()
 def main():
+
+    basic_append = f"_{args.gen_mode}"
+    append_exp_name = (
+        basic_append
+        if args.append_exp_name is None
+        else f"{basic_append}_{args.append_exp_name}"
+    )
 
     valset = {
         "alphafold": AlphaFoldCSVDataset,
@@ -193,12 +200,18 @@ def main():
     logger.info("Model has been loaded")
 
     results = defaultdict(list)
-    os.makedirs(args.outpdb, exist_ok=True)
+    os.makedirs(args.output_path, exist_ok=True)
     runtime = defaultdict(list)
     for i, item in enumerate(valset):
+        eval_folder = os.path.join(
+            args.output_path, item["name"], "main_eval_output" + append_exp_name
+        )
+        os.makedirs(eval_folder, exist_ok=True)
         if args.pdb_id and item["name"] not in args.pdb_id:
             continue
-        if args.no_overwrite and os.path.exists(f'{args.outpdb}/{item["name"]}.pdb'):
+        if args.no_overwrite and os.path.exists(
+            f"{eval_folder}/sample-{args.gen_mode}.pdb"
+        ):
             continue
         result = []
 
@@ -273,16 +286,35 @@ def main():
             runtime[item["name"]].append(time.time() - start)
             result.append(prots[-1])
 
-        with open(f'{args.outpdb}/{item["name"]}.pdb', "w") as f:
+        with open(f"{eval_folder}/sample-{args.gen_mode}.pdb", "w") as f:
 
             out = protein.prots_to_pdb(result)
             f.write(out)
 
         # Save OVITO file
+        sampled_mol_file = eval_folder + f"/sample-{args.gen_mode}-all.pt"
+        gsd_file = eval_folder + f"/sample-{args.gen_mode}.gsd"
+        sampled_mol = torch.stack(
+            [
+                torch.tensor(prot.atom_positions[:, [1, 0, 2]]).reshape(-1, 3)
+                for prot in result
+            ]
+        )
+        torch.save(sampled_mol, sampled_mol_file)
+        save_ovito_traj(
+            sampled_mol,
+            gsd_file,
+            alpha_carbon_lim=result[0].aatype.shape[0],
+            all_backbone=False,
+            align=args.gen_mode == "iid",
+        )
 
     if args.runtime_json:
         with open(args.runtime_json, "w") as f:
             f.write(json.dumps(dict(runtime)))
+
+    # TODO: evaluation
+    print("Done.")
 
 
 if __name__ == "__main__":
