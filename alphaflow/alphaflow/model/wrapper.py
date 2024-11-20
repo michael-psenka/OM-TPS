@@ -2,6 +2,7 @@ from alphaflow.utils.logging import get_logger
 
 logger = get_logger(__name__)
 import torch, os, wandb, time
+from copy import deepcopy
 from tqdm import tqdm
 import pandas as pd
 
@@ -32,6 +33,8 @@ from openfold.utils.tensor_utils import (
 from collections import defaultdict
 from openfold.utils.lr_schedulers import AlphaFoldLRScheduler
 
+from utils import center_zero, assert_center_zero
+
 
 def gather_log(log, world_size):
     if world_size == 1:
@@ -53,7 +56,25 @@ def get_log_mean(log):
 
 
 class ModelWrapper(pl.LightningModule):
-    def _add_noise(self, batch):
+
+    def _expand_batch(self, batch, num_paths):
+        batch["aatype"] = batch["aatype"].repeat(num_paths, 1)
+        batch["residue_index"] = batch["residue_index"].repeat(num_paths, 1)
+        batch["seq_mask"] = batch["seq_mask"].repeat(num_paths, 1)
+        batch["atom14_atom_exists"] = batch["atom14_atom_exists"].repeat(
+            num_paths, 1, 1
+        )
+        batch["residx_atom14_to_atom37"] = batch["residx_atom14_to_atom37"].repeat(
+            num_paths, 1, 1
+        )
+        batch["residx_atom37_to_atom14"] = batch["residx_atom37_to_atom14"].repeat(
+            num_paths, 1, 1
+        )
+        batch["atom37_atom_exists"] = batch["atom37_atom_exists"].repeat(
+            num_paths, 1, 1
+        )
+
+    def _add_noise(self, batch, t=None, train=True):
         """
         Add noise to the Beta carbon positions. Analaogous to the forward diffusion
         process in diffusion models.
@@ -61,9 +82,23 @@ class ModelWrapper(pl.LightningModule):
         """
 
         device = batch["aatype"].device
-        batch_dims = batch["seq_length"].shape
 
-        noisy = self.harmonic_prior.sample(batch_dims)
+        if "seq_length" in batch.keys():
+            batch_dims = batch["seq_length"].shape
+        else:
+            batch_dims = batch["pseudo_beta"][:, 0, 0].shape
+
+        if train:
+            noisy = self.harmonic_prior.sample(batch_dims)  # fixed crop length
+        else:
+            N = batch["aatype"].shape[1]
+            device = batch["aatype"].device
+            prior = HarmonicPrior(N)
+            prior.to(device)
+            noisy = []
+            for i in range(batch["aatype"].shape[0]):
+                noisy.append(prior.sample())
+            noisy = torch.stack(noisy, dim=0)
         try:
             noisy = rmsdalign(
                 batch["pseudo_beta"], noisy, weights=batch["pseudo_beta_mask"]
@@ -73,7 +108,12 @@ class ModelWrapper(pl.LightningModule):
             batch["t"] = torch.ones(batch_dims, device=device)
             return
 
-        t = torch.rand(batch_dims, device=device)
+        if t is None:
+            t = torch.rand(batch_dims, device=device)
+        else:
+            # Make sure t is between 0 and 1
+            assert t >= 0 and t <= 1, "t must be between 0 and 1"
+            t = torch.ones(batch_dims, device=device) * t
         noisy_beta = (1 - t[:, None, None]) * batch["pseudo_beta"] + t[
             :, None, None
         ] * noisy
@@ -84,6 +124,9 @@ class ModelWrapper(pl.LightningModule):
             )
             ** 0.5
         )
+
+        # TODO: should we be adding these during inference?
+        batch["noised_pseudo_beta"] = noisy_beta
         batch["noised_pseudo_beta_dists"] = pseudo_beta_dists
         batch["t"] = t
 
@@ -396,6 +439,9 @@ class ModelWrapper(pl.LightningModule):
                 if p.grad is None:
                     print(name)
 
+    def force_func(self, batch):
+        raise NotImplementedError
+
     def sample_step(self, batch, noisy, prev_outputs, outputs, s, t):
         """
         One step of the flow sampling process.
@@ -420,18 +466,39 @@ class ModelWrapper(pl.LightningModule):
     def sample_from_t(
         self,
         batch,
-        t,
+        noisy,
+        schedule,
+        t_idx=None,
+        prev_outputs=None,
         as_protein=False,
         no_diffusion=False,
         self_cond=True,
         noisy_first=False,
-        schedule=None,
     ):
         """
-        Run sampling process starting at given time t.
+        Run sampling process starting at given time t, given the initial condition noisy.
+        The convention is that t_idx = 0 is the last step of the flow and t_idx = len(schedule) - 1 is the first step.
         """
+        outputs = []
+        if t_idx is None:
+            t_idx = len(schedule) - 1
+        start = len(schedule) - 1 - t_idx
 
-        raise NotImplementedError
+        for t, s in tqdm(zip(schedule[start:-1], schedule[start + 1 :])):
+            batch, noisy, output, outputs = self.sample_step(
+                batch, noisy, prev_outputs, outputs, s, t
+            )
+            if self_cond:
+                prev_outputs = output
+
+        del batch["noised_pseudo_beta_dists"], batch["t"]
+        if as_protein:
+            prots = []
+            for output in outputs:
+                prots.extend(protein.output_to_protein(output))
+            return prots
+        else:
+            return outputs
 
     def sample(
         self,
@@ -470,28 +537,27 @@ class ModelWrapper(pl.LightningModule):
             schedule = np.array([1.0, 0.75, 0.5, 0.25, 0.1, 0])
         outputs = []
         prev_outputs = None
-        for t, s in tqdm(zip(schedule[:-1], schedule[1:])):
-            batch, noisy, output, outputs = self.sample_step(
-                batch, noisy, prev_outputs, outputs, s, t
-            )
-            if self_cond:
-                prev_outputs = output
 
-        del batch["noised_pseudo_beta_dists"], batch["t"]
-        if as_protein:
-            prots = []
-            for output in outputs:
-                prots.extend(protein.output_to_protein(output))
-            return prots
-        else:
-            return outputs
+        return self.sample_from_t(
+            batch,
+            noisy=noisy,
+            schedule=schedule,
+            t_idx=len(schedule) - 1,
+            prev_outputs=prev_outputs,
+            as_protein=as_protein,
+            no_diffusion=no_diffusion,
+            self_cond=self_cond,
+            noisy_first=noisy_first,
+        )
 
     def interpolate(
         self,
+        batch,
         x1,
         x2,
         path_length,
         latent_time,
+        interpolation_fn,
         temperature,
         as_protein=False,
         no_diffusion=False,
@@ -499,8 +565,100 @@ class ModelWrapper(pl.LightningModule):
         noisy_first=False,
         schedule=None,
     ):
+        """
+        Encode the two points into latent space, linearly or spherically interpolate, and decode.
+        Args:
+            x1: torch.Tensor, shape of [n_paths, num_atoms x 3]
+            x2: torch.Tensor, shape of [n_paths, num_atoms x 3]
+            path_length: int, length of the path to interpolate
+            latent_time: float, time at which to interpolate
+            interpolation_fn: function, interpolation function
+            temperature: float, temperature for sampling
+        """
 
-        raise NotImplementedError
+        # TODO: below is placeholder code from Two-for-One Diffusion. Need to implement the actual interpolation
+        num_paths = x1.shape[0]
+
+        # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
+        x2 = rmsdalign(x2, x1)
+
+        x1 = center_zero(x1)
+        x2 = center_zero(x2)
+        assert_center_zero(x1)
+        assert_center_zero(x2)
+
+        original_x1 = x1.clone()
+        original_x2 = x2.clone()
+
+        self._expand_batch(batch, num_paths)
+
+        batch1 = deepcopy(batch)
+        batch2 = deepcopy(batch)
+        import pdb
+
+        pdb.set_trace()
+        # need to fix batching issues here
+        batch1["pseudo_beta"] = pseudo_beta_fn(batch1["aatype"], x1, None)
+        batch2["pseudo_beta"] = pseudo_beta_fn(batch2["aatype"], x2, None)
+        original_batch1 = deepcopy(batch1)
+        original_batch2 = deepcopy(batch2)
+
+        # Encode
+        with torch.no_grad():
+            self._add_noise(batch1, t=latent_time, train=False)
+            self._add_noise(batch2, t=latent_time, train=False)
+
+        noised_x1 = batch1["noised_pseudo_beta"]
+        noised_x2 = batch2["noised_pseudo_beta"]
+
+        num_paths, n_atoms = noised_x1.shape[0], noised_x1.shape[1]
+
+        # linear interpolation of noised_x1 and noised_x2
+        noised_xs = torch.stack(
+            [
+                center_zero(interpolation_fn(noised_x1.cpu(), noised_x2.cpu(), alpha))
+                for alpha in torch.linspace(0, 1, path_length)
+            ]
+        )
+
+        noised_xs = noised_xs.permute((1, 0, 2, 3)).to(
+            self.device
+        )  # make batch dimension come first [B, path_length, n_atoms, 3]
+
+        new_batch = deepcopy(batch)
+        self._expand_batch(new_batch, num_paths)
+
+        import pdb
+
+        pdb.set_trace()
+        new_batch["pseudo_beta"] = pseudo_beta_fn(
+            new_batch["aatype"], noised_xs.reshape(-1, n_atoms, 3), None
+        )
+
+        # decode
+        # TODO: implement batched decoding
+        xs = self.sample_from_t(
+            new_batch,
+            noised_xs.reshape(-1, n_atoms, 3),
+            schedule,
+            t_idx=latent_time,  # not quite right
+            prev_outputs=None,
+            as_protein=as_protein,
+            no_diffusion=False,
+            self_cond=self_cond,
+            noisy_first=False,
+        )
+        xs = xs["pseudo_beta"]
+
+        xs = xs.reshape(num_paths, path_length, n_atoms, 3)
+        xs = xs.clone().detach()
+
+        # reset the endpoints
+        xs[:, 0], xs[:, -1] = original_x1, original_x2
+
+        final_path = xs.reshape(-1, n_atoms, 3) * self.norm_factor
+
+        return {"final_path": final_path}
 
     def om_interpolate(
         self,

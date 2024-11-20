@@ -16,6 +16,7 @@ from alphaflow.config import model_config
 from alphaflow.utils.logging import get_logger
 
 from logging_utils import save_ovito_traj
+from utils import slerp
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--input_csv", type=str, default="splits/transporters_only.csv")
@@ -53,7 +54,7 @@ parser.add_argument("-b", "--batch_size", type=int, default=50, help="Batch size
 parser.add_argument(
     "--latent_time",
     type=int,
-    default=10,
+    default=0.75,
     help="time at which to do latent interpolation",
 )
 parser.add_argument(
@@ -240,55 +241,92 @@ def main():
                     schedule=schedule,
                     self_cond=args.self_cond,
                 )
+            elif "interpolate" in args.gen_mode:
 
-            elif args.gen_mode == "interpolate":
-                prots = model.interpolate(
-                    endpoint_1,
-                    endpoint_2,
-                    path_length=args.path_length,
-                    latent_time=args.latent_time,
-                    temperature=args.interpolation_temp,
-                    as_protein=True,
-                    noisy_first=args.noisy_first,
-                    no_diffusion=args.no_diffusion,
-                    schedule=schedule,
-                    self_cond=args.self_cond,
-                )
+                # Define endpoints
+                # For now just get them from iid samples
 
-            elif args.gen_mode == "om_interpolate":
-                if args.action == "hessian":
-                    action_cls = S2Action
-                elif args.action == "truncated":
-                    action_cls = TruncatedAction
-                elif args.action == "simple":
-                    action_cls = SimpleAction
-                prots = model.om_interpolate(
-                    endpoint_1,
-                    endpoint_2,
-                    as_protein=True,
-                    noisy_first=args.noisy_first,
-                    no_diffusion=args.no_diffusion,
-                    schedule=schedule,
-                    self_cond=args.self_cond,
-                    path_length=args.path_length,
-                    latent_time=args.latent_time,
-                    encode_and_decode=not args.no_encode_and_decode,
-                    mlff=args.mlff,
-                    action_cls=action_cls,
-                    initial_guess_method=(
-                        torch.lerp if args.initial_guess_method == "linear" else slerp
-                    ),
-                    initial_guess_level=args.initial_guess_level,
-                    steps=args.steps,
-                    lr=args.lr,
-                    dt=args.om_dt,
-                    gamma=args.om_gamma,
-                    anneal=args.anneal,
-                    add_noise=args.add_noise,
-                    truncated_gradient=args.truncated_gradient,
-                    temperature=args.interpolation_temp,
-                    log=not args.disable_logging,
+                iid_base_name = (
+                    eval_folder.split("/")[0]
+                    + "/"
+                    + eval_folder.split("/")[1]
+                    + "/"
+                    + eval_folder.split("/")[2]
+                    + "/main_eval_output_iid"
                 )
+                if os.path.exists(f"{iid_base_name}/sample-iid-all.pt"):
+                    iid_samples = torch.load(f"{iid_base_name}/sample-iid-all.pt")
+                    endpoint_1 = (
+                        iid_samples[0]
+                        .unsqueeze(0)
+                        .repeat(args.num_samples, 1, 1)
+                        .to(model.device)
+                    )
+                    endpoint_2 = (
+                        iid_samples[-1]
+                        .unsqueeze(0)
+                        .repeat(args.num_samples, 1, 1)
+                        .to(model.device)
+                    )
+                else:
+                    raise FileNotFoundError("Need to sample iid first")
+
+                if args.gen_mode == "interpolate":
+                    prots = model.interpolate(
+                        batch,
+                        endpoint_1,
+                        endpoint_2,
+                        path_length=args.path_length,
+                        latent_time=args.latent_time,
+                        interpolation_fn=(
+                            torch.lerp
+                            if args.initial_guess_method == "linear"
+                            else slerp
+                        ),
+                        temperature=args.interpolation_temp,
+                        as_protein=True,
+                        noisy_first=args.noisy_first,
+                        no_diffusion=args.no_diffusion,
+                        schedule=schedule,
+                        self_cond=args.self_cond,
+                    )
+
+                elif args.gen_mode == "om_interpolate":
+                    if args.action == "hessian":
+                        action_cls = S2Action
+                    elif args.action == "truncated":
+                        action_cls = TruncatedAction
+                    elif args.action == "simple":
+                        action_cls = SimpleAction
+                    prots = model.om_interpolate(
+                        endpoint_1,
+                        endpoint_2,
+                        as_protein=True,
+                        noisy_first=args.noisy_first,
+                        no_diffusion=args.no_diffusion,
+                        schedule=schedule,
+                        self_cond=args.self_cond,
+                        path_length=args.path_length,
+                        latent_time=args.latent_time,
+                        encode_and_decode=not args.no_encode_and_decode,
+                        mlff=args.mlff,
+                        action_cls=action_cls,
+                        initial_guess_method=(
+                            torch.lerp
+                            if args.initial_guess_method == "linear"
+                            else slerp
+                        ),
+                        initial_guess_level=args.initial_guess_level,
+                        steps=args.steps,
+                        lr=args.lr,
+                        dt=args.om_dt,
+                        gamma=args.om_gamma,
+                        anneal=args.anneal,
+                        add_noise=args.add_noise,
+                        truncated_gradient=args.truncated_gradient,
+                        temperature=args.interpolation_temp,
+                        log=not args.disable_logging,
+                    )
 
             runtime[item["name"]].append(time.time() - start)
             result.append(prots[-1])
@@ -299,17 +337,22 @@ def main():
             f.write(out)
 
         # Save OVITO file
+        sampled_mol_backbone_file = eval_folder + f"/sample-{args.gen_mode}-backbone.pt"
         sampled_mol_file = eval_folder + f"/sample-{args.gen_mode}-all.pt"
         gsd_file = eval_folder + f"/sample-{args.gen_mode}.gsd"
-        sampled_mol = torch.stack(
+        sampled_mol_backbone = torch.stack(
             [
                 torch.tensor(prot.atom_positions[:, [1, 0, 2]]).reshape(-1, 3)
                 for prot in result
             ]
         )
+        sampled_mol = torch.stack(
+            [torch.tensor(prot.atom_positions).reshape(-1, 3) for prot in result]
+        )
+        torch.save(sampled_mol_backbone, sampled_mol_backbone_file)
         torch.save(sampled_mol, sampled_mol_file)
         save_ovito_traj(
-            sampled_mol,
+            sampled_mol_backbone,
             gsd_file,
             alpha_carbon_lim=result[0].aatype.shape[0],
             all_backbone=False,

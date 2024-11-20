@@ -6,6 +6,7 @@ import torch
 from tqdm import tqdm
 import gsd.hoomd
 import numpy as np
+
 # import matplotlib.pyplot as plt
 # from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from IPython.display import Image as IPyImage, display
