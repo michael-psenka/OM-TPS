@@ -174,7 +174,9 @@ def main():
 
     if args.weights:
         if "distilled" in args.weights:
-            assert args.noisy_first and args.no_diffusion, "Distilled model requires noisy_first and no_diffusion"
+            assert (
+                args.noisy_first and args.no_diffusion
+            ), "Distilled model requires noisy_first and no_diffusion"
         ckpt = torch.load(args.weights, map_location="cpu")
         model = model_class(**ckpt["hyper_parameters"], training=False)
         model.model.load_state_dict(ckpt["params"], strict=False)
@@ -205,10 +207,10 @@ def main():
     os.makedirs(args.output_path, exist_ok=True)
     runtime = defaultdict(list)
     for i, item in enumerate(valset):
-        
+
         if args.pdb_id and item["name"] not in args.pdb_id:
             continue
-        
+
         eval_folder = os.path.join(
             args.output_path, item["name"], "main_eval_output" + append_exp_name
         )
