@@ -57,22 +57,40 @@ def get_log_mean(log):
 
 class ModelWrapper(pl.LightningModule):
 
-    def _expand_batch(self, batch, num_paths):
-        batch["aatype"] = batch["aatype"].repeat(num_paths, 1)
-        batch["residue_index"] = batch["residue_index"].repeat(num_paths, 1)
-        batch["seq_mask"] = batch["seq_mask"].repeat(num_paths, 1)
-        batch["atom14_atom_exists"] = batch["atom14_atom_exists"].repeat(
-            num_paths, 1, 1
-        )
-        batch["residx_atom14_to_atom37"] = batch["residx_atom14_to_atom37"].repeat(
-            num_paths, 1, 1
-        )
-        batch["residx_atom37_to_atom14"] = batch["residx_atom37_to_atom14"].repeat(
-            num_paths, 1, 1
-        )
-        batch["atom37_atom_exists"] = batch["atom37_atom_exists"].repeat(
-            num_paths, 1, 1
-        )
+    def _expand_batch(self, batch, batch_size):
+        if "t" in batch.keys():
+            if batch["t"].shape[0] != batch_size:
+                batch["t"] = batch["t"].repeat(batch_size // batch["t"].shape[0])
+        if len(batch["name"]) != batch_size:
+            batch["name"] = batch["name"] * (batch_size // len(batch["name"]))
+        if batch["aatype"].shape[0] != batch_size:
+            batch["aatype"] = batch["aatype"].repeat(
+                batch_size // batch["aatype"].shape[0], 1
+            )
+        if batch["residue_index"].shape[0] != batch_size:
+            batch["residue_index"] = batch["residue_index"].repeat(
+                batch_size // batch["residue_index"].shape[0], 1
+            )
+        if batch["seq_mask"].shape[0] != batch_size:
+            batch["seq_mask"] = batch["seq_mask"].repeat(
+                batch_size // batch["seq_mask"].shape[0], 1
+            )
+        if batch["atom14_atom_exists"].shape[0] != batch_size:
+            batch["atom14_atom_exists"] = batch["atom14_atom_exists"].repeat(
+                batch_size // batch["atom14_atom_exists"].shape[0], 1, 1
+            )
+        if batch["residx_atom14_to_atom37"].shape[0] != batch_size:
+            batch["residx_atom14_to_atom37"] = batch["residx_atom14_to_atom37"].repeat(
+                batch_size // batch["residx_atom14_to_atom37"].shape[0], 1, 1
+            )
+        if batch["residx_atom37_to_atom14"].shape[0] != batch_size:
+            batch["residx_atom37_to_atom14"] = batch["residx_atom37_to_atom14"].repeat(
+                batch_size // batch["residx_atom37_to_atom14"].shape[0], 1, 1
+            )
+        if batch["atom37_atom_exists"].shape[0] != batch_size:
+            batch["atom37_atom_exists"] = batch["atom37_atom_exists"].repeat(
+                batch_size // batch["atom37_atom_exists"].shape[0], 1, 1
+            )
 
     def _add_noise(self, batch, t=None, train=True):
         """
@@ -446,7 +464,6 @@ class ModelWrapper(pl.LightningModule):
         """
         One step of the flow sampling process.
         """
-
         output = self.model(batch, prev_outputs=prev_outputs)
         pseudo_beta = pseudo_beta_fn(
             batch["aatype"], output["final_atom_positions"], None
@@ -458,7 +475,7 @@ class ModelWrapper(pl.LightningModule):
             torch.sum((noisy.unsqueeze(-2) - noisy.unsqueeze(-3)) ** 2, dim=-1) ** 0.5
         )
         batch["t"] = (
-            torch.ones(1, device=noisy.device) * s
+            torch.ones(pseudo_beta.shape[0], device=noisy.device) * s
         )  # first one doesn't get the time embedding, last one is ignored :)
 
         return batch, noisy, output, outputs
@@ -485,6 +502,7 @@ class ModelWrapper(pl.LightningModule):
         start = len(schedule) - 1 - t_idx
 
         for t, s in tqdm(zip(schedule[start:-1], schedule[start + 1 :])):
+
             batch, noisy, output, outputs = self.sample_step(
                 batch, noisy, prev_outputs, outputs, s, t
             )
@@ -594,19 +612,16 @@ class ModelWrapper(pl.LightningModule):
 
         batch1 = deepcopy(batch)
         batch2 = deepcopy(batch)
-        import pdb
 
-        pdb.set_trace()
-        # need to fix batching issues here
-        batch1["pseudo_beta"] = pseudo_beta_fn(batch1["aatype"], x1, None)
-        batch2["pseudo_beta"] = pseudo_beta_fn(batch2["aatype"], x2, None)
+        batch1["pseudo_beta"] = pseudo_beta_fn(batch1["aatype"], x1.unsqueeze(1), None)
+        batch2["pseudo_beta"] = pseudo_beta_fn(batch2["aatype"], x2.unsqueeze(1), None)
         original_batch1 = deepcopy(batch1)
         original_batch2 = deepcopy(batch2)
 
         # Encode
         with torch.no_grad():
-            self._add_noise(batch1, t=latent_time, train=False)
-            self._add_noise(batch2, t=latent_time, train=False)
+            self._add_noise(batch1, t=latent_time / len(schedule), train=False)
+            self._add_noise(batch2, t=latent_time / len(schedule), train=False)
 
         noised_x1 = batch1["noised_pseudo_beta"]
         noised_x2 = batch2["noised_pseudo_beta"]
@@ -625,40 +640,48 @@ class ModelWrapper(pl.LightningModule):
             self.device
         )  # make batch dimension come first [B, path_length, n_atoms, 3]
 
-        new_batch = deepcopy(batch)
-        self._expand_batch(new_batch, num_paths)
+        new_batch = deepcopy(batch1)
+        self._expand_batch(new_batch, num_paths * path_length)
 
-        import pdb
+        noised_pseudo_beta = pseudo_beta_fn(
+            new_batch["aatype"], noised_xs.reshape(-1, 1, n_atoms, 3), None
+        )
 
-        pdb.set_trace()
-        new_batch["pseudo_beta"] = pseudo_beta_fn(
-            new_batch["aatype"], noised_xs.reshape(-1, n_atoms, 3), None
+        # compute pairwise distances between pseudo beta carbons on noised path
+        new_batch["noised_pseudo_beta_dists"] = (
+            torch.sum(
+                (noised_pseudo_beta.unsqueeze(-2) - noised_pseudo_beta.unsqueeze(-3))
+                ** 2,
+                dim=-1,
+            )
+            ** 0.5
         )
 
         # decode
         # TODO: implement batched decoding
-        xs = self.sample_from_t(
+        prots = self.sample_from_t(
             new_batch,
             noised_xs.reshape(-1, n_atoms, 3),
             schedule,
-            t_idx=latent_time,  # not quite right
+            t_idx=latent_time,
             prev_outputs=None,
             as_protein=as_protein,
             no_diffusion=False,
             self_cond=self_cond,
             noisy_first=False,
         )
-        xs = xs["pseudo_beta"]
 
-        xs = xs.reshape(num_paths, path_length, n_atoms, 3)
-        xs = xs.clone().detach()
+        # take final path
+        prots = prots[-num_paths * path_length :]
 
-        # reset the endpoints
-        xs[:, 0], xs[:, -1] = original_x1, original_x2
+        # reset the endpoints (temp hardcoding of batch size = 2)
+        prots[0].atom_positions = original_x1[0].reshape(-1, 37, 3)
+        prots[path_length].atom_positions = original_x1[1].reshape(-1, 37, 3)
 
-        final_path = xs.reshape(-1, n_atoms, 3) * self.norm_factor
+        prots[path_length - 1].atom_positions = original_x2[0].reshape(-1, 37, 3)
+        prots[path_length - 1].atom_positions = original_x2[1].reshape(-1, 37, 3)
 
-        return {"final_path": final_path}
+        return prots
 
     def om_interpolate(
         self,

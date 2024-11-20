@@ -320,17 +320,15 @@ class ESMFold(nn.Module):
         else:
             s_s_0 = s_s_0 + self.trunk.recycle_s_norm(torch.zeros_like(s_s_0)) * 0.0
             s_z_0 = s_z_0 + self.trunk.recycle_z_norm(torch.zeros_like(s_z_0)) * 0.0
-            s_z_0 = (
-                s_z_0
-                + self.trunk.recycle_disto(
-                    s_z_0.new_zeros(s_z_0.shape[:-2], dtype=torch.long)
-                )
-                * 0.0
-            )
+            # SR: What is this even doing??
+            # s_z_0 = (
+            #     s_z_0
+            #     + self.trunk.recycle_disto(s_z_0.new_zeros(s_z_0.shape[:-2], dtype=torch.long))* 0.0
+            # )
 
         structure: dict = self.trunk(
-            s_s_0, s_z_0, aa, residx, mask, no_recycles=0  # num_recycles
-        )
+            s_s_0, s_z_0, aa, residx, mask, no_recycles=0
+        )  # num_recycles)
         disto_logits = self.distogram_head(structure["s_z"])
         disto_logits = (disto_logits + disto_logits.transpose(1, 2)) / 2
         structure["distogram_logits"] = disto_logits

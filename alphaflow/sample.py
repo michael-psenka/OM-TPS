@@ -1,4 +1,5 @@
 import argparse
+import itertools
 import torch, tqdm, os, wandb, json, time
 import pandas as pd
 import pytorch_lightning as pl
@@ -54,8 +55,8 @@ parser.add_argument("-b", "--batch_size", type=int, default=50, help="Batch size
 parser.add_argument(
     "--latent_time",
     type=int,
-    default=0.75,
-    help="time at which to do latent interpolation",
+    default=7,
+    help="step at which to do latent interpolation - must be in range [0, flow_steps]",
 )
 parser.add_argument(
     "--initial_guess_method",
@@ -223,8 +224,9 @@ def main():
             continue
         result = []
 
+        num_batches = max(1, args.num_samples // args.batch_size)
         # TODO: convert to batched inference
-        for j in tqdm.trange(args.num_samples):
+        for j in tqdm.trange(num_batches):
             if args.subsample or args.resample:
                 item = valset[i]  # resample MSA
 
@@ -329,10 +331,15 @@ def main():
                     )
 
             runtime[item["name"]].append(time.time() - start)
-            result.append(prots[-1])
 
+            result.append(
+                prots
+            )  # TODO: take care of taking last sample in sample function?
+
+        result = list(
+            itertools.chain.from_iterable(result)
+        )  # consolidate list of lists
         with open(f"{eval_folder}/sample-{args.gen_mode}.pdb", "w") as f:
-
             out = protein.prots_to_pdb(result)
             f.write(out)
 
@@ -342,12 +349,12 @@ def main():
         gsd_file = eval_folder + f"/sample-{args.gen_mode}.gsd"
         sampled_mol_backbone = torch.stack(
             [
-                torch.tensor(prot.atom_positions[:, [1, 0, 2]]).reshape(-1, 3)
+                torch.tensor(prot.atom_positions[:, [1, 0, 2]]).reshape(-1, 3).cpu()
                 for prot in result
             ]
         )
         sampled_mol = torch.stack(
-            [torch.tensor(prot.atom_positions).reshape(-1, 3) for prot in result]
+            [torch.tensor(prot.atom_positions).reshape(-1, 3).cpu() for prot in result]
         )
         torch.save(sampled_mol_backbone, sampled_mol_backbone_file)
         torch.save(sampled_mol, sampled_mol_file)
