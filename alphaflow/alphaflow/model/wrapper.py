@@ -2,6 +2,7 @@ from alphaflow.utils.logging import get_logger
 
 logger = get_logger(__name__)
 import torch, os, wandb, time
+from tqdm import tqdm
 import pandas as pd
 
 from .esmfold import ESMFold
@@ -451,7 +452,7 @@ class ModelWrapper(pl.LightningModule):
         prior.to(device)
         noisy = prior.sample()
 
-        if noisy_first:
+        if noisy_first: # why isn't this always done?
             batch["noised_pseudo_beta_dists"] = (
                 torch.sum((noisy.unsqueeze(-2) - noisy.unsqueeze(-3)) ** 2, dim=-1)
                 ** 0.5
@@ -469,25 +470,25 @@ class ModelWrapper(pl.LightningModule):
             schedule = np.array([1.0, 0.75, 0.5, 0.25, 0.1, 0])
         outputs = []
         prev_outputs = None
-        for t, s in zip(schedule[:-1], schedule[1:]):
+        for t, s in tqdm(zip(schedule[:-1], schedule[1:])):
             # TODO: place the following in a function called sample_step
-            # output = self.model(batch, prev_outputs=prev_outputs)
-            # pseudo_beta = pseudo_beta_fn(
-            #     batch["aatype"], output["final_atom_positions"], None
-            # )
-            # outputs.append({**output, **batch})
-            # noisy = rmsdalign(pseudo_beta, noisy)
-            # noisy = (s / t) * noisy + (1 - s / t) * pseudo_beta
-            # batch["noised_pseudo_beta_dists"] = (
-            #     torch.sum((noisy.unsqueeze(-2) - noisy.unsqueeze(-3)) ** 2, dim=-1)
-            #     ** 0.5
-            # )
-            # batch["t"] = (
-            #     torch.ones(1, device=noisy.device) * s
-            # )  # first one doesn't get the time embedding, last one is ignored :)
-            batch, noisy, output, outputs = self.sample_step(
-                batch, noisy, prev_outputs, outputs, s, t
+            output = self.model(batch, prev_outputs=prev_outputs)
+            pseudo_beta = pseudo_beta_fn(
+                batch["aatype"], output["final_atom_positions"], None
             )
+            outputs.append({**output, **batch})
+            noisy = rmsdalign(pseudo_beta, noisy)
+            noisy = (s / t) * noisy + (1 - s / t) * pseudo_beta
+            batch["noised_pseudo_beta_dists"] = (
+                torch.sum((noisy.unsqueeze(-2) - noisy.unsqueeze(-3)) ** 2, dim=-1)
+                ** 0.5
+            )
+            batch["t"] = (
+                torch.ones(1, device=noisy.device) * s
+            )  # first one doesn't get the time embedding, last one is ignored :)
+            # batch, noisy, output, outputs = self.sample_step(
+            #     batch, noisy, prev_outputs, outputs, s, t
+            # )
             if self_cond:
                 prev_outputs = output
 
