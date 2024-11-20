@@ -464,6 +464,7 @@ class ModelWrapper(pl.LightningModule):
         """
         One step of the flow sampling process.
         """
+        # TODO: make sure that time in batch is correct here (not off by one)
         output = self.model(batch, prev_outputs=prev_outputs)
         pseudo_beta = pseudo_beta_fn(
             batch["aatype"], output["final_atom_positions"], None
@@ -488,9 +489,7 @@ class ModelWrapper(pl.LightningModule):
         t_idx=None,
         prev_outputs=None,
         as_protein=False,
-        no_diffusion=False,
         self_cond=True,
-        noisy_first=False,
     ):
         """
         Run sampling process starting at given time t, given the initial condition noisy.
@@ -563,9 +562,7 @@ class ModelWrapper(pl.LightningModule):
             t_idx=len(schedule) - 1,
             prev_outputs=prev_outputs,
             as_protein=as_protein,
-            no_diffusion=no_diffusion,
             self_cond=self_cond,
-            noisy_first=noisy_first,
         )
 
     def interpolate(
@@ -598,25 +595,32 @@ class ModelWrapper(pl.LightningModule):
         num_paths = x1.shape[0]
 
         # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
-        x2 = rmsdalign(x2, x1)
-
-        x1 = center_zero(x1)
-        x2 = center_zero(x2)
-        assert_center_zero(x1)
-        assert_center_zero(x2)
-
-        original_x1 = x1.clone()
-        original_x2 = x2.clone()
+        import pdb; pdb.set_trace()
+        
 
         self._expand_batch(batch, num_paths)
 
         batch1 = deepcopy(batch)
         batch2 = deepcopy(batch)
-
+        
+        # these are only added to add batch size information before encoding
         batch1["pseudo_beta"] = pseudo_beta_fn(batch1["aatype"], x1.unsqueeze(1), None)
         batch2["pseudo_beta"] = pseudo_beta_fn(batch2["aatype"], x2.unsqueeze(1), None)
         original_batch1 = deepcopy(batch1)
         original_batch2 = deepcopy(batch2)
+
+        import pdb; pdb.set_trace()
+
+        x1 = center_zero(x1)
+        x2 = center_zero(x2)
+
+        x2 = rmsdalign(x2, x1)
+
+        assert_center_zero(x1)
+        assert_center_zero(x2)
+
+        original_x1 = x1.clone()
+        original_x2 = x2.clone()
 
         # Encode
         with torch.no_grad():
@@ -658,7 +662,6 @@ class ModelWrapper(pl.LightningModule):
         )
 
         # decode
-        # TODO: implement batched decoding
         prots = self.sample_from_t(
             new_batch,
             noised_xs.reshape(-1, n_atoms, 3),
@@ -666,9 +669,7 @@ class ModelWrapper(pl.LightningModule):
             t_idx=latent_time,
             prev_outputs=None,
             as_protein=as_protein,
-            no_diffusion=False,
             self_cond=self_cond,
-            noisy_first=False,
         )
 
         # take final path
@@ -676,10 +677,11 @@ class ModelWrapper(pl.LightningModule):
 
         # reset the endpoints (temp hardcoding of batch size = 2)
         prots[0].atom_positions = original_x1[0].reshape(-1, 37, 3)
-        prots[path_length].atom_positions = original_x1[1].reshape(-1, 37, 3)
+        # prots[path_length].atom_positions = original_x1[1].reshape(-1, 37, 3)
 
         prots[path_length - 1].atom_positions = original_x2[0].reshape(-1, 37, 3)
-        prots[path_length - 1].atom_positions = original_x2[1].reshape(-1, 37, 3)
+        import pdb; pdb.set_trace()
+        # prots[path_length - 1].atom_positions = original_x2[1].reshape(-1, 37, 3)
 
         return prots
 

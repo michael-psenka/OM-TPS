@@ -5,7 +5,8 @@ python sample.py \
     --num_samples 3 \
     --msa_dir msas \
     --gen_mode interpolate \
-    --num_samples 2
+    --num_samples 1 \
+    --latent_time 2 \
     # --noisy_first \
     # --no_diffusion #\
     # --tmax 0.2 \
