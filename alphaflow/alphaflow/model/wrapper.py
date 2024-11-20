@@ -496,6 +496,7 @@ class ModelWrapper(pl.LightningModule):
         Run sampling process starting at given time t, given the initial condition noisy.
         The convention is that t_idx = 0 is the last step of the flow and t_idx = len(schedule) - 1 is the first step.
         """
+        batch_size = batch["aatype"].shape[0]
         outputs = []
         if t_idx is None:
             t_idx = len(schedule) - 1
@@ -514,13 +515,14 @@ class ModelWrapper(pl.LightningModule):
             prots = []
             for output in outputs:
                 prots.extend(protein.output_to_protein(output))
-            return prots
+            return prots[-batch_size:]
         else:
-            return outputs
+            return outputs[-1]
 
     def sample(
         self,
         batch,
+        num_samples=1,
         as_protein=False,
         no_diffusion=False,
         self_cond=True,
@@ -531,18 +533,23 @@ class ModelWrapper(pl.LightningModule):
         Produce i.i.d. samples from the model
         """
 
+        self._expand_batch(batch, num_samples)
+
         N = batch["aatype"].shape[1]
         device = batch["aatype"].device
         prior = HarmonicPrior(N)
         prior.to(device)
-        noisy = prior.sample()
+        noisy = []
+        for i in range(num_samples):
+            noisy.append(prior.sample())
+        noisy = torch.stack(noisy, dim=0)
 
         if noisy_first:  # why isn't this always done?
             batch["noised_pseudo_beta_dists"] = (
                 torch.sum((noisy.unsqueeze(-2) - noisy.unsqueeze(-3)) ** 2, dim=-1)
                 ** 0.5
             )
-            batch["t"] = torch.ones(1, device=noisy.device)
+            batch["t"] = torch.ones(num_samples, device=noisy.device)
 
         if no_diffusion:
             output = self.model(batch)
@@ -586,71 +593,75 @@ class ModelWrapper(pl.LightningModule):
         """
         Encode the two points into latent space, linearly or spherically interpolate, and decode.
         Args:
-            x1: torch.Tensor, shape of [n_paths, num_atoms x 3]
-            x2: torch.Tensor, shape of [n_paths, num_atoms x 3]
+            x1: torch.Tensor, shape of [n_paths, num_backbone_atoms x 3]
+            x2: torch.Tensor, shape of [n_paths, num_backbone_atoms x 3]
             path_length: int, length of the path to interpolate
             latent_time: float, time at which to interpolate
             interpolation_fn: function, interpolation function
             temperature: float, temperature for sampling
         """
 
-        # TODO: below is placeholder code from Two-for-One Diffusion. Need to implement the actual interpolation
         num_paths = x1.shape[0]
-
-        # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
-        x2 = rmsdalign(x2, x1)
-
-        x1 = center_zero(x1)
-        x2 = center_zero(x2)
-        assert_center_zero(x1)
-        assert_center_zero(x2)
-
-        original_x1 = x1.clone()
-        original_x2 = x2.clone()
 
         self._expand_batch(batch, num_paths)
 
         batch1 = deepcopy(batch)
         batch2 = deepcopy(batch)
 
-        batch1["pseudo_beta"] = pseudo_beta_fn(batch1["aatype"], x1.unsqueeze(1), None)
-        batch2["pseudo_beta"] = pseudo_beta_fn(batch2["aatype"], x2.unsqueeze(1), None)
+        import pdb
+
+        pdb.set_trace()
+        beta1 = x1[:, 1].unsqueeze(1)
+        beta2 = x2[:, 1].unsqueeze(1)
+
+        # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
+        beta2 = rmsdalign(beta2, x1)
+
+        beta1 = center_zero(beta1)
+        beta2 = center_zero(beta2)
+        assert_center_zero(beta1)
+        assert_center_zero(beta2)
+        batch1["pseudo_beta"] = beta1
+        batch2["pseudo_beta"] = beta2
         original_batch1 = deepcopy(batch1)
         original_batch2 = deepcopy(batch2)
+
+        original_beta1 = beta1.clone()
+        original_beta2 = beta2.clone()
+        original_x1 = x1.clone()
+        original_x2 = x2.clone()
 
         # Encode
         with torch.no_grad():
             self._add_noise(batch1, t=latent_time / len(schedule), train=False)
             self._add_noise(batch2, t=latent_time / len(schedule), train=False)
 
-        noised_x1 = batch1["noised_pseudo_beta"]
-        noised_x2 = batch2["noised_pseudo_beta"]
+        noised_beta1 = batch1["noised_pseudo_beta"]
+        noised_beta2 = batch2["noised_pseudo_beta"]
 
-        num_paths, n_atoms = noised_x1.shape[0], noised_x1.shape[1]
+        num_paths, n_atoms = noised_beta1.shape[0], noised_beta1.shape[1]
 
         # linear interpolation of noised_x1 and noised_x2
-        noised_xs = torch.stack(
+        noised_pseudo_betas = torch.stack(
             [
-                center_zero(interpolation_fn(noised_x1.cpu(), noised_x2.cpu(), alpha))
+                center_zero(
+                    interpolation_fn(noised_beta1.cpu(), noised_beta2.cpu(), alpha)
+                )
                 for alpha in torch.linspace(0, 1, path_length)
             ]
         )
 
-        noised_xs = noised_xs.permute((1, 0, 2, 3)).to(
+        noised_psuedo_betas = noised_pseudo_betas.permute((1, 0, 2, 3)).to(
             self.device
         )  # make batch dimension come first [B, path_length, n_atoms, 3]
 
         new_batch = deepcopy(batch1)
         self._expand_batch(new_batch, num_paths * path_length)
 
-        noised_pseudo_beta = pseudo_beta_fn(
-            new_batch["aatype"], noised_xs.reshape(-1, 1, n_atoms, 3), None
-        )
-
         # compute pairwise distances between pseudo beta carbons on noised path
         new_batch["noised_pseudo_beta_dists"] = (
             torch.sum(
-                (noised_pseudo_beta.unsqueeze(-2) - noised_pseudo_beta.unsqueeze(-3))
+                (noised_pseudo_betas.unsqueeze(-2) - noised_pseudo_betas.unsqueeze(-3))
                 ** 2,
                 dim=-1,
             )
@@ -661,7 +672,7 @@ class ModelWrapper(pl.LightningModule):
         # TODO: implement batched decoding
         prots = self.sample_from_t(
             new_batch,
-            noised_xs.reshape(-1, n_atoms, 3),
+            noised_pseudo_betas.reshape(-1, n_atoms, 3),
             schedule,
             t_idx=latent_time,
             prev_outputs=None,
@@ -676,10 +687,10 @@ class ModelWrapper(pl.LightningModule):
 
         # reset the endpoints (temp hardcoding of batch size = 2)
         prots[0].atom_positions = original_x1[0].reshape(-1, 37, 3)
-        prots[path_length].atom_positions = original_x1[1].reshape(-1, 37, 3)
+        # prots[path_length].atom_positions = original_x1[1].reshape(-1, 37, 3)
 
         prots[path_length - 1].atom_positions = original_x2[0].reshape(-1, 37, 3)
-        prots[path_length - 1].atom_positions = original_x2[1].reshape(-1, 37, 3)
+        # prots[path_length - 1].atom_positions = original_x2[1].reshape(-1, 37, 3)
 
         return prots
 

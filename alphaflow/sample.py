@@ -208,6 +208,7 @@ def main():
     results = defaultdict(list)
     os.makedirs(args.output_path, exist_ok=True)
     runtime = defaultdict(list)
+
     for i, item in enumerate(valset):
 
         if args.pdb_id and item["name"] not in args.pdb_id:
@@ -225,8 +226,12 @@ def main():
         result = []
 
         num_batches = max(1, args.num_samples // args.batch_size)
-        # TODO: convert to batched inference
-        for j in tqdm.trange(num_batches):
+
+        for j in range(num_batches):
+            logger.info(f"Generating batch {j+1}/{num_batches}")
+            actual_batch_size = min(
+                args.batch_size, args.num_samples - j * args.batch_size
+            )
             if args.subsample or args.resample:
                 item = valset[i]  # resample MSA
 
@@ -237,6 +242,7 @@ def main():
             if args.gen_mode == "iid":
                 prots = model.sample(
                     batch,
+                    num_samples=actual_batch_size,
                     as_protein=True,
                     noisy_first=args.noisy_first,
                     no_diffusion=args.no_diffusion,
@@ -247,7 +253,6 @@ def main():
 
                 # Define endpoints
                 # For now just get them from iid samples
-
                 iid_base_name = (
                     eval_folder.split("/")[0]
                     + "/"
@@ -256,18 +261,18 @@ def main():
                     + eval_folder.split("/")[2]
                     + "/main_eval_output_iid"
                 )
-                if os.path.exists(f"{iid_base_name}/sample-iid-all.pt"):
-                    iid_samples = torch.load(f"{iid_base_name}/sample-iid-all.pt")
+                if os.path.exists(f"{iid_base_name}/sample-iid-backbone.pt"):
+                    iid_samples = torch.load(f"{iid_base_name}/sample-iid-backbone.pt")
                     endpoint_1 = (
                         iid_samples[0]
                         .unsqueeze(0)
-                        .repeat(args.num_samples, 1, 1)
+                        .repeat(actual_batch_size, 1, 1)
                         .to(model.device)
                     )
                     endpoint_2 = (
                         iid_samples[-1]
                         .unsqueeze(0)
-                        .repeat(args.num_samples, 1, 1)
+                        .repeat(actual_batch_size, 1, 1)
                         .to(model.device)
                     )
                 else:
@@ -332,9 +337,7 @@ def main():
 
             runtime[item["name"]].append(time.time() - start)
 
-            result.append(
-                prots
-            )  # TODO: take care of taking last sample in sample function?
+            result.append(prots)  # list of lists
 
         result = list(
             itertools.chain.from_iterable(result)

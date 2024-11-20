@@ -172,3 +172,75 @@
 2024-11-19 23:56:23,754 [germain:2952585] [INFO] Model has been loaded
 2024-11-19 23:57:13,715 [germain:2954716] [INFO] Loading the model
 2024-11-19 23:57:43,321 [germain:2954716] [INFO] Model has been loaded
+2024-11-20 13:58:38,867 [germain:3483650] [INFO] Loading the model
+2024-11-20 13:58:59,482 [germain:3484084] [INFO] Loading the model
+2024-11-20 13:59:07,285 [germain:3484338] [INFO] Loading the model
+2024-11-20 13:59:35,323 [germain:3484338] [INFO] Model has been loaded
+2024-11-20 14:10:00,591 [germain:3505064] [INFO] Loading the model
+2024-11-20 14:10:13,455 [germain:3505464] [INFO] Loading the model
+2024-11-20 14:10:45,079 [germain:3505464] [INFO] Model has been loaded
+2024-11-20 14:12:56,259 [germain:3509386] [INFO] Loading the model
+2024-11-20 14:13:26,681 [germain:3509386] [INFO] Model has been loaded
+2024-11-20 14:14:54,933 [germain:3513080] [INFO] Loading the model
+2024-11-20 14:15:26,209 [germain:3513080] [INFO] Model has been loaded
+2024-11-20 14:19:24,975 [germain:3518642] [INFO] Loading the model
+2024-11-20 14:19:56,322 [germain:3518642] [INFO] Model has been loaded
+2024-11-20 14:23:36,167 [germain:3560687] [INFO] Loading the model
+2024-11-20 14:24:07,260 [germain:3560687] [INFO] Model has been loaded
+2024-11-20 14:27:14,787 [germain:3573765] [INFO] Loading the model
+2024-11-20 14:27:43,652 [germain:3573765] [INFO] Model has been loaded
+2024-11-20 14:27:43,676 [germain:3573765] [INFO] Generating batch 1/1
+2024-11-20 14:32:36,518 [germain:3581730] [INFO] Loading the model
+2024-11-20 14:33:07,175 [germain:3581730] [INFO] Model has been loaded
+2024-11-20 14:33:25,964 [germain:3583162] [INFO] Loading the model
+2024-11-20 14:33:56,713 [germain:3583162] [INFO] Model has been loaded
+2024-11-20 14:33:56,716 [germain:3583162] [INFO] Generating batch 1/50
+2024-11-20 14:33:59,159 [germain:3583162] [INFO] Generating batch 2/50
+2024-11-20 14:34:00,820 [germain:3583162] [INFO] Generating batch 3/50
+2024-11-20 14:34:02,570 [germain:3583162] [INFO] Generating batch 4/50
+2024-11-20 14:34:04,251 [germain:3583162] [INFO] Generating batch 5/50
+2024-11-20 14:34:05,906 [germain:3583162] [INFO] Generating batch 6/50
+2024-11-20 14:34:07,581 [germain:3583162] [INFO] Generating batch 7/50
+2024-11-20 14:34:09,233 [germain:3583162] [INFO] Generating batch 8/50
+2024-11-20 14:34:10,900 [germain:3583162] [INFO] Generating batch 9/50
+2024-11-20 14:34:12,553 [germain:3583162] [INFO] Generating batch 10/50
+2024-11-20 14:34:14,254 [germain:3583162] [INFO] Generating batch 11/50
+2024-11-20 14:34:15,929 [germain:3583162] [INFO] Generating batch 12/50
+2024-11-20 14:34:17,624 [germain:3583162] [INFO] Generating batch 13/50
+2024-11-20 14:34:19,320 [germain:3583162] [INFO] Generating batch 14/50
+2024-11-20 14:34:20,993 [germain:3583162] [INFO] Generating batch 15/50
+2024-11-20 14:34:22,693 [germain:3583162] [INFO] Generating batch 16/50
+2024-11-20 14:34:24,359 [germain:3583162] [INFO] Generating batch 17/50
+2024-11-20 14:34:26,014 [germain:3583162] [INFO] Generating batch 18/50
+2024-11-20 14:34:27,672 [germain:3583162] [INFO] Generating batch 19/50
+2024-11-20 14:34:29,322 [germain:3583162] [INFO] Generating batch 20/50
+2024-11-20 14:34:30,979 [germain:3583162] [INFO] Generating batch 21/50
+2024-11-20 14:34:32,630 [germain:3583162] [INFO] Generating batch 22/50
+2024-11-20 14:34:34,304 [germain:3583162] [INFO] Generating batch 23/50
+2024-11-20 14:34:35,991 [germain:3583162] [INFO] Generating batch 24/50
+2024-11-20 14:34:37,656 [germain:3583162] [INFO] Generating batch 25/50
+2024-11-20 14:34:39,325 [germain:3583162] [INFO] Generating batch 26/50
+2024-11-20 14:34:40,996 [germain:3583162] [INFO] Generating batch 27/50
+2024-11-20 14:34:42,655 [germain:3583162] [INFO] Generating batch 28/50
+2024-11-20 14:34:44,329 [germain:3583162] [INFO] Generating batch 29/50
+2024-11-20 14:34:46,012 [germain:3583162] [INFO] Generating batch 30/50
+2024-11-20 14:34:47,692 [germain:3583162] [INFO] Generating batch 31/50
+2024-11-20 14:34:49,380 [germain:3583162] [INFO] Generating batch 32/50
+2024-11-20 14:34:51,097 [germain:3583162] [INFO] Generating batch 33/50
+2024-11-20 14:34:52,771 [germain:3583162] [INFO] Generating batch 34/50
+2024-11-20 14:34:54,431 [germain:3583162] [INFO] Generating batch 35/50
+2024-11-20 14:34:56,114 [germain:3583162] [INFO] Generating batch 36/50
+2024-11-20 14:34:57,769 [germain:3583162] [INFO] Generating batch 37/50
+2024-11-20 14:34:59,439 [germain:3583162] [INFO] Generating batch 38/50
+2024-11-20 14:35:01,092 [germain:3583162] [INFO] Generating batch 39/50
+2024-11-20 14:35:02,755 [germain:3583162] [INFO] Generating batch 40/50
+2024-11-20 14:35:04,401 [germain:3583162] [INFO] Generating batch 41/50
+2024-11-20 14:35:06,045 [germain:3583162] [INFO] Generating batch 42/50
+2024-11-20 14:35:07,710 [germain:3583162] [INFO] Generating batch 43/50
+2024-11-20 14:35:09,405 [germain:3583162] [INFO] Generating batch 44/50
+2024-11-20 14:35:11,087 [germain:3583162] [INFO] Generating batch 45/50
+2024-11-20 14:35:12,743 [germain:3583162] [INFO] Generating batch 46/50
+2024-11-20 14:35:14,448 [germain:3583162] [INFO] Generating batch 47/50
+2024-11-20 14:35:16,169 [germain:3583162] [INFO] Generating batch 48/50
+2024-11-20 14:35:17,829 [germain:3583162] [INFO] Generating batch 49/50
+2024-11-20 14:35:19,495 [germain:3583162] [INFO] Generating batch 50/50
