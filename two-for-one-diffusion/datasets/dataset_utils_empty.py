@@ -126,9 +126,9 @@ def get_dataset(
             trainset = dataset
             valset = dataset
             testset = dataset
-    # TODO: Add support for other ATLAS proteins
-    elif "delta" in mol.lower():
-        mol = AtlasProteins.DELTA.value
+
+    elif mol.upper() in AtlasProteins.__members__:
+        mol = AtlasProteins[mol.upper()].value
         dataset = AtlasDataset(data_folder, mol)
 
         trainset = dataset
