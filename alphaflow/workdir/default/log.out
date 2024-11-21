@@ -244,3 +244,61 @@
 2024-11-20 14:35:16,169 [germain:3583162] [INFO] Generating batch 48/50
 2024-11-20 14:35:17,829 [germain:3583162] [INFO] Generating batch 49/50
 2024-11-20 14:35:19,495 [germain:3583162] [INFO] Generating batch 50/50
+2024-11-20 14:45:06,283 [germain:3612690] [INFO] Loading the model
+2024-11-20 14:45:39,190 [germain:3612690] [INFO] Model has been loaded
+2024-11-20 14:45:39,194 [germain:3612690] [INFO] Generating batch 1/25
+2024-11-20 14:45:43,140 [germain:3612690] [INFO] Generating batch 2/25
+2024-11-20 14:45:46,495 [germain:3612690] [INFO] Generating batch 3/25
+2024-11-20 14:46:04,144 [germain:3615127] [INFO] Loading the model
+2024-11-20 14:46:37,072 [germain:3615127] [INFO] Model has been loaded
+2024-11-20 14:46:37,076 [germain:3615127] [INFO] Generating batch 1/25
+2024-11-20 14:47:02,196 [germain:3620097] [INFO] Loading the model
+2024-11-20 14:47:25,738 [germain:3621646] [INFO] Loading the model
+2024-11-20 14:47:55,791 [germain:3621646] [INFO] Model has been loaded
+2024-11-20 14:47:55,798 [germain:3621646] [INFO] Generating batch 1/25
+2024-11-20 14:49:49,367 [germain:3630428] [INFO] Loading the model
+2024-11-20 14:50:20,349 [germain:3630428] [INFO] Model has been loaded
+2024-11-20 14:50:20,352 [germain:3630428] [INFO] Generating batch 1/25
+2024-11-20 14:55:13,898 [germain:3647050] [INFO] Loading the model
+2024-11-20 14:55:45,060 [germain:3647050] [INFO] Model has been loaded
+2024-11-20 14:55:45,063 [germain:3647050] [INFO] Generating batch 1/25
+2024-11-20 14:56:44,937 [germain:3653313] [INFO] Loading the model
+2024-11-20 14:57:15,368 [germain:3653313] [INFO] Model has been loaded
+2024-11-20 14:57:15,371 [germain:3653313] [INFO] Generating batch 1/25
+2024-11-20 14:58:08,749 [germain:3656042] [INFO] Loading the model
+2024-11-20 14:58:41,350 [germain:3656042] [INFO] Model has been loaded
+2024-11-20 14:58:41,352 [germain:3656042] [INFO] Generating batch 1/25
+2024-11-20 14:59:03,442 [germain:3657779] [INFO] Loading the model
+2024-11-20 14:59:33,105 [germain:3657779] [INFO] Model has been loaded
+2024-11-20 14:59:33,109 [germain:3657779] [INFO] Generating batch 1/25
+2024-11-20 15:01:17,648 [germain:3665224] [INFO] Loading the model
+2024-11-20 15:01:49,839 [germain:3665224] [INFO] Model has been loaded
+2024-11-20 15:01:49,843 [germain:3665224] [INFO] Generating batch 1/25
+2024-11-20 17:10:32,196 [germain:3825868] [INFO] Loading the model
+2024-11-20 17:11:01,700 [germain:3825868] [INFO] Model has been loaded
+2024-11-20 17:11:01,703 [germain:3825868] [INFO] Generating batch 1/25
+2024-11-20 17:13:59,367 [germain:3831276] [INFO] Loading the model
+2024-11-20 17:14:29,838 [germain:3831276] [INFO] Model has been loaded
+2024-11-20 17:14:29,854 [germain:3831276] [INFO] Generating batch 1/25
+2024-11-20 17:15:06,821 [germain:3833242] [INFO] Loading the model
+2024-11-20 17:15:38,489 [germain:3833242] [INFO] Model has been loaded
+2024-11-20 17:15:38,494 [germain:3833242] [INFO] Generating batch 1/25
+2024-11-20 17:28:46,493 [germain:3848895] [INFO] Loading the model
+2024-11-20 17:29:16,100 [germain:3848895] [INFO] Model has been loaded
+2024-11-20 17:29:16,103 [germain:3848895] [INFO] Generating batch 1/25
+2024-11-20 17:29:32,241 [germain:3848895] [INFO] Generating batch 2/25
+2024-11-20 17:29:44,184 [germain:3850417] [INFO] Loading the model
+2024-11-20 17:30:14,260 [germain:3850417] [INFO] Model has been loaded
+2024-11-20 17:30:14,277 [germain:3850417] [INFO] Generating batch 1/1
+2024-11-20 17:32:28,958 [germain:3853520] [INFO] Loading the model
+2024-11-20 17:32:56,029 [germain:3853520] [INFO] Model has been loaded
+2024-11-20 17:32:56,036 [germain:3853520] [INFO] Generating batch 1/1
+2024-11-20 17:39:56,041 [germain:3861707] [INFO] Loading the model
+2024-11-20 17:40:25,564 [germain:3861707] [INFO] Model has been loaded
+2024-11-20 17:40:25,567 [germain:3861707] [INFO] Generating batch 1/1
+2024-11-20 17:41:01,474 [germain:3863248] [INFO] Loading the model
+2024-11-20 17:41:31,631 [germain:3863248] [INFO] Model has been loaded
+2024-11-20 17:41:31,634 [germain:3863248] [INFO] Generating batch 1/1
+2024-11-20 17:47:53,107 [germain:3870968] [INFO] Loading the model
+2024-11-20 17:48:25,613 [germain:3870968] [INFO] Model has been loaded
+2024-11-20 17:48:25,616 [germain:3870968] [INFO] Generating batch 1/1

@@ -10,7 +10,7 @@ from .esmfold import ESMFold
 from .alphafold import AlphaFold
 
 from alphaflow.utils.loss import AlphaFoldLoss
-from alphaflow.utils.diffusion import HarmonicPrior, rmsdalign
+from alphaflow.utils.diffusion import HarmonicPrior, rmsdalign, kabsch_rmsd
 from alphaflow.utils import protein
 
 from openfold.utils.loss import lddt_ca
@@ -608,19 +608,17 @@ class ModelWrapper(pl.LightningModule):
         batch1 = deepcopy(batch)
         batch2 = deepcopy(batch)
 
-        import pdb
-
-        pdb.set_trace()
-        beta1 = x1[:, 1].unsqueeze(1)
-        beta2 = x2[:, 1].unsqueeze(1)
+        beta1 = x1[:, ::3].to(self.device)
+        beta2 = x2[:, ::3].to(self.device)
 
         # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
-        beta2 = rmsdalign(beta2, x1)
-
         beta1 = center_zero(beta1)
         beta2 = center_zero(beta2)
         assert_center_zero(beta1)
         assert_center_zero(beta2)
+
+        beta2 = rmsdalign(beta2, beta1)
+
         batch1["pseudo_beta"] = beta1
         batch2["pseudo_beta"] = beta2
         original_batch1 = deepcopy(batch1)
@@ -639,7 +637,7 @@ class ModelWrapper(pl.LightningModule):
         noised_beta1 = batch1["noised_pseudo_beta"]
         noised_beta2 = batch2["noised_pseudo_beta"]
 
-        num_paths, n_atoms = noised_beta1.shape[0], noised_beta1.shape[1]
+        num_paths, n_residues = noised_beta1.shape[0], noised_beta1.shape[1]
 
         # linear interpolation of noised_x1 and noised_x2
         noised_pseudo_betas = torch.stack(
@@ -651,9 +649,9 @@ class ModelWrapper(pl.LightningModule):
             ]
         )
 
-        noised_psuedo_betas = noised_pseudo_betas.permute((1, 0, 2, 3)).to(
+        noised_pseudo_betas = noised_pseudo_betas.permute((1, 0, 2, 3)).to(
             self.device
-        )  # make batch dimension come first [B, path_length, n_atoms, 3]
+        )  # make batch dimension come first [B, path_length, n_residues, 3]
 
         new_batch = deepcopy(batch1)
         self._expand_batch(new_batch, num_paths * path_length)
@@ -666,13 +664,15 @@ class ModelWrapper(pl.LightningModule):
                 dim=-1,
             )
             ** 0.5
-        )
+        ).reshape(-1, n_residues, n_residues)
 
+        for k, v in new_batch.items():
+            if isinstance(v, torch.Tensor):
+                new_batch[k] = v.to(self.device)
         # decode
-        # TODO: implement batched decoding
         prots = self.sample_from_t(
             new_batch,
-            noised_pseudo_betas.reshape(-1, n_atoms, 3),
+            noised_pseudo_betas.reshape(-1, n_residues, 3),
             schedule,
             t_idx=latent_time,
             prev_outputs=None,
@@ -682,15 +682,27 @@ class ModelWrapper(pl.LightningModule):
             noisy_first=False,
         )
 
-        # take final path
-        prots = prots[-num_paths * path_length :]
+        # add dummy 0 coordinates for all atoms that are not in the backbone for the endpoints
+        original_x1 = original_x1.reshape(num_paths, n_residues, 3, 3)
+        original_x2 = original_x2.reshape(num_paths, n_residues, 3, 3)
+        padded_endpoint1 = torch.cat(
+            [original_x1, torch.zeros(num_paths, n_residues, 34, 3).to(self.device)],
+            dim=2,
+        )
+        padded_endpoint2 = torch.cat(
+            [original_x2, torch.zeros(num_paths, n_residues, 34, 3).to(self.device)],
+            dim=2,
+        )
 
-        # reset the endpoints (temp hardcoding of batch size = 2)
-        prots[0].atom_positions = original_x1[0].reshape(-1, 37, 3)
-        # prots[path_length].atom_positions = original_x1[1].reshape(-1, 37, 3)
+        # reset endpoints
 
-        prots[path_length - 1].atom_positions = original_x2[0].reshape(-1, 37, 3)
-        # prots[path_length - 1].atom_positions = original_x2[1].reshape(-1, 37, 3)
+        for i in range(num_paths):
+            prots[i * path_length].atom_positions = padded_endpoint1[
+                i, :, [1, 0, 2] + list(range(3, padded_endpoint1.shape[2]))
+            ]
+            prots[(i + 1) * path_length - 1].atom_positions = padded_endpoint2[
+                i, :, [1, 0, 2] + list(range(3, padded_endpoint2.shape[2]))
+            ]
 
         return prots
 

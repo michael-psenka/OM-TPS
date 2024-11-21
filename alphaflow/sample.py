@@ -250,7 +250,7 @@ def main():
                     self_cond=args.self_cond,
                 )
             elif "interpolate" in args.gen_mode:
-
+                # TODO: get samples from ground truth MD simulations (need to define clusters first)
                 # Define endpoints
                 # For now just get them from iid samples
                 iid_base_name = (
