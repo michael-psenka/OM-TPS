@@ -18,6 +18,8 @@ from alphaflow.utils.logging import get_logger
 
 from logging_utils import save_ovito_traj
 from utils import slerp
+from evaluate.evaluators import TicEvaluator
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--input_csv", type=str, default="splits/transporters_only.csv")
@@ -174,34 +176,34 @@ def main():
     logger.info("Loading the model")
     model_class = {"alphafold": AlphaFoldWrapper, "esmfold": ESMFoldWrapper}[args.mode]
 
-    if args.weights:
-        if "distilled" in args.weights:
-            assert (
-                args.noisy_first and args.no_diffusion
-            ), "Distilled model requires noisy_first and no_diffusion"
-        ckpt = torch.load(args.weights, map_location="cpu")
-        model = model_class(**ckpt["hyper_parameters"], training=False)
-        model.model.load_state_dict(ckpt["params"], strict=False)
-        model = model.cuda()
+    # if args.weights:
+    #     if "distilled" in args.weights:
+    #         assert (
+    #             args.noisy_first and args.no_diffusion
+    #         ), "Distilled model requires noisy_first and no_diffusion"
+    #     ckpt = torch.load(args.weights, map_location="cpu")
+    #     model = model_class(**ckpt["hyper_parameters"], training=False)
+    #     model.model.load_state_dict(ckpt["params"], strict=False)
+    #     model = model.cuda()
 
-    elif args.original_weights:
-        model = model_class(config, None, training=False)
-        if args.mode == "esmfold":
-            path = "esmfold_3B_v1.pt"
-            model_data = torch.load(path, map_location="cpu")
-            model_state = model_data["model"]
-            model.model.load_state_dict(model_state, strict=False)
-            model = model.to(torch.float).cuda()
+    # elif args.original_weights:
+    #     model = model_class(config, None, training=False)
+    #     if args.mode == "esmfold":
+    #         path = "esmfold_3B_v1.pt"
+    #         model_data = torch.load(path, map_location="cpu")
+    #         model_state = model_data["model"]
+    #         model.model.load_state_dict(model_state, strict=False)
+    #         model = model.to(torch.float).cuda()
 
-        elif args.mode == "alphafold":
-            import_jax_weights_(model.model, "params_model_1.npz", version="model_3")
-            model = model.cuda()
+    #     elif args.mode == "alphafold":
+    #         import_jax_weights_(model.model, "params_model_1.npz", version="model_3")
+    #         model = model.cuda()
 
-    else:
-        model = model_class.load_from_checkpoint(args.ckpt, map_location="cpu")
-        model.load_ema_weights()
-        model = model.cuda()
-    model.eval()
+    # else:
+    #     model = model_class.load_from_checkpoint(args.ckpt, map_location="cpu")
+    #     model.load_ema_weights()
+    #     model = model.cuda()
+    # model.eval()
 
     logger.info("Model has been loaded")
 
@@ -253,6 +255,7 @@ def main():
                 # TODO: get samples from ground truth MD simulations (need to define clusters first)
                 # Define endpoints
                 # For now just get them from iid samples
+
                 iid_base_name = (
                     eval_folder.split("/")[0]
                     + "/"
@@ -261,6 +264,18 @@ def main():
                     + eval_folder.split("/")[2]
                     + "/main_eval_output_iid"
                 )
+
+                # Get TICA
+                tic_evaluator = TicEvaluator(
+                    val_data=None,
+                    mol_name="delta",
+                    eval_folder=iid_base_name,
+                    saved_ref="/home/sanjeevr/om-diffusion/two-for-one-diffusion/alphaflow/saved_references/saved_TICA_DELTA_testset.pickle",
+                    data_folder="/data/sanjeevr/atlas",
+                    bins=101,
+                    evalset="testset",
+                )
+
                 if os.path.exists(f"{iid_base_name}/sample-iid-backbone.pt"):
                     iid_samples = torch.load(f"{iid_base_name}/sample-iid-backbone.pt")
                     endpoint_1 = (
