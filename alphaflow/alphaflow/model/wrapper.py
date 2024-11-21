@@ -608,6 +608,7 @@ class ModelWrapper(pl.LightningModule):
         batch1 = deepcopy(batch)
         batch2 = deepcopy(batch)
 
+        # expects backbone atoms, only take every 3rd atom (beta carbons)
         beta1 = x1[:, ::3].to(self.device)
         beta2 = x2[:, ::3].to(self.device)
 

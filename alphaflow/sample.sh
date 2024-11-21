@@ -6,6 +6,7 @@ python sample.py \
     --batch_size 2 \
     --msa_dir msas \
     --gen_mode interpolate \
+    --latent_time 1 
     # --noisy_first \
     # --no_diffusion #\
     # --tmax 0.2 \

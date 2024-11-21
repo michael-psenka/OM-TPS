@@ -302,3 +302,6 @@
 2024-11-20 17:47:53,107 [germain:3870968] [INFO] Loading the model
 2024-11-20 17:48:25,613 [germain:3870968] [INFO] Model has been loaded
 2024-11-20 17:48:25,616 [germain:3870968] [INFO] Generating batch 1/1
+2024-11-20 18:09:18,104 [germain:3893603] [INFO] Loading the model
+2024-11-20 18:09:48,469 [germain:3893603] [INFO] Model has been loaded
+2024-11-20 18:09:48,483 [germain:3893603] [INFO] Generating batch 1/1

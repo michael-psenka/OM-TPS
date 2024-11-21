@@ -270,7 +270,7 @@ def main():
                         .to(model.device)
                     )
                     endpoint_2 = (
-                        iid_samples[-1]
+                        iid_samples[45]
                         .unsqueeze(0)
                         .repeat(actual_batch_size, 1, 1)
                         .to(model.device)
