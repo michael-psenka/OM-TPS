@@ -135,7 +135,6 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-
 logger = get_logger(__name__)
 torch.set_float32_matmul_precision("high")
 
@@ -268,11 +267,13 @@ def main():
                 # Get TICA
                 tic_evaluator = TicEvaluator(
                     val_data=None,
-                    mol_name="delta",
+                    mol_name="delta",  # TODO: get rid of hardcoding
                     eval_folder=iid_base_name,
-                    saved_ref="/home/sanjeevr/om-diffusion/two-for-one-diffusion/alphaflow/saved_references/saved_TICA_DELTA_testset.pickle",
-                    data_folder="/data/sanjeevr/atlas",
+                    saved_ref="saved_references/saved_TICA_DELTA_testset.pickle",
+                    data_folder="/data/sanjeevr/atlas_final",
+                    folded_pdb_folder="/data/sanjeevr/atlas_interpolation",
                     bins=101,
+                    lagtime=10,  # ATLAS trajectory spacing is 10 ps, we want to use 100 ps as lagtime (following MDGen paper)
                     evalset="testset",
                 )
 

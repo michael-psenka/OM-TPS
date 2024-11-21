@@ -6,7 +6,6 @@ import torch
 import wandb
 
 wandb.require("core")
-from torch_scatter import scatter_mean
 import numpy as np
 import mdtraj as md
 import matplotlib.pyplot as plt

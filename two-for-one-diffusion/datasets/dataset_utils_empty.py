@@ -1,7 +1,8 @@
 import torch
 import numpy as np
+from tqdm import tqdm
 import math
-import os
+import os, tempfile
 import mdtraj as md
 from mdtraj import Trajectory
 import warnings
@@ -10,6 +11,9 @@ from typing import Optional, Any, Callable, Sequence, Union
 import pandas as pd
 from torch.utils.data import Dataset
 from torch_geometric.data.data import Data
+
+from alphaflow.utils import protein
+from openfold.data.data_pipeline import make_protein_features
 
 
 class AtomSelection(Enum):
@@ -31,6 +35,13 @@ class Molecules(Enum):
     PROTEIN_G = "NuG2"
     ALPHA3D = "A3D"
     LAMBDA_REPRESSOR = "lambda"
+
+
+class AtlasProteins(Enum):
+    DELTA = "5w82_E"
+    GPROTEIN = "2pbi_A"
+    CAPSID = "3qc7_A"
+    ADHESIN = "3wp8_A"
 
 
 all_molecules = ["alanine_dipeptide"] + [mol.name.lower() for mol in Molecules]
@@ -115,6 +126,14 @@ def get_dataset(
             trainset = dataset
             valset = dataset
             testset = dataset
+    # TODO: Add support for other ATLAS proteins
+    elif "delta" in mol.lower():
+        mol = AtlasProteins.DELTA.value
+        dataset = AtlasDataset(data_folder, mol)
+
+        trainset = dataset
+        valset = dataset
+        testset = dataset
 
     elif "alanine_dipeptide" not in mol.lower():
         # D.E. Shaw fast folding proteins data
@@ -144,9 +163,7 @@ def get_dataset(
                 transform=to_angstrom,
                 align=False,
             )
-            import pdb
 
-            pdb.set_trace()
         dataset = CGDataset(
             dataset, topology, molecule, mean0=mean0, shuffle=shuffle_before_splitting
         )
@@ -180,6 +197,11 @@ def to_angstrom(x):
     Convert from nanometer to angstrom.
     """
     return x * 10.0
+
+
+class DummyClass:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
 
 
 class CGDataset(torch.utils.data.TensorDataset):
@@ -443,3 +465,29 @@ class DEShawDataset(MDTrajectory):
             timestep=time_data["time"].values[0],
             align=align,
         )
+
+
+class AtlasDataset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        data_root: str,
+        name,
+    ):
+        self.data_root = data_root
+        self.name = name
+
+        # assumes data is preprocessed and stored in npz files (by AlphaFlow repo)
+        path = os.path.join(data_root, f"{name}.npz")
+        xyz = dict(np.load(path, allow_pickle=True))["all_atom_positions"]
+        # extract only Alpha Carbons
+        xyz = np.expand_dims(xyz[:, :, 1], 0)
+        self.traj = DummyClass(
+            xyz=torch.tensor(xyz)
+        )  # shape is (1, n_frames, n_residues, 3)
+
+    def __len__(self):
+        return len(self.traj.xyz)
+
+    def __getitem__(self, idx):
+        x = self.traj.xyz[idx]
+        return x

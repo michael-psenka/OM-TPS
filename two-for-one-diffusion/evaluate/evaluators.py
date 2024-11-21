@@ -11,7 +11,9 @@ from evaluate.evaluators_CGflowmatching import (
     K_BT_IN_KCAL_PER_MOL,
 )
 import matplotlib.pyplot as plt
+
 from deeptime.decomposition import TICA
+
 from matplotlib.colors import LogNorm, Normalize
 import matplotlib.path as mpath
 from matplotlib.colorbar import ColorbarBase
@@ -21,7 +23,7 @@ from matplotlib.backend_bases import GraphicsContextBase, RendererBase
 import types
 import json
 import math
-from datasets.dataset_utils_empty import get_dataset, Molecules
+from datasets.dataset_utils_empty import get_dataset, Molecules, AtlasProteins
 import pickle
 
 CLUSTER_CENTERS = {
@@ -382,15 +384,23 @@ class TicEvaluator:
         data_folder,
         folded_pdb_folder="../datasets/folded_pdbs",
         bins=101,
+        lagtime=100,
         saved_ref="none",
         evalset="testset",
     ):
         self.mol_name = mol_name
         self.plots_folder = eval_folder
         self.bins = bins
-        protid = Molecules[mol_name.upper()].value
-        folded_pdb = f"{folded_pdb_folder}/{protid}.pdb"
-        self.folded = process_pdb(folded_pdb, mol_name)
+        if mol_name.upper() in Molecules.__members__:
+            protid = Molecules[mol_name.upper()].value
+        else:
+            protid = AtlasProteins[mol_name.upper()].value
+        try:
+            folded_pdb = f"{folded_pdb_folder}/{protid}.pdb"
+            self.folded = process_pdb(folded_pdb, mol_name)
+        except OSError:
+            folded_pdb = f"{folded_pdb_folder}/{protid}/{protid}.pdb"
+            self.folded = process_pdb(folded_pdb, mol_name)
 
         # Check if the computed objects are already saved
         if saved_ref == "none":
@@ -414,6 +424,7 @@ class TicEvaluator:
                 traindata_subset=None,
                 shuffle_before_splitting=False,
             )
+
             sorted_data_xyz = torch.cat(
                 (trainset_sorted[:][0], valset_sorted[:][0], testset_sorted[:][0]),
                 dim=0,
@@ -423,11 +434,14 @@ class TicEvaluator:
 
             # We compute the TIC eigenvalues on the training and validation partitions both together
             # to be consistent with previous works.
-            self.tica = TICA(lagtime=100, dim=2)
+            print("Fitting TICA")
+            self.tica = TICA(lagtime=lagtime, dim=2)
             _ = self.tica.fit_transform(tic_features)
 
-            # We then compute the features only on the val partition that we will use for evaluation.
-            tic_features = self.get_tic_features(val_data, self.folded)
+            if val_data is not None:
+                # We then compute the features only on the val partition that we will use for evaluation.
+                tic_features = self.get_tic_features(val_data, self.folded)
+
             transformed_data = self.tica(tic_features)
 
             self.gt_prob, self.bin_edges_x, self.bin_edges_y = np.histogram2d(
@@ -437,7 +451,9 @@ class TicEvaluator:
                 density=None,
                 normed=True,
             )
-            # Save the computed objects
+            # Save the computed TICA objects
+            if not os.path.exists(os.path.dirname(saved_ref)):
+                os.makedirs(os.path.dirname(saved_ref))
             with open(saved_ref, "wb") as f:
                 pickle.dump(
                     (self.tica, self.gt_prob, self.bin_edges_x, self.bin_edges_y), f
