@@ -44,6 +44,7 @@ class AtlasProteins(Enum):
     CAPSID = "3qc7_A"
     ADHESIN = "3wp8_A"
 
+
 ATLAS_PDB_ID_TO_NAME = {
     "5w82_E": "delta",
     "1l2w_I": "membrane",

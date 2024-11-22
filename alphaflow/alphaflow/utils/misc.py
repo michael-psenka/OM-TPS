@@ -7,6 +7,37 @@ import torch
 from openfold.np import residue_constants, protein
 from openfold.utils.feats import atom14_to_atom37
 
+from Bio.PDB import PDBParser, PDBIO, Select
+
+
+def add_chain_id_to_pdb(input_pdb_file, output_pdb_file, chain_id):
+    """
+    Adds a specified chain ID to all residues in a PDB file.
+
+    Parameters:
+    - input_pdb_file (str): Path to the input PDB file.
+    - output_pdb_file (str): Path to the output PDB file with the chain ID added.
+    - chain_id (str): The chain ID to be added (e.g., 'A').
+    """
+    # Parse the input PDB file
+    parser = PDBParser(QUIET=True)
+    structure = parser.get_structure("structure", input_pdb_file)
+
+    # Assign the specified chain ID to all residues
+    for model in structure:
+        for chain in model:
+            for residue in chain:
+                chain.id = chain_id
+
+    # Write the modified structure to a new PDB file
+    class ChainSelect(Select):
+        def accept_chain(self, chain):
+            return True
+
+    io = PDBIO()
+    io.set_structure(structure)
+    io.save(output_pdb_file, ChainSelect())
+
 
 def encode_sequence(
     seq: str,

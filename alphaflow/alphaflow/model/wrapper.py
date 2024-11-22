@@ -63,7 +63,7 @@ class ModelWrapper(pl.LightningModule):
                 batch[k] = v.repeat(batch_size // v.shape[0], *[1] * (len(v.shape) - 1))
             elif isinstance(v, list):
                 batch[k] = v * (batch_size // len(v))
-            
+
         # if "t" in batch.keys():
         #     if batch["t"].shape[0] != batch_size:
         #         batch["t"] = batch["t"].repeat(batch_size // batch["t"].shape[0])
@@ -631,7 +631,7 @@ class ModelWrapper(pl.LightningModule):
 
         original_beta1 = beta1.clone()
         original_beta2 = beta2.clone()
-        
+
         original_x1 = x1.clone()
         original_x2 = x2.clone()
 
@@ -698,7 +698,6 @@ class ModelWrapper(pl.LightningModule):
             dim=2,
         )
 
-
         # reset endpoints
 
         for i in range(num_paths):
@@ -708,7 +707,6 @@ class ModelWrapper(pl.LightningModule):
             prots[(i + 1) * path_length - 1].atom_positions = padded_endpoint2[
                 i, :, [1, 0, 2] + list(range(3, padded_endpoint2.shape[2]))
             ]
-
 
         return prots
 
