@@ -279,16 +279,16 @@ def main():
                 #     evalset="testset",
                 # )
 
-                if os.path.exists(f"{iid_base_name}/sample-iid-backbone.pt"):
-                    iid_samples = torch.load(f"{iid_base_name}/sample-iid-backbone.pt")
+                if os.path.exists(f"{iid_base_name}/sample-iid-all.pt"):
+                    iid_samples = torch.load(f"{iid_base_name}/sample-iid-all.pt")
                     endpoint_1 = (
-                        iid_samples[0]
+                        iid_samples[8]
                         .unsqueeze(0)
                         .repeat(actual_batch_size, 1, 1)
                         .to(model.device)
                     )
                     endpoint_2 = (
-                        iid_samples[45]
+                        iid_samples[13]
                         .unsqueeze(0)
                         .repeat(actual_batch_size, 1, 1)
                         .to(model.device)
@@ -368,7 +368,7 @@ def main():
         sampled_mol_backbone_file = eval_folder + f"/sample-{args.gen_mode}-backbone.pt"
         sampled_mol_file = eval_folder + f"/sample-{args.gen_mode}-all.pt"
         gsd_file = eval_folder + f"/sample-{args.gen_mode}.gsd"
-        
+
         sampled_mol_backbone = torch.stack(
             [
                 torch.tensor(prot.atom_positions[:, [1, 0, 3]])
@@ -387,7 +387,7 @@ def main():
             gsd_file,
             alpha_carbon_lim=result[0].aatype.shape[0],
             all_backbone=False,
-            align=args.gen_mode == "iid",
+            align=True,
         )
 
     if args.runtime_json:

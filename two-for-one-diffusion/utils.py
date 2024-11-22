@@ -18,6 +18,9 @@ NUM_RESIDUES_TO_PROTEIN = {
     56: "protein_g",
 }
 
+class DummyClass:
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
 
 def validate_git_status(excluded_files=["two-for-one-diffusion/sample.sh"]):
     """

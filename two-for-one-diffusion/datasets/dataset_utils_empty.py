@@ -14,6 +14,7 @@ from torch_geometric.data.data import Data
 
 from alphaflow.utils import protein
 from openfold.data.data_pipeline import make_protein_features
+from utils import DummyClass
 
 
 class AtomSelection(Enum):

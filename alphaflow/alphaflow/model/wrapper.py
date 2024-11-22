@@ -33,7 +33,7 @@ from openfold.utils.tensor_utils import (
 from collections import defaultdict
 from openfold.utils.lr_schedulers import AlphaFoldLRScheduler
 
-from utils import center_zero, assert_center_zero
+from utils import center_zero, assert_center_zero, DummyClass
 
 
 def gather_log(log, world_size):
@@ -466,6 +466,7 @@ class ModelWrapper(pl.LightningModule):
     def force_func(self, batch):
         raise NotImplementedError
 
+    @torch.no_grad()
     def sample_step(self, batch, noisy, prev_outputs, outputs, s, t):
         """
         One step of the flow sampling process.
@@ -487,6 +488,7 @@ class ModelWrapper(pl.LightningModule):
 
         return batch, noisy, output, outputs
 
+    @torch.no_grad()
     def sample_from_t(
         self,
         batch,
@@ -507,6 +509,11 @@ class ModelWrapper(pl.LightningModule):
             t_idx = len(schedule) - 1
         start = len(schedule) - 1 - t_idx
 
+        if t_idx == 0:
+            # add zero to the end of the schedule to have at least one step
+            # (should correspond to just predicting the all atom positions without denoising)
+            schedule = np.append(schedule, 0)
+
         for t, s in tqdm(zip(schedule[start:-1], schedule[start + 1 :])):
 
             batch, noisy, output, outputs = self.sample_step(
@@ -524,6 +531,7 @@ class ModelWrapper(pl.LightningModule):
         else:
             return outputs[-1]
 
+    @torch.no_grad()
     def sample(
         self,
         batch,
@@ -596,8 +604,8 @@ class ModelWrapper(pl.LightningModule):
         """
         Encode the two points into latent space, linearly or spherically interpolate, and decode.
         Args:
-            x1: torch.Tensor, shape of [n_paths, num_backbone_atoms x 3]
-            x2: torch.Tensor, shape of [n_paths, num_backbone_atoms x 3]
+            x1: torch.Tensor, shape of [n_paths, num_atoms, 3]
+            x2: torch.Tensor, shape of [n_paths, num_atoms, 3]
             path_length: int, length of the path to interpolate
             latent_time: float, time at which to interpolate
             interpolation_fn: function, interpolation function
@@ -611,10 +619,11 @@ class ModelWrapper(pl.LightningModule):
         batch1 = deepcopy(batch)
         batch2 = deepcopy(batch)
 
-        # expects backbone atoms, only take every 3rd atom (beta carbons)
-        # TODO: this is wrong, it is currently taking the alpha carbons
-        beta1 = x1[:, ::3].to(self.device)
-        beta2 = x2[:, ::3].to(self.device)
+        x1 = x1.reshape(num_paths, -1, 37, 3)
+        x2 = x2.reshape(num_paths, -1, 37, 3)
+        # extract beta carbons
+        beta1 = x1[:, :, 3].to(self.device)
+        beta2 = x2[:, :, 3].to(self.device)
 
         # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
         beta1 = center_zero(beta1)
@@ -686,27 +695,10 @@ class ModelWrapper(pl.LightningModule):
             self_cond=self_cond,
         )
 
-        # add dummy 0 coordinates for all atoms that are not in the backbone for the endpoints
-        original_x1 = original_x1.reshape(num_paths, n_residues, 3, 3)
-        original_x2 = original_x2.reshape(num_paths, n_residues, 3, 3)
-        padded_endpoint1 = torch.cat(
-            [original_x1, torch.zeros(num_paths, n_residues, 34, 3).to(self.device)],
-            dim=2,
-        )
-        padded_endpoint2 = torch.cat(
-            [original_x2, torch.zeros(num_paths, n_residues, 34, 3).to(self.device)],
-            dim=2,
-        )
-
         # reset endpoints
-
         for i in range(num_paths):
-            prots[i * path_length].atom_positions = padded_endpoint1[
-                i, :, [1, 0, 2] + list(range(3, padded_endpoint1.shape[2]))
-            ]
-            prots[(i + 1) * path_length - 1].atom_positions = padded_endpoint2[
-                i, :, [1, 0, 2] + list(range(3, padded_endpoint2.shape[2]))
-            ]
+            prots[i * path_length].atom_positions = x1[i]
+            prots[(i + 1) * path_length - 1].atom_positions = x2[i]
 
         return prots
 
