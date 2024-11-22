@@ -463,8 +463,39 @@ class ModelWrapper(pl.LightningModule):
                 if p.grad is None:
                     print(name)
 
-    def force_func(self, batch):
-        raise NotImplementedError
+    def force_func(self, pseudo_beta, batch, t):
+        """
+        batch contains noised_pseudo_beta_dists is [batch_size,num_atoms, 3]
+        returns flow matching model "force field" at time t
+
+        Formula: \epsilon = [noised_beta - (1-t) * model(noised_beta, t)] / t
+        """
+        # loop through batch keys and change batch dimensions to match pseudo_beta
+        new_batch = deepcopy(batch)
+        for k, v in new_batch.items():
+            if isinstance(v, torch.Tensor):
+                new_batch[k] = v[: pseudo_beta.shape[0]]
+            elif isinstance(v, list):
+                new_batch[k] = v[: pseudo_beta.shape[0]]
+
+        pseudo_beta_dists = (
+            torch.sum(
+                (pseudo_beta.unsqueeze(-2) - pseudo_beta.unsqueeze(-3)) ** 2, dim=-1
+            )
+            ** 0.5
+        )
+        # TODO: populate batch with relevant stuff
+
+        new_batch["noised_pseudo_beta_dists"] = pseudo_beta_dists
+        new_batch["t"] = torch.ones(pseudo_beta.shape[0], device=pseudo_beta.device) * t
+        new_batch["pseudo_beta"] = pseudo_beta  # probably not needed
+
+        model_output = self.model(new_batch)
+        model_output_beta = pseudo_beta_fn(
+            new_batch["aatype"], model_output["final_atom_positions"], None
+        )
+        noise_pred = (pseudo_beta - (1 - t) * model_output_beta) / t
+        return -noise_pred
 
     @torch.no_grad()
     def sample_step(self, batch, noisy, prev_outputs, outputs, s, t):
@@ -625,6 +656,8 @@ class ModelWrapper(pl.LightningModule):
         beta1 = x1[:, :, 3].to(self.device)
         beta2 = x2[:, :, 3].to(self.device)
 
+        n_residues = beta1.shape[1]
+
         # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
         beta1 = center_zero(beta1)
         beta2 = center_zero(beta2)
@@ -651,8 +684,6 @@ class ModelWrapper(pl.LightningModule):
 
         noised_beta1 = batch1["noised_pseudo_beta"]
         noised_beta2 = batch2["noised_pseudo_beta"]
-
-        num_paths, n_residues = noised_beta1.shape[0], noised_beta1.shape[1]
 
         # linear interpolation of noised_x1 and noised_x2
         noised_pseudo_betas = torch.stack(
@@ -704,12 +735,12 @@ class ModelWrapper(pl.LightningModule):
 
     def om_interpolate(
         self,
-        endpoint_1,
-        endpoint_2,
+        batch,
+        x1,
+        x2,
         path_length,
         latent_time,
         encode_and_decode,
-        mlff,
         action_cls,
         initial_guess_method,
         initial_guess_level,
@@ -728,8 +759,276 @@ class ModelWrapper(pl.LightningModule):
         noisy_first=False,
         schedule=None,
     ):
+        """
+        Onsager-Machlup interpolation between two endpoints.
 
-        raise NotImplementedError
+        """
+
+        num_paths = x1.shape[0]
+        device = x1.device
+
+        self._expand_batch(batch, num_paths)
+
+        batch1 = deepcopy(batch)
+        batch2 = deepcopy(batch)
+
+        x1 = x1.reshape(num_paths, -1, 37, 3)
+        x2 = x2.reshape(num_paths, -1, 37, 3)
+        # extract beta carbons
+        beta1 = x1[:, :, 3].to(self.device)
+        beta2 = x2[:, :, 3].to(self.device)
+
+        n_residues = beta1.shape[1]
+
+        # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
+        beta1 = center_zero(beta1)
+        beta2 = center_zero(beta2)
+        assert_center_zero(beta1)
+        assert_center_zero(beta2)
+
+        beta2 = rmsdalign(beta2, beta1)
+
+        batch1["pseudo_beta"] = beta1
+        batch2["pseudo_beta"] = beta2
+        original_batch1 = deepcopy(batch1)
+        original_batch2 = deepcopy(batch2)
+
+        original_beta1 = beta1.clone()
+        original_beta2 = beta2.clone()
+
+        original_x1 = x1.clone()
+        original_x2 = x2.clone()
+
+        print(
+            f"Generating initial guess with linear interpolation at t={initial_guess_level / len(schedule)}"
+        )
+        prots = self.interpolate(
+            batch,
+            x1,
+            x2,
+            path_length,
+            initial_guess_level,
+            initial_guess_method,
+            temperature,
+            as_protein,
+            no_diffusion,
+            self_cond,
+            noisy_first,
+            schedule,
+        )
+
+        noised_pseudo_betas = torch.stack(
+            [torch.tensor(prot.atom_positions[:, 3]).to(x1.device) for prot in prots]
+        )
+        noised_pseudo_betas = noised_pseudo_betas.reshape(num_paths, path_length, -1, 3)
+
+        new_batch = deepcopy(batch1)
+        self._expand_batch(new_batch, num_paths * path_length)
+
+        # compute pairwise distances between pseudo beta carbons on noised path
+        new_batch["noised_pseudo_beta_dists"] = (
+            torch.sum(
+                (noised_pseudo_betas.unsqueeze(-2) - noised_pseudo_betas.unsqueeze(-3))
+                ** 2,
+                dim=-1,
+            )
+            ** 0.5
+        ).reshape(-1, n_residues, n_residues)
+
+        for k, v in new_batch.items():
+            if isinstance(v, torch.Tensor):
+                new_batch[k] = v.to(self.device)
+
+        # Begin OM optimization
+
+        optimizer = torch.optim.Adam([noised_pseudo_betas], lr=lr)
+
+        pbar = tqdm(range(steps))
+        actions = []
+        path_terms = []
+        force_terms = []
+        all_noised_pseudo_betas = [noised_pseudo_betas.clone().detach()]
+
+        anneal_schedule = torch.linspace(200, latent_time, steps // 4)
+        # add a bunch latent times to the anneal schedule
+        anneal_schedule = (
+            torch.cat(
+                [
+                    anneal_schedule,
+                    torch.linspace(latent_time, latent_time, 3 * steps // 4),
+                ]
+            )
+            .to(self.device)
+            .long()
+        )
+
+        # Optimization of path using OM action
+        with torch.enable_grad():
+            noised_pseudo_betas.requires_grad = True
+
+            changed = False
+            for i in pbar:
+                if anneal:
+                    # diff_time = max(
+                    #     0,
+                    #     self.num_timesteps - int(self.num_timesteps / steps) * i - 1,
+                    # )  # anneal the time from T to 0
+                    diff_time = anneal_schedule[i].item() / len(schedule)
+                else:
+                    diff_time = latent_time / len(schedule)
+
+                if truncated_gradient:
+                    # Truncated gradient method: (maybe would be better to directly populate grads with the forces?)
+                    force_func = None
+
+                    with torch.no_grad():
+                        targets = [
+                            x + self.force_func(x, diff_time)
+                            for x in noised_pseudo_betas
+                        ]
+                    forces = [
+                        target - x for x, target in zip(noised_pseudo_betas, targets)
+                    ]
+
+                else:
+                    force_func = lambda x: self.force_func(x, new_batch, diff_time)
+                    forces = [None] * len(noised_pseudo_betas)
+
+                laplace = lambda x: self.laplacian_func(x, diff_time)
+                action_func = action_cls(
+                    force_func=force_func,
+                    laplace_func=laplace,
+                    dt=dt,
+                    gamma=gamma,
+                    D=100,
+                )  # (D is only used for HessianAction)
+
+                # TODO: vmap over batch dimension
+
+                terms = [
+                    action_func(x, force)
+                    for x, force in zip(noised_pseudo_betas, forces)
+                ]
+                first_term = torch.cat([term[0].unsqueeze(0) for term in terms]).mean()
+                second_term = torch.cat([term[1].unsqueeze(0) for term in terms]).mean()
+                action = torch.cat(
+                    [(term[0] + term[1]).unsqueeze(0) for term in terms]
+                ).mean()
+
+                actions.append(action.item())
+                path_terms.append(first_term.item())
+                force_terms.append(second_term.item())
+
+                optimizer.zero_grad()
+                (grads,) = torch.autograd.grad(action, noised_pseudo_betas)
+
+                if add_noise:
+                    # add noise to gradients, since adding directly to path yields optimization problems with Adam
+                    # TODO: a lot of this is Two For One stuff, which we need to replace
+                    with torch.no_grad():
+                        _t = (
+                            torch.tensor([max(1000 - i - 1, diff_time)])
+                            .repeat(
+                                noised_pseudo_betas.shape[0]
+                                * noised_pseudo_betas.shape[1]
+                            )
+                            .to(self.device)
+                        )
+                        _, _, model_log_variance = self.p_mean_variance(
+                            center_zero(
+                                noised_pseudo_betas.reshape(-1, self.num_atoms, 3)
+                            ),
+                            _t,
+                        )
+                        noise = torch.randn_like(
+                            noised_pseudo_betas.reshape(-1, self.num_atoms, 3)
+                        )
+                        noise = center_zero(noise)
+                        path_noise = (
+                            (0.5 * model_log_variance).exp() * noise * temperature
+                        )
+
+                    grads = grads + path_noise.reshape(grads.shape) / lr
+
+                with torch.no_grad():
+                    grads[:, 0], grads[:, -1] = 0, 0
+                    noised_pseudo_betas.grad = grads
+                    optimizer.step()
+
+                all_noised_pseudo_betas.append(noised_pseudo_betas.clone().detach())
+                path_contribution = first_term.item() / action.item()
+                force_contribution = second_term.item() / action.item()
+                pbar.set_description(
+                    f"OM Action: {action.item()}, Path Contribution: {round(path_contribution*100, 3)}%, Force Contribution: {round(force_contribution * 100, 3)}%"
+                )
+
+                if path_contribution > 0.99 and i > 50 and not changed:
+                    print(
+                        "Path contribution is too high, decreasing dt to upweight the path loss"
+                    )
+                    dt /= 10  # decrease the time step to upweight the path term
+                    changed = True
+                elif force_contribution > 0.99 and i > 50 and not changed:
+                    print(
+                        "Force contribution is too high, increasing dt to upweight the force loss"
+                    )
+                    dt *= 10  # increase the time step to upweight the force term
+                    changed = True
+
+                if log:
+                    wandb.log(
+                        {
+                            "OM Action": action.item(),
+                            "Path Norm": first_term.item(),
+                            "Force Norm": second_term.item(),
+                            "Path Contribution": path_contribution,
+                            "Force Contribution": force_contribution,
+                        }
+                    )
+
+        import pdb
+
+        pdb.set_trace()
+        # TODO: replace below code with ours
+        all_denoised_paths = []
+        # decode the optimized paths (keeping every 20 for future visualization)
+        for path in all_noised_pseudo_betas[::20]:
+            if encode_and_decode:
+                denoised_path = self.p_sample_loop(
+                    path.reshape(-1, n_atoms, 3), latent_time, temperature=temperature
+                )
+            else:
+                denoised_path = path
+
+            denoised_path = denoised_path.reshape(num_paths, path_length, n_atoms, 3)
+
+            # reset the endpoints
+            denoised_path[:, 0], denoised_path[:, -1] = original_x1, original_x2
+
+            denoised_path = denoised_path.reshape(-1, n_atoms, 3) * self.norm_factor
+            all_denoised_paths.append(denoised_path)
+
+        # Print improvement in action
+        print(
+            f"Initial action: {actions[0]}, Final action: {actions[-1]}, Percent improvement: {(actions[0] - actions[-1]) / actions[0] * 100}%"
+        )
+        # Print improvement in path term
+        print(
+            f"Initial path norm: {path_terms[0]}, Final path norm: {path_terms[-1]}, Percent improvement: {(path_terms[0] - path_terms[-1]) / path_terms[0] * 100}%"
+        )
+        # Print improvement in force term
+        print(
+            f"Initial force norm: {force_terms[0]}, Final force norm: {force_terms[-1]}, Percent improvement: {(force_terms[0] - force_terms[-1]) / (force_terms[0]+1e-8) * 100}%"
+        )
+
+        # return dict with final path, actions, path terms, force terms
+        return {
+            "final_path": all_denoised_paths[-1],
+            "all_paths": torch.stack(all_denoised_paths),
+            "actions": torch.tensor(actions),
+            "path_terms": torch.tensor(path_terms),
+            "force_terms": torch.tensor(force_terms),
+        }
 
     def _compute_validation_metrics(
         self, batch, outputs, superimposition_metrics=False

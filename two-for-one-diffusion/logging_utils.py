@@ -20,7 +20,7 @@ def save_ovito_traj(
     """
     Save the given positions to a GSD file using Ovito.
     Expects that the positions are in the shape (n_frames, n_atoms, 3).
-    The atom dimension has CA, N, and CB atoms in that order, interleaved per residue. 
+    The atom dimension has CA, N, and CB atoms in that order, interleaved per residue.
     For example, for a protein with 3 residues, the positions tensor for one frame would be:
     [CA1, N1, CB1, CA2, N2, CB2, CA3, N3, CB3]
     """
@@ -32,7 +32,7 @@ def save_ovito_traj(
         positions = center_zero(positions)
 
     if not all_backbone:
-        positions = positions[:, ::3] # take only alpha carbons
+        positions = positions[:, ::3]  # take only alpha carbons
     for i, pos in enumerate(positions):
         if align:
             pos = kabsch_rotate(pos, positions[0])

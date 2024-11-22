@@ -20,6 +20,7 @@ from logging_utils import save_ovito_traj
 from utils import slerp
 from evaluate.evaluators import TicEvaluator
 from datasets.dataset_utils_empty import ATLAS_PDB_ID_TO_NAME
+from actions import S2Action, TruncatedAction, SimpleAction
 
 
 parser = argparse.ArgumentParser()
@@ -71,8 +72,8 @@ parser.add_argument(
 parser.add_argument(
     "--initial_guess_level",
     type=int,
-    help="At what latent level to generate the initial interpolation path",
-    default=500,
+    help="step at which to generate initial guess interpolation - must be in range [0, flow_steps]",
+    default=1,
 )
 parser.add_argument(
     "--anneal",
@@ -128,11 +129,6 @@ parser.add_argument(
     help="Instead of taking gradient through the diffusion model forces, just follow the forces",
 )
 
-parser.add_argument(
-    "--mlff",
-    action="store_true",
-    help="Use a pretrained machine learning force field (MLFF) to compute forces instead of the diffusion model",
-)
 
 args = parser.parse_args()
 
@@ -324,17 +320,17 @@ def main():
                     elif args.action == "simple":
                         action_cls = SimpleAction
                     prots = model.om_interpolate(
+                        batch,
                         endpoint_1,
                         endpoint_2,
+                        path_length=args.path_length,
+                        latent_time=args.latent_time,
                         as_protein=True,
                         noisy_first=args.noisy_first,
                         no_diffusion=args.no_diffusion,
                         schedule=schedule,
                         self_cond=args.self_cond,
-                        path_length=args.path_length,
-                        latent_time=args.latent_time,
                         encode_and_decode=not args.no_encode_and_decode,
-                        mlff=args.mlff,
                         action_cls=action_cls,
                         initial_guess_method=(
                             torch.lerp

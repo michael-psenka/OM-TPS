@@ -1,5 +1,4 @@
 import torch
-from tqdm import tqdm
 
 
 class S2Action(torch.nn.Module):
@@ -53,57 +52,18 @@ class TruncatedAction(torch.nn.Module):
         self.dt = dt
         self.gamma = gamma
 
-    def forward(
-        self,
-        _path: torch.Tensor,
-        _forces: torch.Tensor = None,
-        path_term_only=False,
-        force_term_only=False,
-    ):
+    def forward(self, path: torch.Tensor, forces: torch.Tensor = None):
         """
-        Args:
-            path: tuple consisting of one or more elements of shape [P, N, 3]
-            forces: tuple consisting of one or more elements of shape [P, N, 3]
-
-        For Two for One, the path and forces are just tensors (just the alpha-Carbon coordinates and scores)
-        For DiG, the path and forces are tuples of length 2 (alpha-Carbon and residue rotation values and scores)
-
+        Args: path of shape [P, N, 3], forces of shape [P, N, 3]
         """
-        N_ref = torch.tensor([1.45597958, 0.0, 0.0])
-        C_ref = torch.tensor([-0.533655602, 1.42752619, 0.0])
-        ref = torch.stack([N_ref, C_ref], dim=0)
+        first_term = torch.square((path[1:] - path[:-1])) * (self.gamma / 4 / self.dt)
+        if forces is not None:
+            f_n = forces[:-1]
+        else:
+            f_n = self.force_func(path[:-1])
+        second_term = torch.square(f_n) * (self.dt / 4 / self.gamma)
 
-        path_term_all = 0
-        force_term_all = 0
-        if not isinstance(_path, tuple):
-            _path = (_path,)
-        if _forces is None or None in _forces:
-            if not path_term_only:
-                _forces = self.force_func(_path)
-            else:
-                _forces = (None,) * len(_path)
-
-        if not isinstance(_forces, tuple):
-            _forces = (_forces,)
-
-        for i, (path, forces) in enumerate(zip(_path, _forces)):
-            path_term = torch.zeros_like(path)
-            force_term = torch.zeros_like(path)
-
-            if not force_term_only:
-
-                if len(path_term.shape) == 4:
-                    path_term = torch.matmul(ref.to(path_term.device), path_term)
-
-                path_term = torch.square((path[1:] - path[:-1])) * (
-                    self.gamma / 4 / self.dt
-                )
-            if not path_term_only:
-                force_term = torch.square(forces) * (self.dt / 4 / self.gamma)
-            path_term_all += path_term.sum()
-            force_term_all += force_term.sum()
-
-        return path_term_all, force_term_all
+        return first_term.sum(), second_term.sum()
 
 
 class SimpleAction(torch.nn.Module):
