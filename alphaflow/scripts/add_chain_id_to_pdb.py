@@ -1,5 +1,6 @@
 import os
 import argparse
+from tqdm import tqdm
 from Bio.PDB import PDBParser, PDBIO, Select
 from alphaflow.utils.misc import add_chain_id_to_pdb
 
@@ -7,11 +8,12 @@ from alphaflow.utils.misc import add_chain_id_to_pdb
 def process_atlas_directory(atlas_dir):
     """
     Process all PDB files in the atlas directory and annotate them with their chain IDs.
+    This is useful for the models which take in templates as input. They require chain IDs to be present in the PDB files.
 
     Parameters:
     - atlas_dir (str): Path to the atlas directory containing subdirectories with PDB files.
     """
-    for folder_name in os.listdir(atlas_dir):
+    for folder_name in tqdm(os.listdir(atlas_dir)):
         folder_path = os.path.join(atlas_dir, folder_name)
 
         # Skip if it's not a directory
@@ -37,5 +39,6 @@ def process_atlas_directory(atlas_dir):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--atlas_directory", type=str, default="/data/sanjeevr/atlas")
+    args = parser.parse_args()
 
-    process_atlas_directory(atlas_directory)
+    process_atlas_directory(args.atlas_directory)

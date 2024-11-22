@@ -368,6 +368,7 @@ def main():
         sampled_mol_backbone_file = eval_folder + f"/sample-{args.gen_mode}-backbone.pt"
         sampled_mol_file = eval_folder + f"/sample-{args.gen_mode}-all.pt"
         gsd_file = eval_folder + f"/sample-{args.gen_mode}.gsd"
+        
         sampled_mol_backbone = torch.stack(
             [
                 torch.tensor(prot.atom_positions[:, [1, 0, 3]])

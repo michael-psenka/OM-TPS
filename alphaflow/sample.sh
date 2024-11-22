@@ -2,8 +2,9 @@ python sample.py \
     --mode alphafold \
     --input_csv splits/atlas_interpolation.csv \
     --weights alphaflow_md_templates_base_202402.pt \
-    --num_samples 10 \
-    --batch_size 2 \
+    --pdb_id 5w82_E \
+    --num_samples 20 \
+    --batch_size 10 \
     --msa_dir msas \
     --templates_dir /data/sanjeevr/atlas/5w82_E \
     --gen_mode iid \
