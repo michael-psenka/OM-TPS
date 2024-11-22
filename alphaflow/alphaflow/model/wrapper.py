@@ -470,6 +470,7 @@ class ModelWrapper(pl.LightningModule):
         """
         One step of the flow sampling process.
         """
+        # TODO: make sure that time in batch is correct here (not off by one)
         output = self.model(batch, prev_outputs=prev_outputs)
         pseudo_beta = pseudo_beta_fn(
             batch["aatype"], output["final_atom_positions"], None
@@ -494,9 +495,7 @@ class ModelWrapper(pl.LightningModule):
         t_idx=None,
         prev_outputs=None,
         as_protein=False,
-        no_diffusion=False,
         self_cond=True,
-        noisy_first=False,
     ):
         """
         Run sampling process starting at given time t, given the initial condition noisy.
@@ -576,9 +575,7 @@ class ModelWrapper(pl.LightningModule):
             t_idx=len(schedule) - 1,
             prev_outputs=prev_outputs,
             as_protein=as_protein,
-            no_diffusion=no_diffusion,
             self_cond=self_cond,
-            noisy_first=noisy_first,
         )
 
     def interpolate(
@@ -634,6 +631,7 @@ class ModelWrapper(pl.LightningModule):
 
         original_beta1 = beta1.clone()
         original_beta2 = beta2.clone()
+        
         original_x1 = x1.clone()
         original_x2 = x2.clone()
 
@@ -685,9 +683,7 @@ class ModelWrapper(pl.LightningModule):
             t_idx=latent_time,
             prev_outputs=None,
             as_protein=as_protein,
-            no_diffusion=False,
             self_cond=self_cond,
-            noisy_first=False,
         )
 
         # add dummy 0 coordinates for all atoms that are not in the backbone for the endpoints
@@ -702,6 +698,7 @@ class ModelWrapper(pl.LightningModule):
             dim=2,
         )
 
+
         # reset endpoints
 
         for i in range(num_paths):
@@ -711,6 +708,7 @@ class ModelWrapper(pl.LightningModule):
             prots[(i + 1) * path_length - 1].atom_positions = padded_endpoint2[
                 i, :, [1, 0, 2] + list(range(3, padded_endpoint2.shape[2]))
             ]
+
 
         return prots
 
