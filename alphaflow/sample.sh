@@ -1,11 +1,12 @@
 python sample.py \
     --mode esmfold \
-    --input_csv splits/atlas_interpolation.csv \
+    --input_csv splits/atlas_test.csv \
     --weights esmflow_md_base_202402.pt \
-    --num_samples 2 \
-    --batch_size 2 \
+    --pdb_id 7jfl_C \
+    --num_samples 50 \
+    --batch_size 50 \
     --msa_dir msas \
-    --gen_mode interpolate \
+    --gen_mode iid \
     --latent_time 1 
     # --noisy_first \
     # --no_diffusion #\

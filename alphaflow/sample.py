@@ -19,6 +19,7 @@ from alphaflow.utils.logging import get_logger
 from logging_utils import save_ovito_traj
 from utils import slerp
 from evaluate.evaluators import TicEvaluator
+from datasets.dataset_utils_empty import ATLAS_PDB_ID_TO_NAME
 
 
 parser = argparse.ArgumentParser()
@@ -175,34 +176,34 @@ def main():
     logger.info("Loading the model")
     model_class = {"alphafold": AlphaFoldWrapper, "esmfold": ESMFoldWrapper}[args.mode]
 
-    # if args.weights:
-    #     if "distilled" in args.weights:
-    #         assert (
-    #             args.noisy_first and args.no_diffusion
-    #         ), "Distilled model requires noisy_first and no_diffusion"
-    #     ckpt = torch.load(args.weights, map_location="cpu")
-    #     model = model_class(**ckpt["hyper_parameters"], training=False)
-    #     model.model.load_state_dict(ckpt["params"], strict=False)
-    #     model = model.cuda()
+    if args.weights:
+        if "distilled" in args.weights:
+            assert (
+                args.noisy_first and args.no_diffusion
+            ), "Distilled model requires noisy_first and no_diffusion"
+        ckpt = torch.load(args.weights, map_location="cpu")
+        model = model_class(**ckpt["hyper_parameters"], training=False)
+        model.model.load_state_dict(ckpt["params"], strict=False)
+        model = model.cuda()
 
-    # elif args.original_weights:
-    #     model = model_class(config, None, training=False)
-    #     if args.mode == "esmfold":
-    #         path = "esmfold_3B_v1.pt"
-    #         model_data = torch.load(path, map_location="cpu")
-    #         model_state = model_data["model"]
-    #         model.model.load_state_dict(model_state, strict=False)
-    #         model = model.to(torch.float).cuda()
+    elif args.original_weights:
+        model = model_class(config, None, training=False)
+        if args.mode == "esmfold":
+            path = "esmfold_3B_v1.pt"
+            model_data = torch.load(path, map_location="cpu")
+            model_state = model_data["model"]
+            model.model.load_state_dict(model_state, strict=False)
+            model = model.to(torch.float).cuda()
 
-    #     elif args.mode == "alphafold":
-    #         import_jax_weights_(model.model, "params_model_1.npz", version="model_3")
-    #         model = model.cuda()
+        elif args.mode == "alphafold":
+            import_jax_weights_(model.model, "params_model_1.npz", version="model_3")
+            model = model.cuda()
 
-    # else:
-    #     model = model_class.load_from_checkpoint(args.ckpt, map_location="cpu")
-    #     model.load_ema_weights()
-    #     model = model.cuda()
-    # model.eval()
+    else:
+        model = model_class.load_from_checkpoint(args.ckpt, map_location="cpu")
+        model.load_ema_weights()
+        model = model.cuda()
+    model.eval()
 
     logger.info("Model has been loaded")
 
@@ -265,17 +266,18 @@ def main():
                 )
 
                 # Get TICA
-                tic_evaluator = TicEvaluator(
-                    val_data=None,
-                    mol_name="delta",  # TODO: get rid of hardcoding
-                    eval_folder=iid_base_name,
-                    saved_ref="saved_references/saved_TICA_DELTA_testset.pickle",
-                    data_folder="/data/sanjeevr/atlas_final",
-                    folded_pdb_folder="/data/sanjeevr/atlas_interpolation",
-                    bins=101,
-                    lagtime=10,  # ATLAS trajectory spacing is 10 ps, we want to use 100 ps as lagtime (following MDGen paper)
-                    evalset="testset",
-                )
+                # mol_name = ATLAS_PDB_ID_TO_NAME[item["name"]]
+                # tic_evaluator = TicEvaluator(
+                #     val_data=None,
+                #     mol_name=mol_name,
+                #     eval_folder=iid_base_name,
+                #     saved_ref="saved_references/saved_TICA_DELTA_testset.pickle",
+                #     data_folder="/data/sanjeevr/atlas_final",
+                #     folded_pdb_folder="/data/sanjeevr/atlas_interpolation",
+                #     bins=101,
+                #     lagtime=10,  # ATLAS trajectory spacing is 10 ps, we want to use 100 ps as lagtime (following MDGen paper)
+                #     evalset="testset",
+                # )
 
                 if os.path.exists(f"{iid_base_name}/sample-iid-backbone.pt"):
                     iid_samples = torch.load(f"{iid_base_name}/sample-iid-backbone.pt")
@@ -367,11 +369,11 @@ def main():
         sampled_mol_file = eval_folder + f"/sample-{args.gen_mode}-all.pt"
         gsd_file = eval_folder + f"/sample-{args.gen_mode}.gsd"
         sampled_mol_backbone = torch.stack(
-            [
-                torch.tensor(prot.atom_positions[:, [1, 0, 2]]).reshape(-1, 3).cpu()
+            [   
+                torch.tensor(prot.atom_positions[:, [1, 0, 3]]).reshape(-1, 3).cpu() # this is saving CA, N, CB atoms
                 for prot in result
             ]
-        )
+        ) 
         sampled_mol = torch.stack(
             [torch.tensor(prot.atom_positions).reshape(-1, 3).cpu() for prot in result]
         )

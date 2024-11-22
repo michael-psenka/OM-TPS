@@ -58,39 +58,45 @@ def get_log_mean(log):
 class ModelWrapper(pl.LightningModule):
 
     def _expand_batch(self, batch, batch_size):
-        if "t" in batch.keys():
-            if batch["t"].shape[0] != batch_size:
-                batch["t"] = batch["t"].repeat(batch_size // batch["t"].shape[0])
-        if len(batch["name"]) != batch_size:
-            batch["name"] = batch["name"] * (batch_size // len(batch["name"]))
-        if batch["aatype"].shape[0] != batch_size:
-            batch["aatype"] = batch["aatype"].repeat(
-                batch_size // batch["aatype"].shape[0], 1
-            )
-        if batch["residue_index"].shape[0] != batch_size:
-            batch["residue_index"] = batch["residue_index"].repeat(
-                batch_size // batch["residue_index"].shape[0], 1
-            )
-        if batch["seq_mask"].shape[0] != batch_size:
-            batch["seq_mask"] = batch["seq_mask"].repeat(
-                batch_size // batch["seq_mask"].shape[0], 1
-            )
-        if batch["atom14_atom_exists"].shape[0] != batch_size:
-            batch["atom14_atom_exists"] = batch["atom14_atom_exists"].repeat(
-                batch_size // batch["atom14_atom_exists"].shape[0], 1, 1
-            )
-        if batch["residx_atom14_to_atom37"].shape[0] != batch_size:
-            batch["residx_atom14_to_atom37"] = batch["residx_atom14_to_atom37"].repeat(
-                batch_size // batch["residx_atom14_to_atom37"].shape[0], 1, 1
-            )
-        if batch["residx_atom37_to_atom14"].shape[0] != batch_size:
-            batch["residx_atom37_to_atom14"] = batch["residx_atom37_to_atom14"].repeat(
-                batch_size // batch["residx_atom37_to_atom14"].shape[0], 1, 1
-            )
-        if batch["atom37_atom_exists"].shape[0] != batch_size:
-            batch["atom37_atom_exists"] = batch["atom37_atom_exists"].repeat(
-                batch_size // batch["atom37_atom_exists"].shape[0], 1, 1
-            )
+        for k, v in batch.items():
+            if isinstance(v, torch.Tensor):
+                batch[k] = v.repeat(batch_size // v.shape[0], *[1] * (len(v.shape) - 1))
+            elif isinstance(v, list):
+                batch[k] = v * (batch_size // len(v))
+            
+        # if "t" in batch.keys():
+        #     if batch["t"].shape[0] != batch_size:
+        #         batch["t"] = batch["t"].repeat(batch_size // batch["t"].shape[0])
+        # if len(batch["name"]) != batch_size:
+        #     batch["name"] = batch["name"] * (batch_size // len(batch["name"]))
+        # if batch["aatype"].shape[0] != batch_size:
+        #     batch["aatype"] = batch["aatype"].repeat(
+        #         batch_size // batch["aatype"].shape[0], 1
+        #     )
+        # if batch["residue_index"].shape[0] != batch_size:
+        #     batch["residue_index"] = batch["residue_index"].repeat(
+        #         batch_size // batch["residue_index"].shape[0], 1
+        #     )
+        # if batch["seq_mask"].shape[0] != batch_size:
+        #     batch["seq_mask"] = batch["seq_mask"].repeat(
+        #         batch_size // batch["seq_mask"].shape[0], 1
+        #     )
+        # if batch["atom14_atom_exists"].shape[0] != batch_size:
+        #     batch["atom14_atom_exists"] = batch["atom14_atom_exists"].repeat(
+        #         batch_size // batch["atom14_atom_exists"].shape[0], 1, 1
+        #     )
+        # if batch["residx_atom14_to_atom37"].shape[0] != batch_size:
+        #     batch["residx_atom14_to_atom37"] = batch["residx_atom14_to_atom37"].repeat(
+        #         batch_size // batch["residx_atom14_to_atom37"].shape[0], 1, 1
+        #     )
+        # if batch["residx_atom37_to_atom14"].shape[0] != batch_size:
+        #     batch["residx_atom37_to_atom14"] = batch["residx_atom37_to_atom14"].repeat(
+        #         batch_size // batch["residx_atom37_to_atom14"].shape[0], 1, 1
+        #     )
+        # if batch["atom37_atom_exists"].shape[0] != batch_size:
+        #     batch["atom37_atom_exists"] = batch["atom37_atom_exists"].repeat(
+        #         batch_size // batch["atom37_atom_exists"].shape[0], 1, 1
+        #     )
 
     def _add_noise(self, batch, t=None, train=True):
         """

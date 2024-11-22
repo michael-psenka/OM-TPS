@@ -39,9 +39,18 @@ class Molecules(Enum):
 
 class AtlasProteins(Enum):
     DELTA = "5w82_E"
+    MEMBRANE = "1l2w_I"
     GPROTEIN = "2pbi_A"
     CAPSID = "3qc7_A"
     ADHESIN = "3wp8_A"
+
+ATLAS_PDB_ID_TO_NAME = {
+    "5w82_E": "delta",
+    "1l2w_I": "membrane",
+    "2pbi_A": "gprotein",
+    "3qc7_A": "capsid",
+    "3wp8_A": "adhesin",
+}
 
 
 all_molecules = ["alanine_dipeptide"] + [mol.name.lower() for mol in Molecules]
