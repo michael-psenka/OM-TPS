@@ -13,6 +13,9 @@ mnist/
 ffp-output/
 torchmd-net/
 two-for-one-diffusion/
+dig/
+alphaflow/
+.bashrc
 
 # ignore test notebook
 michael_testbed.ipynb
