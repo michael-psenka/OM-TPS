@@ -1,6 +1,7 @@
 *.gif
 *.traj
 *.npy
+*.csv
 *.json
 log
 *.pt
@@ -16,6 +17,7 @@ mnist/
 ffp-output/
 mlffs/
 mlff_residue_numbers/
+alphaflow/saved_references
 
 # Two for One stuff:
 

@@ -58,18 +58,18 @@ def create_frame(step, position, cell, alpha_carbon_lim, all_backbone):
     s.configuration.box = [cell[0][0], cell[1][1], cell[2][2], 0, 0, 0]
 
     # Bonds for visualization
-    # TODO: add option to include bonds between backbone and C/N atoms
+    # TODO: add option to include bonds between backbone and CB/N atoms
     senders = np.arange(min(position.shape[0], alpha_carbon_lim) - 1)
     receivers = np.arange(1, min(position.shape[0], alpha_carbon_lim))
     if all_backbone:
-        # construct bonds between CA and N atoms
+        # construct bonds between CA and N atoms AND between CA and CB atoms
         N_senders = senders
         N_receivers = np.arange(alpha_carbon_lim, 2 * alpha_carbon_lim - 1)
-        C_senders = senders
-        C_receivers = np.arange(2 * alpha_carbon_lim, 3 * alpha_carbon_lim - 1)
+        CB_senders = senders
+        CB_receivers = np.arange(2 * alpha_carbon_lim, 3 * alpha_carbon_lim - 1)
 
-        senders = np.concatenate([senders, N_senders, C_senders])
-        receivers = np.concatenate([receivers, N_receivers, C_receivers])
+        senders = np.concatenate([senders, N_senders, CB_senders])
+        receivers = np.concatenate([receivers, N_receivers, CB_receivers])
 
     bonds = np.stack([senders, receivers], axis=1)
 

@@ -57,7 +57,7 @@ def do_job(name):
     f, temp_path = tempfile.mkstemp()
     os.close(f)
     positions_stacked = []
-    for i in tqdm.trange(0, len(traj), 100):
+    for i in tqdm.trange(0, len(traj)):
         traj[i].save_pdb(temp_path)
 
         with open(temp_path) as f:

@@ -18,6 +18,9 @@ from alphaflow.utils.logging import get_logger
 
 from logging_utils import save_ovito_traj
 from utils import slerp
+from evaluate.evaluators import TicEvaluator
+from datasets.dataset_utils_empty import ATLAS_PDB_ID_TO_NAME
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--input_csv", type=str, default="splits/transporters_only.csv")
@@ -133,7 +136,6 @@ parser.add_argument(
 
 args = parser.parse_args()
 
-
 logger = get_logger(__name__)
 torch.set_float32_matmul_precision("high")
 
@@ -208,6 +210,7 @@ def main():
     results = defaultdict(list)
     os.makedirs(args.output_path, exist_ok=True)
     runtime = defaultdict(list)
+
     for i, item in enumerate(valset):
 
         if args.pdb_id and item["name"] not in args.pdb_id:
@@ -225,8 +228,12 @@ def main():
         result = []
 
         num_batches = max(1, args.num_samples // args.batch_size)
-        # TODO: convert to batched inference
-        for j in tqdm.trange(num_batches):
+
+        for j in range(num_batches):
+            logger.info(f"Generating batch {j+1}/{num_batches}")
+            actual_batch_size = min(
+                args.batch_size, args.num_samples - j * args.batch_size
+            )
             if args.subsample or args.resample:
                 item = valset[i]  # resample MSA
 
@@ -237,6 +244,7 @@ def main():
             if args.gen_mode == "iid":
                 prots = model.sample(
                     batch,
+                    num_samples=actual_batch_size,
                     as_protein=True,
                     noisy_first=args.noisy_first,
                     no_diffusion=args.no_diffusion,
@@ -244,7 +252,7 @@ def main():
                     self_cond=args.self_cond,
                 )
             elif "interpolate" in args.gen_mode:
-
+                # TODO: get samples from ground truth MD simulations (need to define clusters first)
                 # Define endpoints
                 # For now just get them from iid samples
 
@@ -256,18 +264,33 @@ def main():
                     + eval_folder.split("/")[2]
                     + "/main_eval_output_iid"
                 )
-                if os.path.exists(f"{iid_base_name}/sample-iid-all.pt"):
-                    iid_samples = torch.load(f"{iid_base_name}/sample-iid-all.pt")
+
+                # Get TICA
+                # mol_name = ATLAS_PDB_ID_TO_NAME[item["name"]]
+                # tic_evaluator = TicEvaluator(
+                #     val_data=None,
+                #     mol_name=mol_name,
+                #     eval_folder=iid_base_name,
+                #     saved_ref="saved_references/saved_TICA_DELTA_testset.pickle",
+                #     data_folder="/data/sanjeevr/atlas_final",
+                #     folded_pdb_folder="/data/sanjeevr/atlas_interpolation",
+                #     bins=101,
+                #     lagtime=10,  # ATLAS trajectory spacing is 10 ps, we want to use 100 ps as lagtime (following MDGen paper)
+                #     evalset="testset",
+                # )
+
+                if os.path.exists(f"{iid_base_name}/sample-iid-backbone.pt"):
+                    iid_samples = torch.load(f"{iid_base_name}/sample-iid-backbone.pt")
                     endpoint_1 = (
                         iid_samples[0]
                         .unsqueeze(0)
-                        .repeat(args.num_samples, 1, 1)
+                        .repeat(actual_batch_size, 1, 1)
                         .to(model.device)
                     )
                     endpoint_2 = (
-                        iid_samples[-1]
+                        iid_samples[45]
                         .unsqueeze(0)
-                        .repeat(args.num_samples, 1, 1)
+                        .repeat(actual_batch_size, 1, 1)
                         .to(model.device)
                     )
                 else:
@@ -332,9 +355,7 @@ def main():
 
             runtime[item["name"]].append(time.time() - start)
 
-            result.append(
-                prots
-            )  # TODO: take care of taking last sample in sample function?
+            result.append(prots)  # list of lists
 
         result = list(
             itertools.chain.from_iterable(result)
@@ -348,11 +369,11 @@ def main():
         sampled_mol_file = eval_folder + f"/sample-{args.gen_mode}-all.pt"
         gsd_file = eval_folder + f"/sample-{args.gen_mode}.gsd"
         sampled_mol_backbone = torch.stack(
-            [
-                torch.tensor(prot.atom_positions[:, [1, 0, 2]]).reshape(-1, 3).cpu()
+            [   
+                torch.tensor(prot.atom_positions[:, [1, 0, 3]]).reshape(-1, 3).cpu() # this is saving CA, N, CB atoms
                 for prot in result
             ]
-        )
+        ) 
         sampled_mol = torch.stack(
             [torch.tensor(prot.atom_positions).reshape(-1, 3).cpu() for prot in result]
         )
