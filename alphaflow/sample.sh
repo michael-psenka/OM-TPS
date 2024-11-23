@@ -8,10 +8,12 @@ python sample.py \
     --gen_mode om_interpolate \
     --latent_time 1 \
     --initial_guess_level 1 \
-    --path_length 3 \
+    --no_encode_and_decode \
+    --path_length 5 \
     --msa_dir msas \
     --disable_logging \
-    
+    --steps 100 
+
     # --templates_dir /data/sanjeevr/atlas/5w82_E \
     # --noisy_first \
     # --no_diffusion #\

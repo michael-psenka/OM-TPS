@@ -58,7 +58,7 @@ parser.add_argument(
 parser.add_argument("-b", "--batch_size", type=int, default=50, help="Batch size")
 parser.add_argument(
     "--latent_time",
-    type=int,
+    type=float,
     default=7,
     help="step at which to do latent interpolation - must be in range [0, flow_steps]",
 )
@@ -89,7 +89,7 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--lr", type=float, help="learning rate for OM optimization", default=1e-2
+    "--lr", type=float, help="learning rate for OM optimization", default=2e-1
 )
 parser.add_argument("--om_dt", type=float, help="dt for OM optimization", default=1)
 
@@ -367,7 +367,7 @@ def main():
 
         sampled_mol_backbone = torch.stack(
             [
-                torch.tensor(prot.atom_positions[:, [1, 0, 3]])
+                torch.tensor(prot.atom_positions[:, 3])
                 .reshape(-1, 3)
                 .cpu()  # this is saving CA, N, CB atoms
                 for prot in result

@@ -5,6 +5,7 @@ import torch, os, wandb, time
 from copy import deepcopy
 from tqdm import tqdm
 import pandas as pd
+import itertools
 
 from .esmfold import ESMFold
 from .alphafold import AlphaFold
@@ -986,27 +987,37 @@ class ModelWrapper(pl.LightningModule):
                         }
                     )
 
-        import pdb
-
-        pdb.set_trace()
         # TODO: replace below code with ours
         all_denoised_paths = []
         # decode the optimized paths (keeping every 20 for future visualization)
         for path in all_noised_pseudo_betas[::20]:
             if encode_and_decode:
-                denoised_path = self.p_sample_loop(
-                    path.reshape(-1, n_atoms, 3), latent_time, temperature=temperature
+                denoised_path = self.sample_from_t(
+                    new_batch,
+                    noised_pseudo_betas.reshape(-1, n_residues, 3),
+                    schedule,
+                    t_idx=latent_time,
+                    prev_outputs=None,
+                    as_protein=as_protein,
+                    self_cond=self_cond,
                 )
+
             else:
-                denoised_path = path
+                denoised_path = []
+                path = path.reshape(-1, n_residues, 3)
+                for p in path:
+                    prot = deepcopy(prots[0])
+                    prot.atom_positions = torch.zeros_like(prot.atom_positions)
+                    prot.atom_positions[:, 3] = p
+                    denoised_path.append(prot)
 
-            denoised_path = denoised_path.reshape(num_paths, path_length, n_atoms, 3)
+                # TODO: reset the endpoint (is it necessary?) - don't think so
 
-            # reset the endpoints
-            denoised_path[:, 0], denoised_path[:, -1] = original_x1, original_x2
-
-            denoised_path = denoised_path.reshape(-1, n_atoms, 3) * self.norm_factor
             all_denoised_paths.append(denoised_path)
+
+        all_denoised_paths = list(
+            itertools.chain.from_iterable(all_denoised_paths)
+        )  # consolidate list of lists
 
         # Print improvement in action
         print(
@@ -1021,14 +1032,7 @@ class ModelWrapper(pl.LightningModule):
             f"Initial force norm: {force_terms[0]}, Final force norm: {force_terms[-1]}, Percent improvement: {(force_terms[0] - force_terms[-1]) / (force_terms[0]+1e-8) * 100}%"
         )
 
-        # return dict with final path, actions, path terms, force terms
-        return {
-            "final_path": all_denoised_paths[-1],
-            "all_paths": torch.stack(all_denoised_paths),
-            "actions": torch.tensor(actions),
-            "path_terms": torch.tensor(path_terms),
-            "force_terms": torch.tensor(force_terms),
-        }
+        return all_denoised_paths
 
     def _compute_validation_metrics(
         self, batch, outputs, superimposition_metrics=False
