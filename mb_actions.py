@@ -43,7 +43,7 @@ class S2Action(torch.nn.Module):
             self.dt * self.D / torch.tensor(2.0)
         )
         #third_term = 0.0
-        result = torch.sum(first_term + second_term + third_term)
+        result = torch.sum(first_term + second_term - third_term)
         return result
 
 
@@ -129,8 +129,9 @@ class HutchinsonAction(torch.nn.Module):
             for _ in range(N+1):
                 v = torch.randint(0, 2, (2,), dtype=torch.float32) * 2 - 1
                 v = v.to(x.device)
+                #Minuts is from the sign of the forces
                 Av, = vjp_func(v)
-                res += torch.sum(v*Av) 
+                res += -torch.sum(v*Av) 
             
             return forces, res / N
 
@@ -156,6 +157,6 @@ class HutchinsonAction(torch.nn.Module):
         #print(first_term, second_term, third_term)
         #sdasd
 
-        result = torch.sum(first_term + second_term + third_term)
+        result = torch.sum(first_term + second_term - third_term)
         return result / torch.tensor(4.0)
 

@@ -53,8 +53,8 @@ class SimpleMB:
 
         self.total_potential = lambda X: torch.sum(self.U(X))
 
-        self.force_func = vmap(lambda X: grad_and_value(self.total_potential)(X)[0])
-        self.sample_force_func = lambda X: grad_and_value(self.total_potential)(X)[0]
+        self.force_func = vmap(lambda X: -grad_and_value(self.total_potential)(X)[0])
+        self.sample_force_func = lambda X: -grad_and_value(self.total_potential)(X)[0]
 
         self.old_force_func = lambda X: (
             torch.tensor(0),

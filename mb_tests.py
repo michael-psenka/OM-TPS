@@ -5,10 +5,13 @@ Use the same parameters to evaluate the actions so that we have a one-to-one com
 
 import torch
 import os
-from simpleMB import SimpleMB
-
 import numpy as np
 import matplotlib.pyplot as plt
+import pickle
+
+from simpleMB import SimpleMB
+from draw_gifs import GifDrawer
+
 
 from tqdm import tqdm
 import imageio
@@ -16,9 +19,30 @@ import wandb
 
 from mb_actions import SimpleAction, S2Action, HutchinsonAction, TruncatedAction
 
-wandb.init(mode="disabled")
+# Action parameters
+
+line_density = 80  # number of points on the line
+iterations = 1000
+alpha = 2e-1
+write_every = 100
+# WARGNING if use_guess is true, line_density is ignored
+use_guess = False
+# Save guess for further runs
+save_guess = False
+
+global_config = {
+    "line_density": line_density,
+    "iterations": iterations,
+    "alpha": alpha,
+    "write_every": write_every,
+    "use_guess": use_guess,
+    "save_guess": save_guess
+}
+
 wandb.login()
-#WANDB_MODE=disabledwandb.login()
+wandb.init(
+    project="OMBasics", config=global_config, # Let the name be generated name="MB-1000-sweep"
+)
 
 os.makedirs("MB_tests", exist_ok=True)
 
@@ -30,170 +54,150 @@ potential = SimpleMB(device=device, n_in=2)
 
 x0, xf = potential.initial_point.detach(), potential.final_point.detach()
 
-
-# Action parameters
-
-line_density = 50  # number of points on the line
-iterations = 1000
-alpha = 2e-1
-write_every = 100
-
-# Loop over a bunch of different action parameters
-
-# Evaluate the action with the same hyperparams regardless of the optimization
-evaluation_action_cls = SimpleAction(
-    force_func=potential.force_func,
-    laplace_func=potential.laplace,
-    gamma=torch.tensor(0.1).to(device),
-    dt=0.1,
-    D=torch.tensor(10).to(device),
-)
-evaluation_action = lambda path: evaluation_action_cls(path)
-
-#for action_f in [SimpleAction, S2Action]:
-
-#action_f = S2Action
-#action_str = "S2Action"
-#action_f = TruncatedAction
-#action_str = "TruncatedAction"
-
-action_f = HutchinsonAction
-action_str = "Hutchinson"
-
-#action_f = SimpleAction
+# Gif drawing
+gif_drawer = GifDrawer()
 
 gamma = torch.tensor(1.0).to(device)
 dt = torch.tensor(1.0).to(device)
-#for gamma in torch.logspace(-2, 1, 5).to(device):
-#    for dt in torch.logspace(-2, 0, 5):
+D = torch.tensor(1.0)
 
-D = torch.tensor(0.2)
-config = {
+#Create trunaced action config
+trunc_config = {
+    "gamma": gamma.item(),
+    "dt": dt.item(),
+    "D": 0,
+    "action": S2Action,
+    "name": "Trunc_dt={:.2f}_gamma={:.2f}_D={:.2f}".format(dt.item(), gamma.item(), 0),
+} 
+
+s2_config = {
     "gamma": gamma.item(),
     "dt": dt.item(),
     "D": D.item(),
-    "action": action_f.__name__,
-}
-print(config)
+    "action": S2Action,
+    "name": "S2dt={:.2f}_gamma={:.2f}_D={:.2f}".format(dt.item(), gamma.item(), D.item()),
+} 
+
+hutch_config = {
+    "gamma": gamma.item(),
+    "dt": dt.item(),
+    "D": D.item(),
+    "action": HutchinsonAction,
+    "name": "Hutch_dt={:.2f}_gamma={:.2f}_D={:.2f}".format(dt.item(), gamma.item(), D.item()),
+} 
+
+D = torch.tensor(5.0)
+s2_highD = {
+    "gamma": gamma.item(),
+    "dt": dt.item(),
+    "D": D.item(),
+    "action": S2Action,
+    "name": "S2dt={:.2f}_gamma={:.2f}_D={:.2f}".format(dt.item(), gamma.item(), D.item()),
+} 
+
+hutch_highD = {
+    "gamma": gamma.item(),
+    "dt": dt.item(),
+    "D": D.item(),
+    "action": HutchinsonAction,
+    "name": "Hutch_dt={:.2f}_gamma={:.2f}_D={:.2f}".format(dt.item(), gamma.item(), D.item()),
+} 
+
+configs = [trunc_config, s2_config, hutch_config, s2_highD, hutch_highD]
+
 wandb.init(
-    project="mb-tests-100points-fixedopt", config=config, name="MB_test"
+    project="mb-tests-multi-parameter", config=global_config, name="MB-100-sweep"
 )
-
-#action_str = "Hutch"
-print(
-    f"MB_{action_str}_gamma={round(gamma.item(), 1)}_dt={dt}_D={D.item()}"
-)
-action_func = lambda path: action_f(
-    sample_force_func=potential.sample_force_func,
-    laplace_func=potential.laplace,
-    dt=dt,
-    gamma=gamma,
-    D=D,
-)(path)
-
-line_x = torch.linspace(x0[0], xf[0], line_density)
-line_y = torch.linspace(x0[1], xf[1], line_density)
-line_points = torch.stack((line_x, line_y), axis=-1).to(device)
-
-optimizer = torch.optim.Adam([line_points], lr=alpha)
 
 gif_data = []
 
-# Choose action
+result_dict = {}
+log_dict = {}
 
-# plot the potential
-num_points = 100
-x_values = torch.linspace(potential.Lx, potential.Hx, num_points)
-y_values = torch.linspace(potential.Ly, potential.Hy, num_points)
+if use_guess:
+    with open('good_guess.bck', 'rb') as handle:
+        good_guess = pickle.load(handle)
 
-x, y = torch.meshgrid(x_values, y_values, indexing="xy")
-z = potential.U_split(x.to(device), y.to(device)).cpu()
-actions = []
-for i in tqdm(range(iterations)):
-    line_points.requires_grad = True
-    action = action_func(line_points)
-    reverse_action = action_func(torch.flip(line_points, dims=(0,)))
+print("Will run for {} runs.".format(len(configs)))
 
-    # It seems likely that they are the same. It probably can be proven
-    total_action = action + reverse_action
+for config in configs:
 
-    optimizer.zero_grad()
+    action_f = config["action"]
+    action_func = lambda path: action_f(
+            sample_force_func=potential.sample_force_func,
+            laplace_func=potential.laplace,
+            dt=config["dt"],
+            gamma=config["gamma"],
+            D=config["D"],
+        )(path)
+    run_name = config["name"]
+    result_dict[run_name] = []
 
-    (grads,) = torch.autograd.grad(total_action, line_points)
+    
+    if use_guess:
+        line_points = torch.tensor(good_guess).to(device)
+    else:
+        line_x = torch.linspace(x0[0], xf[0], line_density)
+        line_y = torch.linspace(x0[1], xf[1], line_density)
+        line_points = torch.stack((line_x, line_y), axis=-1).to(device)
+    optimizer = torch.optim.Adam([line_points], lr=alpha)
 
-    with torch.no_grad():
-        grads[0, :], grads[-1, :] = torch.zeros(2), torch.zeros(2)
-        line_points.grad = grads
-        optimizer.step()
-        grads = grads.cpu()
-        draw_points = line_points.detach().cpu()
+    print("Running ", run_name)
 
-    if i % write_every == 0:
-        # print(f"Total action for the step {i} is {(action+reverse_action).detach().numpy()}")
-        fig, ax = plt.subplots()
-        colorbar = ax.imshow(
-            z,
-            extent=(
-                x_values.min(),
-                x_values.max(),
-                y_values.min(),
-                y_values.max(),
-            ),
-            vmin=potential.U_min,
-            vmax=potential.U_max,
-            origin="lower",
-            cmap="viridis",
-            aspect="auto",
-        )
-        ax.set(xlabel="x-axis", ylabel="y-axis", title="Contour Plot")
-        plt.colorbar(colorbar)
+    for i in tqdm(range(iterations)):
+        line_points.requires_grad = True
+        action = action_func(line_points)
+        reverse_action = action_func(torch.flip(line_points, dims=(0,)))
 
-        scatter_plot = ax.scatter(
-            draw_points[:, 0],
-            draw_points[:, 1],
-            s=1,
-            c="red",
-            label="Line",
-        )
-        quiver_plot = ax.quiver(
-            draw_points[:, 0],
-            draw_points[:, 1],
-            -grads[:, 0],
-            -grads[:, 1],
-            scale_units="xy",
-            angles="xy",
-            color="blue",
-            alpha=0.7,
-        )
-        ax.legend()
+        # It seems likely that they are the same. It probably can be proven
+        total_action = action + reverse_action
 
-        # plt.show()
+        optimizer.zero_grad()
 
-        # Save the frame to gif_data
+        (grads,) = torch.autograd.grad(total_action, line_points)
 
-        fig.canvas.draw()
-        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype="uint8")
-        image = image.reshape(
-            fig.canvas.get_width_height()[::-1] + (3,)
-        )
-        gif_data.append(image)
-        actions.append(total_action.item())
+        with torch.no_grad():
+            grads[0, :], grads[-1, :] = torch.zeros(2), torch.zeros(2)
+            line_points.grad = grads
+            optimizer.step()
+            grads = grads.cpu()
+            draw_points = line_points.detach().cpu()
+            result_dict[run_name].append((draw_points.detach().cpu().numpy(), grads.detach().cpu().numpy()))
 
-imageio.mimsave(
-    f"MB_tests/MB_{action_str}_gamma={round(gamma.item(), 3)}_dt={round(dt.item(), 3)}_D={round(D.item(), 3)}.gif",
-    gif_data,
-    fps=3,
-)
-log_dict = {
-    "gif": wandb.Video(
-        f"MB_tests/MB_{action_str}_gamma={round(gamma.item(), 3)}_dt={round(dt.item(), 3)}_D={round(D.item(), 3)}.gif"
+        if i % write_every == 0:
+            image = gif_drawer.draw_single_traj(draw_points, grads)
+            gif_data.append(image)
+
+    imageio.mimsave(
+        f"MB_tests/{run_name}.gif",
+        gif_data,
+        fps=3,
     )
-}
-plt.close(fig)
+    
+    log_dict[run_name] = wandb.Video(f"MB_tests/{run_name}.gif")
+
+    gif_data = []
+    
+if save_guess: 
+    with open('good_guess.bck', 'wb') as handle:
+        pickle.dump(line_points.detach().cpu().numpy(), handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+# Save all points for future plotting if needed.
+with open('trajectories.bck', 'wb') as handle:
+    pickle.dump(result_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+gif_drawer.draw_all_data(result_dict)
+log_dict["all_runs"] = wandb.Video(f"MB_tests/all_runs.gif")
+
+wandb.log(log_dict)
+wandb.run.summary.update(log_dict)
+wandb.finish()
+
+"""
 
 # Plot gif of OM actions
 plt.figure()
-plt.plot(np.arange(len(actions)), actions)
+plt.plot(np.arange(len(configs)), actions)
 plt.xlabel("Optimization Steps")
 plt.ylabel("OM Action")
 plt.title("OM Action vs Optimization Steps")
@@ -208,3 +212,5 @@ log_dict.update({"final_eval_action": eval_action.item()})
 wandb.log(log_dict, step=0)
 wandb.run.summary.update(log_dict)
 wandb.finish()
+
+"""
