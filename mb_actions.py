@@ -1,9 +1,8 @@
 import torch
 from torch.func import vmap, grad, vjp
 
-
 class S2Action(torch.nn.Module):
-    """Action with Hessian"""
+    """Action with Hessian calculated using autodiff - Hessian is exact."""
 
     def __init__(self, sample_force_func=None, laplace_func=None, dt=1.0, gamma=1.0, D=1.0):
         """
@@ -29,21 +28,22 @@ class S2Action(torch.nn.Module):
         x_n = path[:-1]
         x_np = path[1:]
         f_n = self.force_func(x_n)
-        #f_np = self.force_func(x_np)
 
-        first_term = torch.square((x_np - x_n)) * (self.gamma / 4 / self.dt)
-        second_term = torch.square(f_n) * (
+        first_term = torch.sum(torch.square((x_np - x_n)) * (self.gamma / 4 / self.dt), axis=-1)
+        second_term = torch.sum(torch.square(f_n) * (
             self.dt / 4 / self.gamma
-        )
-
+        ), axis=-1)
 
         exact_laplace = self.laplace_func(x_n)
 
-        third_term = exact_laplace * (
+        third_term = exact_laplace.squeeze() * (
             self.dt * self.D / torch.tensor(2.0)
         )
-        #third_term = 0.0
+
+        assert(first_term.shape == second_term.shape and second_term.shape == third_term.shape)
         result = torch.sum(first_term + second_term - third_term)
+
+        # Result is the action and is expected to have shape [batch, 1]
         return result
 
 
@@ -71,6 +71,7 @@ class TruncatedAction(torch.nn.Module):
         second_term = torch.square(self.force_func(path[:-1])) * (
             self.dt / 4 / self.gamma
         )
+
         result = torch.sum(first_term + second_term)
         return result
 
@@ -102,35 +103,41 @@ class SimpleAction(torch.nn.Module):
             self.dt / self.gamma / 2.0
         )
         third_term = (path[1:] - path[:-1]) * (f_np - f_n)
+
+
         result = torch.sum(first_term + second_term + third_term)
         return result / torch.tensor(4.0)
 
 class HutchinsonAction(torch.nn.Module):
     """
-    Action with some randomness in hessian calculation. Saves one function call. 
+    Action that is the same as S2 Action but calculates laplacian using Hutchinson trick using 
+    random vector of -1s and 1s.
     """
 
-    def __init__(self, dt, gamma, D, sample_force_func=None, laplace_func = None):
+    def __init__(self, dt, gamma, D, N=1, sample_force_func=None, laplace_func = None):
         super(HutchinsonAction, self).__init__()
         self.sample_force_func = sample_force_func
         self.dt = dt
         self.gamma = gamma
         self.D = D
+        self.N = N
         self.true_laplace = laplace_func
         self.force_func = vmap(sample_force_func)
 
         
         def force_and_laplace(x: torch.tensor):
-            N = 1
-            res = torch.zeros_like(x)
+            res = 0
 
             forces, vjp_func = vjp(self.sample_force_func, x)
 
-            for _ in range(N+1):
+            for _ in range(self.N):
+                # Generate random vector of -1s and 1s.
                 v = torch.randint(0, 2, (2,), dtype=torch.float32) * 2 - 1
                 v = v.to(x.device)
-                #Minuts is from the sign of the forces
+                # Calculate matrix vector product of Hessian and random vector
                 Av, = vjp_func(v)
+
+                # Make it a scalar. Minus is from the sign of the forces
                 res += -torch.sum(v*Av) 
             
             return forces, res / N
@@ -142,21 +149,18 @@ class HutchinsonAction(torch.nn.Module):
         
         x_n = path[:-1]
         x_np = path[1:]
-        f_n = self.force_func(x_n)
-        f_np, laplace = self.force_and_laplace(x_np)
+        f_n, laplace = self.force_and_laplace(x_n)
 
-        first_term = torch.square((path[1:] - path[:-1])) * (self.gamma / self.dt)
-
-        second_term = (torch.square(f_n) + torch.square(f_np)) * (
-            self.dt / self.gamma / 2.0
-        )
+        # Make sure the terms are [batch, 1] as is the third term
+        first_term = torch.sum(torch.square((x_np - x_n)) * (self.gamma / 4 / self.dt), axis=-1)
+        second_term = torch.sum(torch.square(f_n) * (
+            self.dt / 4 / self.gamma
+        ), axis=-1)
 
         third_term = laplace * self.dt * self.D / torch.tensor(2.0)
 
-
-        #print(first_term, second_term, third_term)
-        #sdasd
-
+        # First apply physical dimension sum. The sum can be rearanged but Hutch term has to be scalar. So others need to be too
         result = torch.sum(first_term + second_term - third_term)
-        return result / torch.tensor(4.0)
 
+        # Result is the action and is expected to have shape [batch, 1]
+        return result

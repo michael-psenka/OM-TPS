@@ -163,7 +163,7 @@ class SimpleMB:
             argnums=1,
         )(x, y)
 
-        return torch.stack((U_xx, U_yy), axis=-1)
+        return U_xx + U_yy
 
     def get_init_point(self, batch_size):
 

@@ -24,6 +24,7 @@ from mb_actions import SimpleAction, S2Action, HutchinsonAction, TruncatedAction
 line_density = 80  # number of points on the line
 iterations = 1000
 alpha = 2e-1
+#How many subiterations of Hutch to do
 write_every = 100
 # WARGNING if use_guess is true, line_density is ignored
 use_guess = False
@@ -41,7 +42,7 @@ global_config = {
 
 wandb.login()
 wandb.init(
-    project="OMBasics", config=global_config, # Let the name be generated name="MB-1000-sweep"
+    project="OMBasics", config=global_config, # name = "Define name if desired"
 )
 
 os.makedirs("MB_tests", exist_ok=True)
@@ -104,10 +105,6 @@ hutch_highD = {
 } 
 
 configs = [trunc_config, s2_config, hutch_config, s2_highD, hutch_highD]
-
-wandb.init(
-    project="mb-tests-multi-parameter", config=global_config, name="MB-100-sweep"
-)
 
 gif_data = []
 
