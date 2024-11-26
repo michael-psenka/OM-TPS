@@ -284,17 +284,20 @@ def main():
                 if os.path.exists(f"{iid_base_name}/sample-iid-all.pt"):
                     iid_samples = torch.load(f"{iid_base_name}/sample-iid-all.pt")
                     endpoint_1 = (
-                        iid_samples[8]  # unfolded state
+                        iid_samples[13]  # unfolded state
                         .unsqueeze(0)
                         .repeat(actual_batch_size, 1, 1)
                         .to(model.device)
                     )
                     endpoint_2 = (
-                        iid_samples[13]  # folded state
+                        iid_samples[8]  # folded state
                         .unsqueeze(0)
                         .repeat(actual_batch_size, 1, 1)
                         .to(model.device)
                     )
+                    from logging_utils import save_ovito_traj
+                    save_ovito_traj(endpoint_1.repeat_interleave(3, dim=1), "test1.gsd")
+                    save_ovito_traj(endpoint_2.repeat_interleave(3, dim=1), "test2.gsd")
                 else:
                     raise FileNotFoundError("Need to sample iid first")
 

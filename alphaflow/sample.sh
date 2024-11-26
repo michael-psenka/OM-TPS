@@ -1,7 +1,7 @@
 python sample.py \
-    --mode esmfold \
+    --mode alphafold \
     --input_csv splits/atlas_interpolation.csv \
-    --weights esmflow_md_base_202402.pt \
+    --weights alphaflow_md_base_202402.pt \
     --pdb_id 5w82_E \
     --num_samples 1 \
     --batch_size 1 \
