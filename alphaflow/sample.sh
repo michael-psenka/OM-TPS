@@ -9,10 +9,12 @@ python sample.py \
     --latent_time 1 \
     --initial_guess_level 1 \
     --no_encode_and_decode \
+    --om_dt 0.1 \
     --path_length 5 \
     --msa_dir msas \
     --disable_logging \
-    --steps 100 
+    --steps 20 \
+    # --lr 2e-2
 
     # --templates_dir /data/sanjeevr/atlas/5w82_E \
     # --noisy_first \

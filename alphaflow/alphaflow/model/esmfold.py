@@ -183,7 +183,12 @@ class ESMFold(nn.Module):
         dists = dists.unsqueeze(-1)
         inf = self.cfg.input_pair_embedder.inf
         upper = torch.cat([lower[1:], lower.new_tensor([inf])], dim=-1)
-        dgram = ((dists > lower) * (dists < upper)).type(dists.dtype)
+
+        # Smooth binning using sigmoid for differentiability
+        smooth_lower = torch.sigmoid(10 * (dists - lower))
+        smooth_upper = torch.sigmoid(10 * (upper - dists))
+        dgram = smooth_lower * smooth_upper  # Smooth bin indicator
+        # dgram = ((dists > lower) * (dists < upper)).type(dists.dtype)
 
         inp_z = self.input_pair_embedding(dgram * mask.unsqueeze(-1))
         inp_z = self.input_pair_stack(inp_z, mask, chunk_size=None)

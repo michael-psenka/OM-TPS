@@ -122,8 +122,11 @@ class AlphaFold(nn.Module):
         dists = dists.unsqueeze(-1)
         inf = self.config.input_pair_embedder.inf
         upper = torch.cat([lower[1:], lower.new_tensor([inf])], dim=-1)
-        dgram = ((dists > lower) * (dists < upper)).type(dists.dtype)
-
+        # Smooth binning using sigmoid for differentiability
+        smooth_lower = torch.sigmoid(10 * (dists - lower))
+        smooth_upper = torch.sigmoid(10 * (upper - dists))
+        dgram = smooth_lower * smooth_upper  # Smooth bin indicator
+        # dgram = ((dists > lower) * (dists < upper)).type(dists.dtype)
         inp_z = self.input_pair_embedding(dgram * mask.unsqueeze(-1))
         inp_z = self.input_pair_stack(inp_z, mask, chunk_size=None)
         return inp_z
@@ -161,6 +164,7 @@ class AlphaFold(nn.Module):
         #         feats[k] = feats[k].to(dtype=dtype)
 
         # Grab some data about the input
+
         batch_dims = feats["target_feat"].shape[:-2]
         no_batch_dims = len(batch_dims)
         n = feats["target_feat"].shape[-2]
@@ -311,7 +315,6 @@ class AlphaFold(nn.Module):
                 del input_tensors
             else:
                 # [*, N, N, C_z]
-
                 z = self.extra_msa_stack(
                     a,
                     z,
@@ -367,6 +370,7 @@ class AlphaFold(nn.Module):
             inplace_safe=inplace_safe,
             _offload_inference=self.globals.offload_inference,
         )
+
         outputs["final_atom_positions"] = atom14_to_atom37(
             outputs["sm"]["positions"][-1], feats
         )

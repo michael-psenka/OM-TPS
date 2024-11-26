@@ -149,7 +149,6 @@ if args.subsample:  # https://elifesciences.org/articles/75751#s3
     data_cfg.predict.max_extra_msa = args.subsample
 
 
-@torch.no_grad()
 def main():
 
     basic_append = f"_{args.gen_mode}"
@@ -178,8 +177,11 @@ def main():
                 args.noisy_first and args.no_diffusion
             ), "Distilled model requires noisy_first and no_diffusion"
         ckpt = torch.load(args.weights, map_location="cpu")
+
+        # ckpt["hyper_parameters"]["config"]["globals"]["blocks_per_ckpt"] = None # disable gradient checkpointing
         model = model_class(**ckpt["hyper_parameters"], training=False)
         model.model.load_state_dict(ckpt["params"], strict=False)
+
         model = model.cuda()
 
     elif args.original_weights:
@@ -199,7 +201,11 @@ def main():
         model = model_class.load_from_checkpoint(args.ckpt, map_location="cpu")
         model.load_ema_weights()
         model = model.cuda()
-    model.eval()
+
+    if args.gen_mode == "iid" or args.gen_mode == "interpolate":
+        model.eval()
+    elif args.gen_mode == "om_interpolate":
+        model.train()
 
     logger.info("Model has been loaded")
 

@@ -480,22 +480,29 @@ class ModelWrapper(pl.LightningModule):
                 new_batch[k] = v[: pseudo_beta.shape[0]]
 
         pseudo_beta_dists = (
-            torch.sum(
-                (pseudo_beta.unsqueeze(-2) - pseudo_beta.unsqueeze(-3)) ** 2, dim=-1
+            torch.clamp(
+                torch.sum(
+                    (pseudo_beta.unsqueeze(-2) - pseudo_beta.unsqueeze(-3)) ** 2, dim=-1
+                ),
+                min=1e-8,
             )
             ** 0.5
-        )
-        # TODO: populate batch with relevant stuff
+        )  # clamp to avoid NaN gradients from zero distances
 
+        # populate batch with relevant stuff
         new_batch["noised_pseudo_beta_dists"] = pseudo_beta_dists
         new_batch["t"] = torch.ones(pseudo_beta.shape[0], device=pseudo_beta.device) * t
         new_batch["pseudo_beta"] = pseudo_beta  # probably not needed
 
-        model_output = self.model(new_batch)
+        with torch.enable_grad():
+            model_output = self.model(new_batch)
+
         model_output_beta = pseudo_beta_fn(
             new_batch["aatype"], model_output["final_atom_positions"], None
         )
-        noise_pred = (pseudo_beta - (1 - t) * model_output_beta) / t
+        noise_pred = (
+            pseudo_beta - (1 - t) * model_output_beta
+        ) / t  # currently only differentiating through this
         return -noise_pred
 
     @torch.no_grad()
@@ -803,6 +810,9 @@ class ModelWrapper(pl.LightningModule):
         print(
             f"Generating initial guess with linear interpolation at t={initial_guess_level / len(schedule)}"
         )
+
+        self.model.training = True
+
         prots = self.interpolate(
             batch,
             x1,
@@ -963,18 +973,18 @@ class ModelWrapper(pl.LightningModule):
                     f"OM Action: {action.item()}, Path Contribution: {round(path_contribution*100, 3)}%, Force Contribution: {round(force_contribution * 100, 3)}%"
                 )
 
-                if path_contribution > 0.99 and i > 50 and not changed:
-                    print(
-                        "Path contribution is too high, decreasing dt to upweight the path loss"
-                    )
-                    dt /= 10  # decrease the time step to upweight the path term
-                    changed = True
-                elif force_contribution > 0.99 and i > 50 and not changed:
-                    print(
-                        "Force contribution is too high, increasing dt to upweight the force loss"
-                    )
-                    dt *= 10  # increase the time step to upweight the force term
-                    changed = True
+                # if path_contribution > 0.99 and i > 50 and not changed:
+                #     print(
+                #         "Path contribution is too high, decreasing dt to upweight the path loss"
+                #     )
+                #     dt /= 10  # decrease the time step to upweight the path term
+                #     changed = True
+                # elif force_contribution > 0.99 and i > 50 and not changed:
+                #     print(
+                #         "Force contribution is too high, increasing dt to upweight the force loss"
+                #     )
+                #     dt *= 10  # increase the time step to upweight the force term
+                #     changed = True
 
                 if log:
                     wandb.log(
