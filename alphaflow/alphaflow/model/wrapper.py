@@ -811,6 +811,60 @@ class ModelWrapper(pl.LightningModule):
             f"Generating initial guess with linear interpolation at t={initial_guess_level / len(schedule)}"
         )
 
+        num_paths = x1.shape[0]
+
+        self._expand_batch(batch, num_paths)
+
+        batch1 = deepcopy(batch)
+        batch2 = deepcopy(batch)
+
+        x1 = x1.reshape(num_paths, -1, 37, 3)
+        x2 = x2.reshape(num_paths, -1, 37, 3)
+        # extract beta carbons
+        beta1 = x1[:, :, 3].to(self.device)
+        beta2 = x2[:, :, 3].to(self.device)
+
+        n_residues = beta1.shape[1]
+
+        # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
+        beta1 = center_zero(beta1)
+        beta2 = center_zero(beta2)
+        assert_center_zero(beta1)
+        assert_center_zero(beta2)
+
+        beta2 = rmsdalign(beta2, beta1)
+
+        batch1["pseudo_beta"] = beta1
+        batch2["pseudo_beta"] = beta2
+        original_batch1 = deepcopy(batch1)
+        original_batch2 = deepcopy(batch2)
+
+        original_beta1 = beta1.clone()
+        original_beta2 = beta2.clone()
+
+        original_x1 = x1.clone()
+        original_x2 = x2.clone()
+
+        # Encode
+        with torch.no_grad():
+            self._add_noise(batch1, t=initial_guess_level / len(schedule), train=False)
+            self._add_noise(batch2, t=initial_guess_level / len(schedule), train=False)
+
+        noised_beta1 = batch1["noised_pseudo_beta"]
+        noised_beta2 = batch2["noised_pseudo_beta"]
+
+        # linear interpolation of noised_x1 and noised_x2
+        noised_pseudo_betas = torch.stack(
+            [
+                center_zero(torch.lerp(noised_beta1.cpu(), noised_beta2.cpu(), alpha))
+                for alpha in torch.linspace(0, 1, path_length)
+            ]
+        )
+
+        noised_pseudo_betas = noised_pseudo_betas.permute((1, 0, 2, 3)).to(
+            self.device
+        )  # make batch dimension come first [B, path_length, n_residues, 3]
+
         self.model.training = True
 
         prots = self.interpolate(
@@ -828,10 +882,10 @@ class ModelWrapper(pl.LightningModule):
             schedule,
         )
 
-        noised_pseudo_betas = torch.stack(
-            [torch.tensor(prot.atom_positions[:, 3]).to(x1.device) for prot in prots]
-        )
-        noised_pseudo_betas = noised_pseudo_betas.reshape(num_paths, path_length, -1, 3)
+        # noised_pseudo_betas = torch.stack(
+        #     [torch.tensor(prot.atom_positions[:, 3]).to(x1.device) for prot in prots]
+        # )
+        # noised_pseudo_betas = noised_pseudo_betas.reshape(num_paths, path_length, -1, 3)
 
         new_batch = deepcopy(batch1)
         self._expand_batch(new_batch, num_paths * path_length)

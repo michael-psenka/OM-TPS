@@ -284,13 +284,13 @@ def main():
                 if os.path.exists(f"{iid_base_name}/sample-iid-all.pt"):
                     iid_samples = torch.load(f"{iid_base_name}/sample-iid-all.pt")
                     endpoint_1 = (
-                        iid_samples[8]
+                        iid_samples[8]  # unfolded state
                         .unsqueeze(0)
                         .repeat(actual_batch_size, 1, 1)
                         .to(model.device)
                     )
                     endpoint_2 = (
-                        iid_samples[13]
+                        iid_samples[13]  # folded state
                         .unsqueeze(0)
                         .repeat(actual_batch_size, 1, 1)
                         .to(model.device)
