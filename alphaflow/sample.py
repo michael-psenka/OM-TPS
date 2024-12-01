@@ -291,21 +291,11 @@ def main():
                         .to(model.device)
                     )
                     endpoint_2 = (
-                        iid_samples[8]  # folded state
+                        iid_samples[7]  # folded state
                         .unsqueeze(0)
                         .repeat(actual_batch_size, 1, 1)
                         .to(model.device)
                     )
-                    from logging_utils import save_ovito_traj
-                    from openfold.utils.feats import pseudo_beta_fn
-
-                    import pdb
-
-                    pdb.set_trace()
-                    e1 = pseudo_beta_fn(batch["aatype"], endpoint_1, None)
-                    e2 = pseudo_beta_fn(batch["aatype"], endpoint_2, None)
-                    save_ovito_traj(e1.repeat_interleave(3, dim=1), "test1.gsd")
-                    save_ovito_traj(e2.repeat_interleave(3, dim=1), "test2.gsd")
                 else:
                     raise FileNotFoundError("Need to sample iid first")
 

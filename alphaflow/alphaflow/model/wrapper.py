@@ -6,6 +6,7 @@ from copy import deepcopy
 from tqdm import tqdm
 import pandas as pd
 import itertools
+from rmsd import kabsch_rotate
 
 from .esmfold import ESMFold
 from .alphafold import AlphaFold
@@ -35,6 +36,7 @@ from collections import defaultdict
 from openfold.utils.lr_schedulers import AlphaFoldLRScheduler
 
 from utils import center_zero, assert_center_zero, DummyClass
+from logging_utils import save_ovito_traj
 
 
 def gather_log(log, world_size):
@@ -672,7 +674,11 @@ class ModelWrapper(pl.LightningModule):
         assert_center_zero(beta1)
         assert_center_zero(beta2)
 
-        beta2 = rmsdalign(beta2, beta1)
+        # Rotational alignment of endpoints (original repo's rmsdalign function isn't working for some reason)
+        for i in range(num_paths):
+            beta2[i] = torch.tensor(kabsch_rotate(beta2[i].cpu(), beta1[i].cpu())).to(
+                beta2.device
+            )
 
         batch1["pseudo_beta"] = beta1
         batch2["pseudo_beta"] = beta2
@@ -786,6 +792,7 @@ class ModelWrapper(pl.LightningModule):
         beta1 = x1[:, :, 3].to(self.device)
         beta2 = x2[:, :, 3].to(self.device)
 
+        # beta1 and beta2 are different here
         n_residues = beta1.shape[1]
 
         # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
@@ -794,10 +801,15 @@ class ModelWrapper(pl.LightningModule):
         assert_center_zero(beta1)
         assert_center_zero(beta2)
 
-        beta2 = rmsdalign(beta2, beta1)
+        # Rotational alignment of endpoints
+        for i in range(num_paths):
+            beta2[i] = torch.tensor(kabsch_rotate(beta2[i].cpu(), beta1[i].cpu())).to(
+                beta2.device
+            )
 
         batch1["pseudo_beta"] = beta1
         batch2["pseudo_beta"] = beta2
+
         original_batch1 = deepcopy(batch1)
         original_batch2 = deepcopy(batch2)
 
@@ -810,63 +822,6 @@ class ModelWrapper(pl.LightningModule):
         print(
             f"Generating initial guess with linear interpolation at t={initial_guess_level / len(schedule)}"
         )
-
-        num_paths = x1.shape[0]
-
-        self._expand_batch(batch, num_paths)
-
-        batch1 = deepcopy(batch)
-        batch2 = deepcopy(batch)
-
-        x1 = x1.reshape(num_paths, -1, 37, 3)
-        x2 = x2.reshape(num_paths, -1, 37, 3)
-        # extract beta carbons
-        beta1 = x1[:, :, 3].to(self.device)
-        beta2 = x2[:, :, 3].to(self.device)
-
-        n_residues = beta1.shape[1]
-
-        # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
-        beta1 = center_zero(beta1)
-        beta2 = center_zero(beta2)
-        assert_center_zero(beta1)
-        assert_center_zero(beta2)
-
-        beta2 = rmsdalign(beta2, beta1)
-
-        batch1["pseudo_beta"] = beta1
-        batch2["pseudo_beta"] = beta2
-        original_batch1 = deepcopy(batch1)
-        original_batch2 = deepcopy(batch2)
-
-        original_beta1 = beta1.clone()
-        original_beta2 = beta2.clone()
-
-        original_x1 = x1.clone()
-        original_x2 = x2.clone()
-
-        # Encode
-        with torch.no_grad():
-            self._add_noise(batch1, t=initial_guess_level / len(schedule), train=False)
-            self._add_noise(batch2, t=initial_guess_level / len(schedule), train=False)
-
-        noised_beta1 = batch1["noised_pseudo_beta"]
-        noised_beta2 = batch2["noised_pseudo_beta"]
-
-        # linear interpolation of noised_x1 and noised_x2
-        noised_pseudo_betas = torch.stack(
-            [
-                center_zero(torch.lerp(noised_beta1.cpu(), noised_beta2.cpu(), alpha))
-                for alpha in torch.linspace(0, 1, path_length)
-            ]
-        )
-
-        noised_pseudo_betas = noised_pseudo_betas.permute((1, 0, 2, 3)).to(
-            self.device
-        )  # make batch dimension come first [B, path_length, n_residues, 3]
-        from logging_utils import save_ovito_traj
-
-        save_ovito_traj(noised_pseudo_betas[0].repeat_interleave(3, 1), "test.gsd")
 
         self.model.training = True
 
@@ -885,10 +840,10 @@ class ModelWrapper(pl.LightningModule):
             schedule,
         )
 
-        # noised_pseudo_betas = torch.stack(
-        #     [torch.tensor(prot.atom_positions[:, 3]).to(x1.device) for prot in prots]
-        # )
-        # noised_pseudo_betas = noised_pseudo_betas.reshape(num_paths, path_length, -1, 3)
+        noised_pseudo_betas = torch.stack(
+            [torch.tensor(prot.atom_positions[:, 3]).to(x1.device) for prot in prots]
+        )
+        noised_pseudo_betas = noised_pseudo_betas.reshape(num_paths, path_length, -1, 3)
 
         new_batch = deepcopy(batch1)
         self._expand_batch(new_batch, num_paths * path_length)
@@ -908,7 +863,6 @@ class ModelWrapper(pl.LightningModule):
                 new_batch[k] = v.to(self.device)
 
         # Begin OM optimization
-
         optimizer = torch.optim.Adam([noised_pseudo_betas], lr=lr)
 
         pbar = tqdm(range(steps))
@@ -1054,7 +1008,7 @@ class ModelWrapper(pl.LightningModule):
                         }
                     )
 
-        # TODO: replace below code with ours
+        # TODO: replace below code with alphaflow specific code
         all_denoised_paths = []
         # decode the optimized paths (keeping every 20 for future visualization)
         for path in all_noised_pseudo_betas[::20]:
