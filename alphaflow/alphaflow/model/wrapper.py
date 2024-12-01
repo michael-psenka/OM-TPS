@@ -171,7 +171,9 @@ class ModelWrapper(pl.LightningModule):
         with torch.no_grad():
             for t, s in zip(schedule[:-1], schedule[1:]):
                 output = self.teacher(batch, prev_outputs=prev_outputs)
-                pseudo_beta = pseudo_beta_fn(batch["aatype"], output["final_atom_positions"], None)
+                pseudo_beta = pseudo_beta_fn(
+                    batch["aatype"], output["final_atom_positions"], None
+                )
                 noisy = rmsdalign(pseudo_beta, noisy)
                 noisy = (s / t) * noisy + (1 - s / t) * pseudo_beta
                 batch["noised_pseudo_beta_dists"] = (
@@ -863,6 +865,7 @@ class ModelWrapper(pl.LightningModule):
             self.device
         )  # make batch dimension come first [B, path_length, n_residues, 3]
         from logging_utils import save_ovito_traj
+
         save_ovito_traj(noised_pseudo_betas[0].repeat_interleave(3, 1), "test.gsd")
 
         self.model.training = True

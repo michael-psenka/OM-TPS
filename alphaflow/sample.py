@@ -178,6 +178,7 @@ def main():
             ), "Distilled model requires noisy_first and no_diffusion"
         ckpt = torch.load(args.weights, map_location="cpu")
 
+        # TODO: do this in a better way so we don't have to override the openfold package code as we currently do
         # ckpt["hyper_parameters"]["config"]["globals"]["blocks_per_ckpt"] = None # disable gradient checkpointing
         model = model_class(**ckpt["hyper_parameters"], training=False)
         model.model.load_state_dict(ckpt["params"], strict=False)
@@ -296,8 +297,15 @@ def main():
                         .to(model.device)
                     )
                     from logging_utils import save_ovito_traj
-                    save_ovito_traj(endpoint_1.repeat_interleave(3, dim=1), "test1.gsd")
-                    save_ovito_traj(endpoint_2.repeat_interleave(3, dim=1), "test2.gsd")
+                    from openfold.utils.feats import pseudo_beta_fn
+
+                    import pdb
+
+                    pdb.set_trace()
+                    e1 = pseudo_beta_fn(batch["aatype"], endpoint_1, None)
+                    e2 = pseudo_beta_fn(batch["aatype"], endpoint_2, None)
+                    save_ovito_traj(e1.repeat_interleave(3, dim=1), "test1.gsd")
+                    save_ovito_traj(e2.repeat_interleave(3, dim=1), "test2.gsd")
                 else:
                     raise FileNotFoundError("Need to sample iid first")
 

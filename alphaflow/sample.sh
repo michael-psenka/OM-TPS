@@ -3,9 +3,9 @@ python sample.py \
     --input_csv splits/atlas_interpolation.csv \
     --weights alphaflow_md_base_202402.pt \
     --pdb_id 5w82_E \
-    --num_samples 1 \
-    --batch_size 1 \
-    --gen_mode om_interpolate \
+    --num_samples 20 \
+    --batch_size 5 \
+    --gen_mode iid \
     --latent_time 1 \
     --initial_guess_level 0 \
     --no_encode_and_decode \
