@@ -122,7 +122,7 @@ class AlphaFold(nn.Module):
         dists = dists.unsqueeze(-1)
         inf = self.config.input_pair_embedder.inf
         upper = torch.cat([lower[1:], lower.new_tensor([inf])], dim=-1)
-        # Smooth binning using sigmoid for differentiability
+        # Sanjeev edit: Smooth binning using sigmoid for differentiability during OM optimization
         smooth_lower = torch.sigmoid(10 * (dists - lower))
         smooth_upper = torch.sigmoid(10 * (upper - dists))
         dgram = smooth_lower * smooth_upper  # Smooth bin indicator
