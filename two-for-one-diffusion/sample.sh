@@ -29,11 +29,12 @@ python sample.py \
     --num_samples_eval 8 \
     --batch_size_gen 8 \
     --latent_time 20 \
-    --initial_guess_level 250 \
+    --initial_guess_level 0 \
     --no_encode_and_decode \
     --append_exp_name test \
     --path_length 200 \
-    --steps 100
+    --steps 100 \
+    --mlff \
 
 
 # python sample.py \

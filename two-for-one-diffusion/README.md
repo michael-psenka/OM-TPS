@@ -17,6 +17,10 @@ Dependencies are listed in [coarse-graining-environment.yml](./coarse-graining-e
 conda env create -f coarse-graining-environment.yml
 ```
 
+## Sanjeev Modifications
+Install Sanjeev's environment by running:
+conda env create -f sanjeev_twoforone_env.yml
+
 ***
 
 ## Sampling and evaluation
