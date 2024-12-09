@@ -114,8 +114,11 @@ class HutchinsonAction(torch.nn.Module):
     random vector of -1s and 1s.
     """
 
-    def __init__(self, dt, gamma, D, N=1, sample_force_func=None, laplace_func = None):
+    def __init__(self, dt, gamma, D, N=1, sample_force_func=None, laplace_func = None, force_func=None, diffusion_model=True):
         super(HutchinsonAction, self).__init__()
+
+        sample_force_func = force_func if sample_force_func is None else sample_force_func
+
         self.sample_force_func = sample_force_func
         self.dt = dt
         self.gamma = gamma
@@ -127,12 +130,16 @@ class HutchinsonAction(torch.nn.Module):
         
         def force_and_laplace(x: torch.tensor):
             res = 0
+            
+            if diffusion_model:
+                x = x.unsqueeze(0)
 
             forces, vjp_func = vjp(self.sample_force_func, x)
 
             for _ in range(self.N):
                 # Generate random vector of -1s and 1s.
-                v = torch.randint(0, 2, (2,), dtype=torch.float32) * 2 - 1
+                shape = x.shape
+                v = torch.randint(0, 2, shape, dtype=torch.float32) * 2 - 1
                 v = v.to(x.device)
                 # Calculate matrix vector product of Hessian and random vector
                 Av, = vjp_func(v)
