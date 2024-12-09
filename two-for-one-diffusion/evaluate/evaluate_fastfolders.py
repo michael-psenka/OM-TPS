@@ -37,6 +37,7 @@ from evaluate.evaluators import (
     TicEvaluator,
     RmsdEvaluator,
     ContactEvaluator,
+    PhysicalEvaluator,
     get_pwd_triu_batch,
     js_divergence,
 )
@@ -379,8 +380,47 @@ def evaluate_fastfolders(
                 / path_probabilities.shape[0]
             )
 
+    # Physicality metrics
+    (
+        fraction_unphysical,
+        fraction_bond_length_issues,
+        fraction_bond_angle_issues,
+        fraction_distance_issues,
+        fraction_rg_issues,
+    ) = (None, None, None, None, None)
+    if "interpolate" in gen_mode:
+        physical_eval = PhysicalEvaluator(gt_traj)
+        physical_dict = {}
+        for traj in sampled_mol.reshape(num_paths, -1, sampled_mol.shape[-2], 3):
+            # Validate the current trajectory
+            results = physical_eval.validate(traj)
+
+            # Aggregate results
+            for key, value in results.items():
+                if key not in physical_dict:
+                    physical_dict[key] = value
+                else:
+                    # Concatenate boolean tensors along the frame dimension
+                    physical_dict[key] = torch.cat((physical_dict[key], value), dim=0)
+
+        fraction_unphysical = physical_dict["unphysical_frames"].sum() / len(
+            physical_dict["unphysical_frames"]
+        )
+        fraction_bond_length_issues = physical_dict["bond_length_issues"].sum() / len(
+            physical_dict["bond_length_issues"]
+        )
+        fraction_bond_angle_issues = physical_dict["bond_angle_issues"].sum() / len(
+            physical_dict["bond_angle_issues"]
+        )
+        fraction_distance_issues = physical_dict["distance_issues"].sum() / len(
+            physical_dict["distance_issues"]
+        )
+        fraction_rg_issues = physical_dict["rg_issues"].sum() / len(
+            physical_dict["rg_issues"]
+        )
+
     # Visualize the model-produced interpolation along with a subset of 20 reference/generated paths
-    free_energies, transition_rates, fraction_unphysical = get_tic_free_energy_plots(
+    free_energies, transition_rates = get_tic_free_energy_plots(
         protein_name,
         gen_mode,
         append_exp_name,
@@ -411,11 +451,33 @@ def evaluate_fastfolders(
         "Max Free Energy (kBT) Mean: ": max_free_energies.mean(),
         "Max Free Energy (kBT) Std: ": max_free_energies.std(),
         "Fraction of Physical Paths: ": (
-            1 - fraction_unphysical if fraction_unphysical is not None else None
+            1 - fraction_unphysical.item() if fraction_unphysical is not None else None
         ),
-        "Transition Rate Mean: ": transition_rates.mean(),
+        "Fraction of Paths with Physical Bond Lengths: ": (
+            1 - fraction_bond_length_issues.item()
+            if fraction_bond_length_issues is not None
+            else None
+        ),
+        "Fraction of Paths with Physical Bond Angles: ": (
+            1 - fraction_bond_angle_issues.item()
+            if fraction_bond_angle_issues is not None
+            else None
+        ),
+        "Fraction of Paths with Physical Inter-Residue Distances: ": (
+            1 - fraction_distance_issues.item()
+            if fraction_distance_issues is not None
+            else None
+        ),
+        "Fraction of Paths with Physical Radius of Gyration: ": (
+            1 - fraction_rg_issues.item() if fraction_rg_issues is not None else None
+        ),
+        "Transition Rate Mean: ": (
+            transition_rates.mean() if transition_rates is not None else None
+        ),
         "Transition Rate Std: ": (
-            transition_rates.std() if "interpolate" in gen_mode else None
+            transition_rates.std()
+            if "interpolate" in gen_mode and transition_rates is not None
+            else None
         ),
         "Path Probability Mean": (
             path_probabilities.mean() if path_probabilities is not None else None
@@ -732,13 +794,6 @@ def get_tic_free_energy_plots(
         plt.close()
         free_energy_paths.append(file_name)
 
-        fraction_unphysical = None
-        if i == len(loop) - 1 and "interpolate" in gen_mode:
-            # save final metrics
-            pwds = pwds.reshape(num_paths, -1, pwds.shape[-1])
-            pwd_mins = np.min(pwds, axis=(1, 2))
-            path_is_unphysical = pwd_mins < 0.5
-            fraction_unphysical = path_is_unphysical.sum() / path_is_unphysical.shape[0]
 
     # Create a GIF from the saved TICA images
     tica_gif_path = join(tic_evaluator.plots_folder, "tica_samples.gif")
@@ -839,7 +894,7 @@ def get_tic_free_energy_plots(
     # Delete the gif folder
     os.rmdir(gif_folder)
 
-    return free_energies, transition_rates, fraction_unphysical
+    return free_energies, transition_rates
 
 
 def dynamics_analysis(
