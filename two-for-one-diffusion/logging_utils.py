@@ -17,17 +17,12 @@ from rmsd import kabsch_rotate
 def save_ovito_traj(
     positions,
     filename,
-    alpha_carbon_lim=100000,
-    all_backbone=False,
     align=False,
     create_bonds=True,
 ):
     """
     Save the given positions to a GSD file using Ovito.
-    Expects that the positions are in the shape (n_frames, n_atoms, 3).
-    The atom dimension has CA, N, and CB atoms in that order, interleaved per residue.
-    For example, for a protein with 3 residues, the positions tensor for one frame would be:
-    [CA1, N1, CB1, CA2, N2, CB2, CA3, N3, CB3]
+    Expects that the positions are in the shape (n_frames, n_residues, 3) (only alpha carbons).
     """
 
     t = gsd.hoomd.open(name=filename, mode="w")
@@ -36,21 +31,15 @@ def save_ovito_traj(
     if align:
         positions = center_zero(positions)
 
-    if not all_backbone:
-        positions = positions[:, ::3]  # take only alpha carbons
     for i, pos in enumerate(positions):
         if align:
             pos = kabsch_rotate(pos, positions[0])
-        t.append(
-            create_frame(i, pos, cell, alpha_carbon_lim, all_backbone, create_bonds)
-        )
+        t.append(create_frame(i, pos, cell, create_bonds))
 
     t.close()
 
 
-def create_frame(
-    step, position, cell, alpha_carbon_lim, all_backbone, create_bonds=True
-):
+def create_frame(step, position, cell, create_bonds=True):
     """
     Create an Ovito frame from the given positions.
     """
@@ -73,17 +62,8 @@ def create_frame(
     # Bonds for visualization
     # TODO: add option to include bonds between backbone and CB/N atoms
     if create_bonds:
-        senders = np.arange(min(position.shape[0], alpha_carbon_lim) - 1)
-        receivers = np.arange(1, min(position.shape[0], alpha_carbon_lim))
-        if all_backbone:
-            # construct bonds between CA and N atoms AND between CA and CB atoms
-            N_senders = senders
-            N_receivers = np.arange(alpha_carbon_lim, 2 * alpha_carbon_lim - 1)
-            CB_senders = senders
-            CB_receivers = np.arange(2 * alpha_carbon_lim, 3 * alpha_carbon_lim - 1)
-
-            senders = np.concatenate([senders, N_senders, CB_senders])
-            receivers = np.concatenate([receivers, N_receivers, CB_receivers])
+        senders = np.arange(position.shape[0] - 1)
+        receivers = np.arange(1, position.shape[0])
 
         bonds = np.stack([senders, receivers], axis=1)
 

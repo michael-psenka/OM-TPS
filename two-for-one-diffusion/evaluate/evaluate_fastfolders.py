@@ -794,7 +794,6 @@ def get_tic_free_energy_plots(
         plt.close()
         free_energy_paths.append(file_name)
 
-
     # Create a GIF from the saved TICA images
     tica_gif_path = join(tic_evaluator.plots_folder, "tica_samples.gif")
     images = [Image.open(tic_path) for tic_path in tic_paths]

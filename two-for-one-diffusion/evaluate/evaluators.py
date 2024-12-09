@@ -975,6 +975,155 @@ class ContactEvaluator:
         return bce.mean()
 
 
+class PhysicalEvaluator:
+    def __init__(self, reference_trajectory, tolerances=None):
+        """
+        Initializes the PhysicalEvaluator with a reference trajectory and tolerances.
+
+        Parameters:
+        - reference_trajectory: torch.Tensor of shape [n_frames, n_residues, 3] containing alpha carbons
+        - tolerances: dict containing tolerance values for deviations
+          {
+              "bond_length": float,
+              "bond_angle": float,
+              "radius_of_gyration": float,
+              "min_distance": float
+          }
+        """
+        self.reference_trajectory = reference_trajectory
+        if isinstance(self.reference_trajectory, np.ndarray):
+            self.reference_trajectory = torch.tensor(self.reference_trajectory)
+        self.tolerances = tolerances
+        if self.tolerances is None:
+            self.tolerances = {
+                "bond_length": 0.5,  # (Angstroms) offset relative to reference min/max
+                "bond_angle": 0.25,  # (radians) offset relative to reference min/max
+                "radius_of_gyration": 5,  # (Angstroms) offset relative to reference min/max
+                "min_distance": 0.5,  # (Angstroms) absolute
+            }
+        self.reference_metrics = self._compute_reference_metrics()
+
+    def _compute_reference_metrics(self):
+        """
+        Compute reference minimum and maximum values for various metrics.
+
+        Returns:
+        - Dictionary of reference metrics.
+        """
+        metrics = {}
+
+        # Bond lengths
+        bond_lengths = torch.norm(
+            self.reference_trajectory[:, 1:, :] - self.reference_trajectory[:, :-1, :],
+            dim=-1,
+        )
+        metrics["bond_length_min"] = bond_lengths.min(dim=0)[0]
+        metrics["bond_length_max"] = bond_lengths.max(dim=0)[0]
+
+        # Bond angles
+        vec1 = (
+            self.reference_trajectory[:, 1:-1, :] - self.reference_trajectory[:, :-2, :]
+        )
+        vec2 = (
+            self.reference_trajectory[:, 2:, :] - self.reference_trajectory[:, 1:-1, :]
+        )
+        cos_theta = torch.nn.functional.cosine_similarity(vec1, vec2, dim=-1)
+        bond_angles = torch.acos(cos_theta)  # Radians
+        metrics["bond_angle_min"] = bond_angles.min(dim=0)[0]
+        metrics["bond_angle_max"] = bond_angles.max(dim=0)[0]
+
+        # Radius of gyration
+        rg = self._compute_radius_of_gyration(self.reference_trajectory)
+        metrics["rg_min"] = rg.min().item()
+        metrics["rg_max"] = rg.max().item()
+
+        return metrics
+
+    @staticmethod
+    def _compute_radius_of_gyration(trajectory):
+        center_of_mass = trajectory.mean(dim=1, keepdim=True)
+        deviations = trajectory - center_of_mass
+        rg = torch.sqrt((deviations**2).sum(dim=-1).mean(dim=-1))
+        return rg
+
+    def validate(self, new_trajectory):
+        """
+        Validate a new trajectory against the reference metrics and tolerances.
+
+        Parameters:
+        - new_trajectory: torch.Tensor of shape [n_frames, n_residues, 3]
+
+        Returns:
+        - Dictionary indicating which frames are unphysical for each check.
+        """
+        results = {}
+        assert (
+            len(new_trajectory.shape) == 3
+            and new_trajectory.shape[1] == self.reference_trajectory.shape[1]
+        )
+
+        # Bond lengths
+
+        bond_lengths = torch.norm(
+            new_trajectory[:, 1:, :] - new_trajectory[:, :-1, :], dim=-1
+        )
+        bond_length_min = (
+            self.reference_metrics["bond_length_min"] - self.tolerances["bond_length"]
+        )
+        bond_length_max = (
+            self.reference_metrics["bond_length_max"] + self.tolerances["bond_length"]
+        )
+        results["bond_length_issues"] = (
+            ((bond_lengths < bond_length_min) | (bond_lengths > bond_length_max))
+            .any()
+            .unsqueeze(0)
+        )
+
+        # Bond angles
+        vec1 = new_trajectory[:, 1:-1, :] - new_trajectory[:, :-2, :]
+        vec2 = new_trajectory[:, 2:, :] - new_trajectory[:, 1:-1, :]
+        cos_theta = torch.nn.functional.cosine_similarity(vec1, vec2, dim=-1)
+        bond_angles = torch.acos(cos_theta)  # Radians
+        bond_angle_min = (
+            self.reference_metrics["bond_angle_min"] - self.tolerances["bond_angle"]
+        )
+        bond_angle_max = (
+            self.reference_metrics["bond_angle_max"] + self.tolerances["bond_angle"]
+        )
+        results["bond_angle_issues"] = (
+            ((bond_angles < bond_angle_min) | (bond_angles > bond_angle_max))
+            .any()
+            .unsqueeze(0)
+        )
+
+        # Pairwise distances
+        pwd = get_pwd_triu_batch(new_trajectory)
+        results["distance_issues"] = (
+            (pwd < self.tolerances["min_distance"]).any().unsqueeze(0)
+        )  # Flag frames with clashes
+
+        # Radius of gyration
+        rg = self._compute_radius_of_gyration(new_trajectory)
+        rg_min = (
+            self.reference_metrics["rg_min"] - self.tolerances["radius_of_gyration"]
+        )
+        rg_max = (
+            self.reference_metrics["rg_max"] + self.tolerances["radius_of_gyration"]
+        )
+        results["rg_issues"] = ((rg < rg_min) | (rg > rg_max)).any().unsqueeze(0)
+
+        # Combine results
+        unphysical_frames = (
+            results["bond_length_issues"]
+            | results["bond_angle_issues"]
+            | results["distance_issues"]
+            | results["rg_issues"]
+        )
+        results["unphysical_frames"] = unphysical_frames
+
+        return results
+
+
 def process_pdb(pdb_path, mol_name):
     """
     Take a fine-grained pdb file and slice out relevant atoms
