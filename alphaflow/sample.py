@@ -388,8 +388,6 @@ def main():
         save_ovito_traj(
             sampled_mol_backbone,
             gsd_file,
-            alpha_carbon_lim=result[0].aatype.shape[0],
-            all_backbone=False,
             align=True,
         )
 

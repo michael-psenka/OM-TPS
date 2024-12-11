@@ -10,7 +10,7 @@ python sample.py \
     --templates_dir /data/sanjeevr/atlas/1l2w_I \
     --gen_mode iid \
     --latent_time 1 \
-    --append_exp_name older_commit_sigmoidbinning
+    --append_exp_name head_commit
     # --noisy_first \
     # --no_diffusion #\
     # --tmax 0.2 \
