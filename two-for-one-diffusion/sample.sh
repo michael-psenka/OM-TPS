@@ -34,7 +34,7 @@ python sample.py \
     --append_exp_name test \
     --path_length 200 \
     --steps 100 \
-    --mlff \
+    --disable_logging
 
 
 # python sample.py \
