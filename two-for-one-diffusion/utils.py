@@ -363,6 +363,10 @@ class OMInterpolatorWrapper(torch.nn.Module):
         dt=0.1,
         gamma=10,
         anneal=False,
+        sample_latent_time=False,
+        cosine_scheduler=False,
+        subsample_points_percent=None,
+        subsample_dimensions_percent=None,
         add_noise=False,
         truncated_gradient=False,
         temperature=1.0,
@@ -384,6 +388,10 @@ class OMInterpolatorWrapper(torch.nn.Module):
         self.dt = dt
         self.gamma = gamma
         self.anneal = anneal
+        self.sample_latent_time = sample_latent_time
+        self.cosine_scheduler = cosine_scheduler
+        self.subsample_points_percent = subsample_points_percent
+        self.subsample_dimensions_percent = subsample_dimensions_percent
         self.add_noise = add_noise
         self.truncated_gradient = truncated_gradient
         self.temperature = temperature
@@ -405,6 +413,10 @@ class OMInterpolatorWrapper(torch.nn.Module):
             dt=self.dt,
             gamma=self.gamma,
             anneal=self.anneal,
+            sample_latent_time=self.sample_latent_time,
+            cosine_scheduler=self.cosine_scheduler,
+            subsample_points_percent=self.subsample_points_percent,
+            subsample_dimensions_percent=self.subsample_dimensions_percent,
             add_noise=self.add_noise,
             truncated_gradient=self.truncated_gradient,
             temperature=self.temperature,

@@ -452,6 +452,10 @@ class GaussianDiffusion(nn.Module):
         dt=0.1,
         gamma=10,
         anneal=False,
+        sample_latent_time=False,
+        cosine_scheduler=False,
+        subsample_points_percent=None,
+        subsample_dimensions_percent=None,
         add_noise=False,
         truncated_gradient=False,
         temperature=1.0,
@@ -540,6 +544,12 @@ class GaussianDiffusion(nn.Module):
         else:
             optimizer = optimizer([noised_xs], lr=lr)
 
+        if cosine_scheduler:
+            # cosine annealing scheduler
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, om_steps, eta_min=1e-6
+            )
+
         pbar = tqdm(range(om_steps))
         actions = []
         path_terms = []
@@ -595,6 +605,14 @@ class GaussianDiffusion(nn.Module):
                     #     self.num_timesteps - int(self.num_timesteps / om_steps) * i - 1,
                     # )  # anneal the time from T to 0
                     diff_time = anneal_schedule[i].item()
+
+                elif sample_latent_time:
+                    # sample from a cosine decay distribution (probabilities decaying from latent_time to T)
+                    probs = cosine_beta_schedule(self.num_timesteps).flip(dims=[0])[
+                        latent_time:
+                    ]
+                    probs = probs / probs.sum()
+                    diff_time = torch.multinomial(probs, 1).item() + latent_time
                 else:
                     diff_time = latent_time
 
@@ -673,8 +691,24 @@ class GaussianDiffusion(nn.Module):
 
                 with torch.no_grad():
                     grads[:, 0], grads[:, -1] = 0, 0
+
+                    # TODO: implement such that we don't need to compute the forces for these points (will yield a speedup)
+                    if subsample_points_percent is not None:
+                        num_points = path_length - int(
+                            subsample_points_percent * path_length
+                        )
+                        bad_idx = torch.randperm(path_length)[:num_points]
+                        grads[:, bad_idx] = 0
+
+                    if subsample_dimensions_percent is not None:
+                        rand = torch.rand_like(grads)
+                        keep_idx = rand < subsample_dimensions_percent
+                        grads = grads * keep_idx
+
                     noised_xs.grad = grads
                     optimizer.step()
+                    if cosine_scheduler:
+                        scheduler.step()
 
                 all_noised_xs.append(noised_xs.clone().detach())
                 path_contribution = first_term.item() / action.item()
