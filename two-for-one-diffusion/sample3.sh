@@ -151,8 +151,8 @@ python sample.py \
     --initial_guess_level 250 \
     --no_encode_and_decode \
     --optimizer adam \
-    --sample_latent_time \
-    --append_exp_name test_initial_latent_time=250_sample_latent_time \
+    --subsample_points_percent 0.8 \
+    --append_exp_name test_initial_latent_time=250_subsample_points=0.8 \
     --path_length 200 \
     --steps 2000 
 
@@ -166,17 +166,18 @@ python sample.py \
     --initial_guess_level 250 \
     --no_encode_and_decode \
     --optimizer adam \
-    --sample_latent_time \
-    --append_exp_name test_initial_latent_time=250_sample_latent_time \
+    --subsample_points_percent 0.8 \
+    --append_exp_name test_initial_latent_time=250_subsample_points=0.8 \
     --path_length 200 \
     --steps 2000
 
+
 python sample.py \
-    --model_path saved_models/bba \
+    --model_path saved_models/trp_cage \
     --gen_mode om_interpolate \
     --num_samples_eval 8 \
     --batch_size_gen 8 \
-    --latent_time 20 \
+    --latent_time 15 \
     --initial_guess_level 250 \
     --no_encode_and_decode \
     --optimizer adam \
@@ -184,7 +185,7 @@ python sample.py \
     --subsample_dimensions_percent 0.8 \
     --append_exp_name test_initial_latent_time=250_subsample_points_dims=0.8 \
     --path_length 200 \
-    --steps 2000
+    --steps 2000 
 
 # python sample.py \
 #     --model_path saved_models/trp_cage \
