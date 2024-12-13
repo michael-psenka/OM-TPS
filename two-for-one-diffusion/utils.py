@@ -358,6 +358,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         initial_guess_fn=torch.lerp,
         initial_guess_level=0,
         om_steps=100,
+        optimizer=torch.optim.Adam,
         lr=2e-1,
         dt=0.1,
         gamma=10,
@@ -378,6 +379,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         self.initial_guess_fn = initial_guess_fn
         self.initial_guess_level = initial_guess_level
         self.om_steps = om_steps
+        self.optimizer = optimizer
         self.lr = lr
         self.dt = dt
         self.gamma = gamma
@@ -398,6 +400,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
             initial_guess_fn=self.initial_guess_fn,
             initial_guess_level=self.initial_guess_level,
             om_steps=self.om_steps,
+            optimizer=self.optimizer,
             lr=self.lr,
             dt=self.dt,
             gamma=self.gamma,

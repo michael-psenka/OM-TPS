@@ -159,6 +159,13 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--optimizer",
+    type=str,
+    help="Which action to use. Options: adam, sgd",
+    default="adam",
+)
+
+parser.add_argument(
     "--lr", type=float, help="learning rate for OM optimization", default=2e-1
 )
 parser.add_argument("--om_dt", type=float, help="dt for OM optimization", default=0.1)
@@ -391,6 +398,13 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                 action_cls = TruncatedAction
             elif samp_args.action == "simple":
                 action_cls = SimpleAction
+            
+            if samp_args.optimizer == "adam":
+                optimizer = torch.optim.Adam
+            elif samp_args.optimizer == "sgd":
+                optimizer = torch.optim.SGD
+            else:
+                raise Exception("Invalid argument 'optimizer'")
             interpolator = (
                 OMInterpolatorWrapper(
                     model.ema_model,
@@ -406,6 +420,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                     mlff=samp_args.mlff,
                     action_cls=action_cls,
                     om_steps=samp_args.steps,
+                    optimizer=optimizer,
                     lr=samp_args.lr,
                     dt=samp_args.om_dt,
                     gamma=samp_args.om_gamma,

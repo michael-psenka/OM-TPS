@@ -447,6 +447,7 @@ class GaussianDiffusion(nn.Module):
         initial_guess_fn=torch.lerp,
         initial_guess_level=0,
         om_steps=100,
+        optimizer=torch.optim.Adam,
         lr=2e-1,
         dt=0.1,
         gamma=10,
@@ -534,7 +535,10 @@ class GaussianDiffusion(nn.Module):
             (1, 0, 2, 3)
         )  # make batch dimension come first [num_paths, path_length, n_atoms, 3]
 
-        optimizer = torch.optim.Adam([noised_xs], lr=lr)
+        if optimizer == torch.optim.SGD:
+            optimizer = optimizer([noised_xs], lr=lr, momentum=0.9)
+        else:
+            optimizer = optimizer([noised_xs], lr=lr)
 
         pbar = tqdm(range(om_steps))
         actions = []
