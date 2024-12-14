@@ -35,7 +35,7 @@ from utils import (
     validate_git_status,
 )
 from logging_utils import save_ovito_traj
-from actions import SimpleAction, TruncatedAction, S2Action
+from actions import SimpleAction, TruncatedAction, S2Action, HutchinsonAction
 
 from dynamics.langevin import temp_dict
 import mdtraj as md
@@ -391,6 +391,8 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                 action_cls = TruncatedAction
             elif samp_args.action == "simple":
                 action_cls = SimpleAction
+            elif samp_args.action == "hutch":
+                action_cls = HutchinsonAction
             interpolator = (
                 OMInterpolatorWrapper(
                     model.ema_model,
