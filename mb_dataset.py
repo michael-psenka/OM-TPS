@@ -183,6 +183,7 @@ class MBDataset(Dataset):
         # pe = np.array([a.get_potential_energy() for a in traj])
         force = np.array([a.get_forces() for a in traj])
         # ke = np.array([a.get_kinetic_energy() for a in traj])
+        
         return {"pos": pos, "force": force}  # , "pe": pe, "force": force, "ke": ke}
 
     def load_simulations(self):
