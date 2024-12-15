@@ -34,8 +34,34 @@
 #     --append_exp_name test \
 #     --path_length 200 \
 #     --steps 100 \
-#     --mlff \
 
+python sample.py \
+    --model_path saved_models/trp_cage \
+    --gen_mode om_interpolate \
+    --action hutch \
+    --num_samples_eval 8 \
+    --batch_size_gen 2 \
+    --latent_time 15 \
+    --initial_guess_level 250 \
+    --no_encode_and_decode \
+    --lr 1e-3 \
+    --append_exp_name test_initial_latent_time_250_hutch_minus_SGD \
+    --path_length 200 \
+    --steps 1000
+
+python sample.py \
+    --model_path saved_models/bba \
+    --gen_mode om_interpolate \
+    --action hutch \
+    --num_samples_eval 8 \
+    --batch_size_gen 2 \
+    --latent_time 20 \
+    --initial_guess_level 250 \
+    --no_encode_and_decode \
+    --lr 1e-3 \
+    --append_exp_name test_initial_latent_time_250_hutch_minus_SGD \
+    --path_length 200 \
+    --steps 1000
 
 # python sample.py \
 #     --model_path saved_models/chignolin \

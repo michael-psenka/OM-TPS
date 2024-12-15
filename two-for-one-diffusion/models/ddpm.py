@@ -554,6 +554,7 @@ class GaussianDiffusion(nn.Module):
         actions = []
         path_terms = []
         force_terms = []
+        laplace_terms = []
         all_noised_xs = [noised_xs.clone().detach()]
 
         # load the NNIP model
@@ -632,9 +633,9 @@ class GaussianDiffusion(nn.Module):
                     forces = [None] * len(noised_xs)
                 else:
                     force_func = lambda x: self.force_func(center_zero(x), diff_time)
+
                     # Subsample points
-                    # subsample_points_percent = None
-                    # subsample_dimensions_percent = None
+                    
                     if subsample_points_percent is not None:
                         num_points = int(subsample_points_percent * path_length)
                         half_points = int(0.5 * num_points)
@@ -703,7 +704,7 @@ class GaussianDiffusion(nn.Module):
                     laplace_func=laplace,
                     dt=dt,
                     gamma=gamma,
-                    D=100,
+                    D=0.01,
                 )  # (D is only used for HessianAction)
 
                 # TODO: vmap over batch dimension
@@ -716,13 +717,16 @@ class GaussianDiffusion(nn.Module):
                 ]
                 first_term = torch.cat([term[0].unsqueeze(0) for term in terms]).mean()
                 second_term = torch.cat([term[1].unsqueeze(0) for term in terms]).mean()
+                third_term = torch.cat([term[2].unsqueeze(0) for term in terms]).mean()
+
                 action = torch.cat(
-                    [(term[0] + term[1]).unsqueeze(0) for term in terms]
+                    [(term[0] + term[1] - term[2]).unsqueeze(0) for term in terms]
                 ).mean()
 
                 actions.append(action.item())
                 path_terms.append(first_term.item())
                 force_terms.append(second_term.item())
+                laplace_terms.append(third_term.item())
 
                 optimizer.zero_grad()
                 (grads,) = torch.autograd.grad(action, noised_xs)
@@ -759,8 +763,9 @@ class GaussianDiffusion(nn.Module):
                 all_noised_xs.append(noised_xs.clone().detach())
                 path_contribution = first_term.item() / action.item()
                 force_contribution = second_term.item() / action.item()
+                laplace_contribution = third_term.item() / action.item()
                 pbar.set_description(
-                    f"OM Action: {action.item()}, Path Contribution: {round(path_contribution*100, 3)}%, Force Contribution: {round(force_contribution * 100, 3)}%"
+                    f"OM Action: {action.item()}, Path Contribution: {round(path_contribution*100, 3)}%, Force Contribution: {round(force_contribution * 100, 3)}%, Laplace Contribution: {round(laplace_contribution * 100, 3)}%"
                 )
 
                 # if path_contribution > 0.99 and i > 50 and not changed:
@@ -784,6 +789,7 @@ class GaussianDiffusion(nn.Module):
                             "Force Norm": second_term.item(),
                             "Path Contribution": path_contribution,
                             "Force Contribution": force_contribution,
+                            "Laplace Contribution": laplace_contribution
                         }
                     )
 
@@ -816,6 +822,10 @@ class GaussianDiffusion(nn.Module):
         # Print improvement in force term
         print(
             f"Initial force norm: {force_terms[0]}, Final force norm: {force_terms[-1]}, Percent improvement: {(force_terms[0] - force_terms[-1]) / (force_terms[0]+1e-8) * 100}%"
+        )
+
+        print(
+            f"Initial laplace norm: {laplace_terms[0]}, Final laplace norm: {laplace_terms[-1]}, Percent improvement: {(laplace_terms[0] - laplace_terms[-1]) / (laplace_terms[0]+1e-8) * 100}%"
         )
 
         # return dict with final path, actions, path terms, force terms
