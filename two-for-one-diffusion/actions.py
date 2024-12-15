@@ -112,24 +112,23 @@ class SimpleAction(torch.nn.Module):
         result = torch.sum(first_term + second_term + third_term)
         return result / torch.tensor(4.0)
 
+
 class HutchinsonAction(torch.nn.Module):
     """
-    Action that is the same as S2 Action but calculates laplacian using Hutchinson trick using 
+    Action that is the same as S2 Action but calculates laplacian using Hutchinson trick using
     random vector of -1s and 1s.
     """
 
-    def __init__(self, force_func, dt, gamma, laplace_func=None, D=None, N=1):
+    def __init__(self, force_func, dt, gamma, D, N=1):
         super(HutchinsonAction, self).__init__()
         self.dt = dt
         self.gamma = gamma
         self.D = D
         self.N = N
-        self.true_laplace = laplace_func
         self.force_func = force_func
 
-        
         def force_and_laplace(x: torch.tensor):
-            res = 0
+            result = 0
 
             forces = self.force_func(x)
 
@@ -138,16 +137,17 @@ class HutchinsonAction(torch.nn.Module):
                 v = torch.randint(0, 2, forces.shape, dtype=torch.float32) * 2 - 1
                 v = v.to(x.device)
                 # Calculate matrix vector product of Hessian and random vector
-                Av, = torch.autograd.grad(forces, x, grad_outputs=v, retain_graph=True, create_graph=True)
+                (Av,) = torch.autograd.grad(
+                    forces, x, grad_outputs=v, retain_graph=True, create_graph=True
+                )
 
-                # Make it a scalar. Minus is from the sign of the forces
-                res += -torch.sum(v*Av) 
-            
-            return forces, res / N
+                # Make it a scalar. Minus is because we want the energy Hessian, which is the negative force Jacobian.
+                result += -torch.sum(v * Av)
+
+            return forces, result / N
 
         self.force_and_laplace = force_and_laplace
 
-    
     def forward(self, path: torch.Tensor, forces: torch.Tensor = None):
 
         x_n = path[:-1]
@@ -155,18 +155,12 @@ class HutchinsonAction(torch.nn.Module):
         f_n, laplace = self.force_and_laplace(x_n)
 
         # Make sure the terms are [batch, 1] as is the third term
-        first_term = torch.sum(torch.square((x_np - x_n)) * (self.gamma / 4 / self.dt), axis=-1)
-        second_term = torch.sum(torch.square(f_n) * (
-            self.dt / 4 / self.gamma
-        ), axis=-1)
+        first_term = torch.sum(
+            torch.square((x_np - x_n)) * (self.gamma / 4 / self.dt), axis=-1
+        )
+        second_term = torch.sum(torch.square(f_n) * (self.dt / 4 / self.gamma), axis=-1)
 
         third_term = laplace * self.dt * self.D / torch.tensor(2.0)
-
-        #print(first_term.sum(), second_term.sum(), third_term)
-        
-        # First apply physical dimension sum. The sum can be rearanged but Hutch term has to be scalar. So others need to be too
-        #result = torch.sum(first_term + second_term) - third_term
-
 
         # Result is the action and is expected to have shape [batch, 1]
         return first_term.sum(), second_term.sum(), third_term.sum()

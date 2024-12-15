@@ -182,22 +182,6 @@ class GaussianDiffusion(nn.Module):
         # force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * noise_pred
         return -noise_pred
 
-    def laplacian_func(self, x, t):
-        # raise NotImplementedError("Laplacian function not implemented yet.")
-        # Taken from Martin's optimal Hessian branch, but not sure if it's correct (Laplacian term is much smaller than path and force norm terms)
-        noise_pred = self.force_func(x, t)
-        dirac = torch.nn.init.dirac_(torch.zeros(1, x.shape[1], 3)).to(
-            noise_pred.device
-        )
-        laplace = torch.autograd.grad(
-            torch.sum(noise_pred, dim=0, keepdim=True),
-            x,
-            grad_outputs=dirac,
-            retain_graph=True,
-            allow_unused=True,
-        )[0]
-        return laplace
-
     def predict_start_from_noise(self, x_t, t, noise):
         """
         Predict input molecule from noisy molecule.
@@ -635,7 +619,7 @@ class GaussianDiffusion(nn.Module):
                     force_func = lambda x: self.force_func(center_zero(x), diff_time)
 
                     # Subsample points
-                    
+
                     if subsample_points_percent is not None:
                         num_points = int(subsample_points_percent * path_length)
                         half_points = int(0.5 * num_points)
@@ -698,10 +682,8 @@ class GaussianDiffusion(nn.Module):
                             num_paths, noised_xs_input.shape[1], -1
                         ).gather(-1, indices)
 
-                laplace = lambda x: self.laplacian_func(x, diff_time)
                 action_func = action_cls(
                     force_func=force_func,
-                    laplace_func=laplace,
                     dt=dt,
                     gamma=gamma,
                     D=0.01,
@@ -789,7 +771,7 @@ class GaussianDiffusion(nn.Module):
                             "Force Norm": second_term.item(),
                             "Path Contribution": path_contribution,
                             "Force Contribution": force_contribution,
-                            "Laplace Contribution": laplace_contribution
+                            "Laplace Contribution": laplace_contribution,
                         }
                     )
 
