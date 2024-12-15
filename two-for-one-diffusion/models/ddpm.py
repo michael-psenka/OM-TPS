@@ -619,7 +619,10 @@ class GaussianDiffusion(nn.Module):
                     #     self.kb_inv / self.temp_data,
                     # )(center_zero(x))[-1]
                     force_func = lambda x: self.force_func(center_zero(x), diff_time)
-                    forces = [None] * len(noised_xs)
+                    # forces = [None] * len(noised_xs)
+                    forces = force_func(
+                        noised_xs.reshape(-1, self.num_atoms, 3)
+                    ).reshape(num_paths, path_length, self.num_atoms, 3)
 
                 laplace = lambda x: self.laplacian_func(x, diff_time)
                 action_func = action_cls(
@@ -639,7 +642,7 @@ class GaussianDiffusion(nn.Module):
                 third_term = torch.cat([term[2].unsqueeze(0) for term in terms]).mean()
 
                 action = torch.cat(
-                    [(term[0] + term[1] + term[2]).unsqueeze(0) for term in terms]
+                    [(term[0] + term[1] - term[2]).unsqueeze(0) for term in terms]
                 ).mean()
 
                 actions.append(action.item())
@@ -684,18 +687,18 @@ class GaussianDiffusion(nn.Module):
                     f"OM Action: {action.item()}, Path Contribution: {round(path_contribution*100, 3)}%, Force Contribution: {round(force_contribution * 100, 3)}%, Laplace Contribution: {round(laplace_contribution * 100, 3)}%"
                 )
 
-                if path_contribution > 0.99 and i > 50 and not changed:
-                    print(
-                        "Path contribution is too high, decreasing dt to upweight the path loss"
-                    )
-                    dt /= 10  # decrease the time step to upweight the path term
-                    changed = True
-                elif force_contribution > 0.99 and i > 50 and not changed:
-                    print(
-                        "Force contribution is too high, increasing dt to upweight the force loss"
-                    )
-                    dt *= 10  # increase the time step to upweight the force term
-                    changed = True
+                # if path_contribution > 0.99 and i > 50 and not changed:
+                #     print(
+                #         "Path contribution is too high, decreasing dt to upweight the path loss"
+                #     )
+                #     dt /= 10  # decrease the time step to upweight the path term
+                #     changed = True
+                # elif force_contribution > 0.99 and i > 50 and not changed:
+                #     print(
+                #         "Force contribution is too high, increasing dt to upweight the force loss"
+                #     )
+                #     dt *= 10  # increase the time step to upweight the force term
+                #     changed = True
 
                 if self.log:
                     wandb.log(
