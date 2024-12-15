@@ -642,13 +642,14 @@ class GaussianDiffusion(nn.Module):
                         # Generate unique indices for each path using torch.randperm
                         indices = torch.stack(
                             [
-                                torch.randperm(path_length - 2)[:half_points]
+                                torch.arange(0, path_length, 2)[torch.randperm(int(path_length/2))]
                                 for _ in range(num_paths)
                             ]
                         )
 
                         # Compute the next_indices (index + 1)
                         next_indices = indices + 1
+                        
 
                         # Interleave indices and next_indices
                         indices = torch.stack((indices, next_indices), dim=-1).view(
@@ -689,10 +690,9 @@ class GaussianDiffusion(nn.Module):
 
                 # TODO: vmap over batch dimension
                 # (currently not possible because of calling requires_grad on x in GraphTransformer)
-
                 terms = [
                     action_func(
-                        x, force, chunks_of_two=subsample_points_percent is not None
+                        x, force, chunks_of_two=True#subsample_points_percent is not None
                     )
                     for x, force in zip(noised_xs_input, forces)
                 ]

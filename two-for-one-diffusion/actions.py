@@ -58,7 +58,6 @@ class TruncatedAction(torch.nn.Module):
         """
         Args: path of shape [P, *], forces of shape [P, *]
         """
-
         if chunks_of_two:
             path = path.reshape(-1, 2, path.shape[-2], path.shape[-1])
             first_term = torch.square((path[:, 1] - path[:, 0])) * (
