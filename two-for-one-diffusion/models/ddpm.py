@@ -27,7 +27,7 @@ from utils import (
     NUM_RESIDUES_TO_PROTEIN,
 )
 
-# from torchmdnet.models.model import load_model as load_mlff_model
+from torchmdnet.models.model import load_model as load_mlff_model
 
 KB = 0.83144626181  # This is the Boltzmann constant converted from J/K (Kg, m^2 / s^2 / K) to -> g/mol, angstroms, ps and K.
 
