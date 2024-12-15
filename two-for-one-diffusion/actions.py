@@ -52,11 +52,26 @@ class TruncatedAction(torch.nn.Module):
         self.dt = dt
         self.gamma = gamma
 
-    def forward(self, path: torch.Tensor, forces: torch.Tensor = None):
+    def forward(
+        self, path: torch.Tensor, forces: torch.Tensor = None, chunks_of_two=False
+    ):
         """
-        Args: path of shape [P, N, 3], forces of shape [P, N, 3]
+        Args: path of shape [P, *], forces of shape [P, *]
         """
-        first_term = torch.square((path[1:] - path[:-1])) * (self.gamma / 4 / self.dt)
+        if chunks_of_two:
+            # this is necessary if we subsampled points in the path
+            # need to make sure that path terms are computed only on adjacent points
+            if len(path.shape) == 2:
+                path = path.reshape(-1, 2, path.shape[-1])
+            else:
+                path = path.reshape(-1, 2, path.shape[-2], path.shape[-1])
+            first_term = torch.square((path[:, 1] - path[:, 0])) * (
+                self.gamma / 4 / self.dt
+            )
+        else:
+            first_term = torch.square((path[1:] - path[:-1])) * (
+                self.gamma / 4 / self.dt
+            )
         if forces is not None:
             f_n = forces[:-1]
         else:

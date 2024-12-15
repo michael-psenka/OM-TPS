@@ -34,34 +34,8 @@
 #     --append_exp_name test \
 #     --path_length 200 \
 #     --steps 100 \
+#     --mlff \
 
-python sample.py \
-    --model_path saved_models/trp_cage \
-    --gen_mode om_interpolate \
-    --action hutch \
-    --num_samples_eval 8 \
-    --batch_size_gen 2 \
-    --latent_time 15 \
-    --initial_guess_level 250 \
-    --no_encode_and_decode \
-    --lr 1e-3 \
-    --append_exp_name test_initial_latent_time_250_hutch_minus_SGD \
-    --path_length 200 \
-    --steps 1000
-
-python sample.py \
-    --model_path saved_models/bba \
-    --gen_mode om_interpolate \
-    --action hutch \
-    --num_samples_eval 8 \
-    --batch_size_gen 2 \
-    --latent_time 20 \
-    --initial_guess_level 250 \
-    --no_encode_and_decode \
-    --lr 1e-3 \
-    --append_exp_name test_initial_latent_time_250_hutch_minus_SGD \
-    --path_length 200 \
-    --steps 1000
 
 # python sample.py \
 #     --model_path saved_models/chignolin \
@@ -169,50 +143,53 @@ python sample.py \
 #     --steps 2000
 
 python sample.py \
-    --model_path saved_models/chignolin \
+    --model_path saved_models/bba \
     --gen_mode om_interpolate \
     --num_samples_eval 8 \
     --batch_size_gen 8 \
     --latent_time 20 \
     --initial_guess_level 250 \
-    --subsample_points_percent 0.25 \
-    --subsample_dimensions_percent 0.25 \
     --no_encode_and_decode \
     --optimizer sgd \
     --lr 1e-3 \
-    --append_exp_name test_initial_latent_time=250_SGD \
+    --subsample_points_percent 0.25 \
+    --append_exp_name test_initial_latent_time=250_subsample_points=0.25_SGD \
     --path_length 200 \
     --steps 2000 
 
 
+python sample.py \
+    --model_path saved_models/bba \
+    --gen_mode om_interpolate \
+    --num_samples_eval 8 \
+    --batch_size_gen 8 \
+    --latent_time 20 \
+    --initial_guess_level 250 \
+    --no_encode_and_decode \
+    --optimizer sgd \
+    --lr 1e-3 \
+    --subsample_points_percent 0.25 \
+    --subsample_dimensions_percent 0.25 \
+    --append_exp_name test_initial_latent_time=250_subsample_points_dims=0.25_SGD \
+    --path_length 200 \
+    --steps 2000
+
+
 # python sample.py \
-#     --model_path saved_models/villin \
+#     --model_path saved_models/trp_cage \
 #     --gen_mode om_interpolate \
 #     --num_samples_eval 8 \
 #     --batch_size_gen 8 \
-#     --latent_time 5 \
+#     --latent_time 15 \
 #     --initial_guess_level 250 \
 #     --no_encode_and_decode \
 #     --optimizer sgd \
 #     --lr 1e-3 \
-#     --append_exp_name test_initial_latent_time=250_SGD \
+#     --subsample_points_percent 0.8 \
+#     --subsample_dimensions_percent 0.8 \
+#     --append_exp_name test_initial_latent_time=250_subsample_points_dims=0.8_SGD \
 #     --path_length 200 \
-#     --steps 2000
-
-
-# python sample.py \
-#     --model_path saved_models/protein_g \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 5 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --optimizer sgd \
-#     --lr 1e-3 \
-#     --append_exp_name test_initial_latent_time=250_SGD \
-#     --path_length 200 \
-#     --steps 2000
+#     --steps 2000 
 
 # python sample.py \
 #     --model_path saved_models/trp_cage \

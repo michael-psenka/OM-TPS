@@ -447,10 +447,15 @@ class GaussianDiffusion(nn.Module):
         initial_guess_fn=torch.lerp,
         initial_guess_level=0,
         om_steps=100,
+        optimizer=torch.optim.Adam,
         lr=2e-1,
         dt=0.1,
         gamma=10,
         anneal=False,
+        sample_latent_time=False,
+        cosine_scheduler=False,
+        subsample_points_percent=None,
+        subsample_dimensions_percent=None,
         add_noise=False,
         truncated_gradient=False,
         temperature=1.0,
@@ -534,7 +539,16 @@ class GaussianDiffusion(nn.Module):
             (1, 0, 2, 3)
         )  # make batch dimension come first [num_paths, path_length, n_atoms, 3]
 
-        optimizer = torch.optim.Adam([noised_xs], lr=lr)
+        if optimizer == torch.optim.SGD:
+            optimizer = optimizer([noised_xs], lr=lr, momentum=0.9)
+        else:
+            optimizer = optimizer([noised_xs], lr=lr)
+
+        if cosine_scheduler:
+            # cosine annealing scheduler
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, om_steps, eta_min=1e-6
+            )
 
         pbar = tqdm(range(om_steps))
         actions = []
@@ -592,6 +606,14 @@ class GaussianDiffusion(nn.Module):
                     #     self.num_timesteps - int(self.num_timesteps / om_steps) * i - 1,
                     # )  # anneal the time from T to 0
                     diff_time = anneal_schedule[i].item()
+
+                elif sample_latent_time:
+                    # sample from a cosine decay distribution (probabilities decaying from latent_time to T)
+                    probs = cosine_beta_schedule(self.num_timesteps).flip(dims=[0])[
+                        latent_time:
+                    ]
+                    probs = probs / probs.sum()
+                    diff_time = torch.multinomial(probs, 1).item() + latent_time
                 else:
                     diff_time = latent_time
 
@@ -610,19 +632,71 @@ class GaussianDiffusion(nn.Module):
                     force_func = get_force_from_mlff
                     forces = [None] * len(noised_xs)
                 else:
-                    # Is there a difference in results between these two force parameterizations? If so, why?
-                    # Yes, there seems to be. The first one is faster but leads to poorer action improvement. TODO: Why?
-                    # force_func = lambda x: ForcesWrapper(
-                    #     self,
-                    #     diff_time,
-                    #     self.num_timesteps,
-                    #     self.kb_inv / self.temp_data,
-                    # )(center_zero(x))[-1]
                     force_func = lambda x: self.force_func(center_zero(x), diff_time)
-                    # forces = [None] * len(noised_xs)
+
+                    # Subsample points
+                    
+                    if subsample_points_percent is not None:
+                        num_points = int(subsample_points_percent * path_length)
+                        half_points = int(0.5 * num_points)
+
+                        # Generate unique indices for each path using torch.randperm
+                        indices = torch.stack(
+                            [
+                                torch.arange(0, path_length, 2)[
+                                    torch.randperm(int(path_length / 2))
+                                ]
+                                for _ in range(num_paths)
+                            ]
+                        )
+
+                        # Compute the next_indices (index + 1)
+                        next_indices = indices + 1
+
+                        # Interleave indices and next_indices
+                        indices = torch.stack((indices, next_indices), dim=-1).view(
+                            num_paths, -1
+                        )[:, :num_points]
+
+                        indices = (
+                            indices.unsqueeze(-1)
+                            .unsqueeze(-1)
+                            .expand(-1, -1, self.num_atoms, 3)
+                            .to(self.device)
+                        )
+
+                        noised_xs_input = noised_xs.gather(1, indices)
+                    else:
+                        noised_xs_input = noised_xs
+
+                    # compute the forces (fully vectorized for speed)
                     forces = force_func(
-                        noised_xs.reshape(-1, self.num_atoms, 3)
-                    ).reshape(num_paths, path_length, self.num_atoms, 3)
+                        noised_xs_input.reshape(-1, self.num_atoms, 3)
+                    ).reshape(num_paths, num_points, self.num_atoms, 3)
+
+                    # Subsample dimensions
+                    if subsample_dimensions_percent is not None:
+                        num_dims = int(
+                            subsample_dimensions_percent * 3 * self.num_atoms
+                        )
+                        indices = torch.stack(
+                            [
+                                torch.randperm(3 * self.num_atoms)[:num_dims]
+                                for _ in range(num_paths)
+                            ]
+                        )
+                        indices = (
+                            indices.unsqueeze(1)
+                            .expand(-1, noised_xs_input.shape[1], -1)
+                            .to(self.device)
+                        )
+
+                        forces = forces.reshape(num_paths, forces.shape[1], -1).gather(
+                            -1, indices
+                        )
+                        noised_xs_input = noised_xs_input.reshape(
+                            num_paths, noised_xs_input.shape[1], -1
+                        ).gather(-1, indices)
 
                 laplace = lambda x: self.laplacian_func(x, diff_time)
                 action_func = action_cls(
@@ -635,8 +709,12 @@ class GaussianDiffusion(nn.Module):
 
                 # TODO: vmap over batch dimension
                 # (currently not possible because of calling requires_grad on x in GraphTransformer)
-
-                terms = [action_func(x, force) for x, force in zip(noised_xs, forces)]
+                terms = [
+                    action_func(
+                        x, force, chunks_of_two=subsample_points_percent is not None
+                    )
+                    for x, force in zip(noised_xs_input, forces)
+                ]
                 first_term = torch.cat([term[0].unsqueeze(0) for term in terms]).mean()
                 second_term = torch.cat([term[1].unsqueeze(0) for term in terms]).mean()
                 third_term = torch.cat([term[2].unsqueeze(0) for term in terms]).mean()
@@ -675,9 +753,12 @@ class GaussianDiffusion(nn.Module):
                     grads = grads + path_noise.reshape(grads.shape) / lr
 
                 with torch.no_grad():
-                    grads[:, 0], grads[:, -1] = 0, 0
+                    grads[:, 0], grads[:, -1] = 0, 0  # reset the endpoints
+
                     noised_xs.grad = grads
                     optimizer.step()
+                    if cosine_scheduler:
+                        scheduler.step()
 
                 all_noised_xs.append(noised_xs.clone().detach())
                 path_contribution = first_term.item() / action.item()

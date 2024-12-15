@@ -150,12 +150,45 @@ parser.add_argument(
     action="store_true",
     help="whether to anneal temperature during interpolation",
 )
+
+parser.add_argument(
+    "--sample_latent_time",
+    action="store_true",
+    help="whether to randomly sample latent time using cosine decay schedule during om interpolation",
+)
+
+parser.add_argument(
+    "--subsample_points_percent",
+    type=float,
+    help="fraction of points along path to keep for optimization",
+    default=1,
+)
+parser.add_argument(
+    "--subsample_dimensions_percent",
+    type=float,
+    help="fraction of dimensions along path to keep for optimization",
+    default=1,
+)
+
 parser.add_argument(
     "--path_length", type=int, help="length of interpolation path", default=200
 )
 
 parser.add_argument(
     "--steps", type=int, help="number of OM optimization steps", default=1000
+)
+
+parser.add_argument(
+    "--optimizer",
+    type=str,
+    help="Which action to use. Options: adam, sgd",
+    default="adam",
+)
+
+parser.add_argument(
+    "--cosine_scheduler",
+    action="store_true",
+    help="whether to use a cosine scheduler for the learning rate during optimization",
 )
 
 parser.add_argument(
@@ -393,6 +426,13 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                 action_cls = SimpleAction
             elif samp_args.action == "hutch":
                 action_cls = HutchinsonAction
+
+            if samp_args.optimizer == "adam":
+                optimizer = torch.optim.Adam
+            elif samp_args.optimizer == "sgd":
+                optimizer = torch.optim.SGD
+            else:
+                raise Exception("Invalid argument 'optimizer'")
             interpolator = (
                 OMInterpolatorWrapper(
                     model.ema_model,
@@ -408,10 +448,15 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                     mlff=samp_args.mlff,
                     action_cls=action_cls,
                     om_steps=samp_args.steps,
+                    optimizer=optimizer,
                     lr=samp_args.lr,
                     dt=samp_args.om_dt,
                     gamma=samp_args.om_gamma,
                     anneal=samp_args.anneal,
+                    sample_latent_time=samp_args.sample_latent_time,
+                    cosine_scheduler=samp_args.cosine_scheduler,
+                    subsample_points_percent=samp_args.subsample_points_percent,
+                    subsample_dimensions_percent=samp_args.subsample_dimensions_percent,
                     add_noise=samp_args.add_noise,
                     truncated_gradient=samp_args.truncated_gradient,
                     temperature=samp_args.interpolation_temp,
