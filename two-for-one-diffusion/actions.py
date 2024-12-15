@@ -115,7 +115,8 @@ class SimpleAction(torch.nn.Module):
 
 class HutchinsonAction(torch.nn.Module):
     """
-    Action that is the same as S2 Action but calculates laplacian using Hutchinson trick using
+    Action that is the same as S2 Action
+    but calculates laplacian using Hutchinson trick using
     random vector of -1s and 1s.
     """
 
@@ -127,16 +128,22 @@ class HutchinsonAction(torch.nn.Module):
         self.N = N
         self.force_func = force_func
 
-        def force_and_laplace(x: torch.tensor):
+        def force_and_laplace(x: torch.tensor, forces: torch.tensor = None):
             result = 0
 
-            forces = self.force_func(x)
+            if forces is None:
+                forces = self.force_func(x)
+            else:
+                forces = forces[:-1]
 
             for _ in range(self.N):
                 # Generate random vector of -1s and 1s.
                 v = torch.randint(0, 2, forces.shape, dtype=torch.float32) * 2 - 1
                 v = v.to(x.device)
                 # Calculate matrix vector product of Hessian and random vector
+                import pdb
+
+                pdb.set_trace()
                 (Av,) = torch.autograd.grad(
                     forces, x, grad_outputs=v, retain_graph=True, create_graph=True
                 )
@@ -148,11 +155,15 @@ class HutchinsonAction(torch.nn.Module):
 
         self.force_and_laplace = force_and_laplace
 
-    def forward(self, path: torch.Tensor, forces: torch.Tensor = None):
-
+    def forward(
+        self, path: torch.Tensor, forces: torch.Tensor = None, chunks_of_two=False
+    ):
+        """
+        Args: path of shape [P, *], forces of shape [P, *]
+        """
         x_n = path[:-1]
         x_np = path[1:]
-        f_n, laplace = self.force_and_laplace(x_n)
+        f_n, laplace = self.force_and_laplace(x_n, forces)
 
         # Make sure the terms are [batch, 1] as is the third term
         first_term = torch.sum(

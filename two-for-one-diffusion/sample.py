@@ -211,7 +211,7 @@ parser.add_argument(
 parser.add_argument(
     "--action",
     type=str,
-    help="Which action to use. Options: hessian, truncated, simple",
+    help="Which action to use. Options: hessian, truncated, simple, or hutch",
     default="truncated",
 )
 
