@@ -642,14 +642,15 @@ class GaussianDiffusion(nn.Module):
                         # Generate unique indices for each path using torch.randperm
                         indices = torch.stack(
                             [
-                                torch.arange(0, path_length, 2)[torch.randperm(int(path_length/2))]
+                                torch.arange(0, path_length, 2)[
+                                    torch.randperm(int(path_length / 2))
+                                ]
                                 for _ in range(num_paths)
                             ]
                         )
 
                         # Compute the next_indices (index + 1)
                         next_indices = indices + 1
-                        
 
                         # Interleave indices and next_indices
                         indices = torch.stack((indices, next_indices), dim=-1).view(
@@ -666,18 +667,35 @@ class GaussianDiffusion(nn.Module):
                         noised_xs_input = noised_xs.gather(1, indices)
                     else:
                         noised_xs_input = noised_xs
-                    forces = torch.stack([force_func(x) for x in noised_xs_input])
-                    # forces = force_func(noised_xs_input.reshape(-1, self.num_atoms, 3)).reshape(num_paths, num_points, self.num_atoms, 3)
-                    # forces = [None] * len(noised_xs_input)
+
+                    # compute the forces (fully vectorized for speed)
+                    forces = force_func(
+                        noised_xs_input.reshape(-1, self.num_atoms, 3)
+                    ).reshape(num_paths, num_points, self.num_atoms, 3)
+
                     # Subsample dimensions
-                    # if subsample_dimensions_percent is not None:
-                    #     num_dims = int(subsample_dimensions_percent * 3*self.num_atoms)
-                    #     subsampled_indices = torch.randint(0, 3*self.num_atoms, (num_paths, num_dims)).unsqueeze(1).expand(-1, noised_xs_input.shape[1], -1).to(self.device)
+                    if subsample_dimensions_percent is not None:
+                        num_dims = int(
+                            subsample_dimensions_percent * 3 * self.num_atoms
+                        )
+                        indices = torch.stack(
+                            [
+                                torch.randperm(3 * self.num_atoms)[:num_dims]
+                                for _ in range(num_paths)
+                            ]
+                        )
+                        indices = (
+                            indices.unsqueeze(1)
+                            .expand(-1, noised_xs_input.shape[1], -1)
+                            .to(self.device)
+                        )
 
-                    #     forces = forces.reshape(num_paths, forces.shape[1], -1).gather(-1, subsampled_indices)
-                    #     noised_xs_input = noised_xs_input.reshape(num_paths, noised_xs_input.shape[1], -1).gather(-1, subsampled_indices)
-
-                    # forces = [None] * len(noised_xs)
+                        forces = forces.reshape(num_paths, forces.shape[1], -1).gather(
+                            -1, indices
+                        )
+                        noised_xs_input = noised_xs_input.reshape(
+                            num_paths, noised_xs_input.shape[1], -1
+                        ).gather(-1, indices)
 
                 laplace = lambda x: self.laplacian_func(x, diff_time)
                 action_func = action_cls(
@@ -692,7 +710,7 @@ class GaussianDiffusion(nn.Module):
                 # (currently not possible because of calling requires_grad on x in GraphTransformer)
                 terms = [
                     action_func(
-                        x, force, chunks_of_two=True#subsample_points_percent is not None
+                        x, force, chunks_of_two=subsample_points_percent is not None
                     )
                     for x, force in zip(noised_xs_input, forces)
                 ]
@@ -731,20 +749,7 @@ class GaussianDiffusion(nn.Module):
                     grads = grads + path_noise.reshape(grads.shape) / lr
 
                 with torch.no_grad():
-                    grads[:, 0], grads[:, -1] = 0, 0
-
-                    # TODO: implement such that we don't need to compute the forces for these points (will yield a speedup)
-                    # if subsample_points_percent is not None:
-                    #     num_points = path_length - int(
-                    #         subsample_points_percent * path_length
-                    #     )
-                    #     bad_idx = torch.randperm(path_length)[:num_points]
-                    #     grads[:, bad_idx] = 0
-
-                    # if subsample_dimensions_percent is not None:
-                    #     rand = torch.rand_like(grads)
-                    #     keep_idx = rand < subsample_dimensions_percent
-                    #     grads = grads * keep_idx
+                    grads[:, 0], grads[:, -1] = 0, 0  # reset the endpoints
 
                     noised_xs.grad = grads
                     optimizer.step()

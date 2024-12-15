@@ -149,11 +149,11 @@ python sample.py \
     --batch_size_gen 8 \
     --latent_time 20 \
     --initial_guess_level 250 \
-    --subsample_points_percent 1 \
-    --subsample_dimensions_percent 1 \
+    --subsample_points_percent 0.25 \
+    --subsample_dimensions_percent 0.25 \
     --no_encode_and_decode \
-    --optimizer adam \
-    --lr 2e-1 \
+    --optimizer sgd \
+    --lr 1e-3 \
     --append_exp_name test_initial_latent_time=250_SGD \
     --path_length 200 \
     --steps 2000 
