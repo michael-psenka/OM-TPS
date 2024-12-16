@@ -619,6 +619,7 @@ class GaussianDiffusion(nn.Module):
                     force_func = lambda x: self.force_func(center_zero(x), diff_time)
 
                     # Subsample points
+                    # TODO: this seems to not be working again, revisit
 
                     if subsample_points_percent is not None:
                         num_points = int(subsample_points_percent * path_length)
