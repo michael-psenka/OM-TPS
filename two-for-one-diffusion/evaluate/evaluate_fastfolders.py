@@ -4,8 +4,6 @@ import warnings
 from datetime import datetime
 import torch
 import wandb
-
-wandb.require("core")
 import numpy as np
 import mdtraj as md
 import matplotlib.pyplot as plt

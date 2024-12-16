@@ -1,7 +1,5 @@
 import os
 import wandb
-
-wandb.require("core")
 import argparse
 import pickle
 from os.path import join

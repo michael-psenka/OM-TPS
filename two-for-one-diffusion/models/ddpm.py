@@ -619,16 +619,15 @@ class GaussianDiffusion(nn.Module):
                     force_func = lambda x: self.force_func(center_zero(x), diff_time)
 
                     # Subsample points
-                    # TODO: this seems to not be working again, revisit
-                    # subsample_points_percent = None #(specifically this one causes path contributions to vanish - force contributions are fine)
+                    # subsample_points_percent = None 
                     # subsample_dimensions_percent = None
                     num_points = path_length
                     if subsample_points_percent is not None:
                         num_points = int(subsample_points_percent * path_length)
-                        half_points = int(0.5 * num_points)
+                        
 
                         # Generate unique indices for each path using torch.randperm
-                        indices = torch.stack(
+                        indices_even = torch.stack(
                             [
                                 torch.arange(0, path_length, 2)[
                                     torch.randperm(int(path_length / 2))
@@ -637,13 +636,23 @@ class GaussianDiffusion(nn.Module):
                             ]
                         )
 
-                        # Compute the next_indices (index + 1)
-                        next_indices = indices + 1
+                        indices_odd = torch.stack(
+                            [
+                                torch.arange(1, path_length-1, 2)[
+                                    torch.randperm(int(path_length / 2) - 1)
+                                ]
+                                for _ in range(num_paths)
+                            ]
+                        )
+
+                        # Compute the next_indices
+                        next_indices_even = indices_even + 1
+                        next_indices_odd = indices_odd + 1
 
                         # Interleave indices and next_indices
-                        indices = torch.stack((indices, next_indices), dim=-1).view(
-                            num_paths, -1
-                        )[:, :num_points]
+                        indices_even = torch.stack((indices_even, next_indices_even), dim=-1).view(num_paths, -1)[:, :num_points]
+                        indices_odd = torch.stack((indices_odd, next_indices_odd), dim=-1).view(num_paths, -1)[:, :num_points]
+                        indices = torch.cat((indices_even, indices_odd), dim=-1)
 
                         indices = (
                             indices.unsqueeze(-1)
@@ -652,13 +661,22 @@ class GaussianDiffusion(nn.Module):
                             .to(self.device)
                         )
 
+                        indices_even = (
+                            indices_even.unsqueeze(-1)
+                            .unsqueeze(-1)
+                            .expand(-1, -1, self.num_atoms, 3)
+                            .to(self.device)
+                        )
+
                         noised_xs_input = noised_xs.gather(1, indices)
+                        noised_xs_input_unique = noised_xs.gather(1, indices_even)
                     else:
                         noised_xs_input = noised_xs
+                        noised_xs_input_unique = noised_xs
 
                     # compute the forces (fully vectorized for speed)
                     forces = force_func(
-                        noised_xs_input.reshape(-1, self.num_atoms, 3)
+                        noised_xs_input_unique.reshape(-1, self.num_atoms, 3)
                     ).reshape(num_paths, num_points, self.num_atoms, 3)
 
                     # TODO: gradients of forces w.r.t noised_xs_input are zero for some reason
@@ -680,12 +698,14 @@ class GaussianDiffusion(nn.Module):
                             .to(self.device)
                         )
 
+                        import pdb; pdb.set_trace()
                         forces = forces.reshape(num_paths, forces.shape[1], -1).gather(
                             -1, indices
                         )
                         noised_xs_input = noised_xs_input.reshape(
                             num_paths, noised_xs_input.shape[1], -1
                         ).gather(-1, indices)
+
 
                 action_func = action_cls(
                     force_func=force_func,
