@@ -80,6 +80,7 @@ class TruncatedAction(torch.nn.Module):
 
         return first_term.sum(), second_term.sum(), torch.tensor(0).to(torch.float32)
 
+
 class SimpleAction(torch.nn.Module):
     """
     Action without hessian.

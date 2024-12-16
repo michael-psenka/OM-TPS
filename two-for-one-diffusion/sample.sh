@@ -43,8 +43,8 @@ python sample.py \
     --batch_size_gen 8 \
     --latent_time 20 \
     --initial_guess_level 25 \
-    --subsample_points_percent 0.8 \
-    --subsample_dimensions_percent 0.8 \
+    --subsample_points_percent 0.25 \
+    --subsample_dimensions_percent 0.25 \
     --no_encode_and_decode \
     --optimizer sgd \
     --lr 1e-3 \

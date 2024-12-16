@@ -619,12 +619,11 @@ class GaussianDiffusion(nn.Module):
                     force_func = lambda x: self.force_func(center_zero(x), diff_time)
 
                     # Subsample points
-                    # subsample_points_percent = None 
+                    # subsample_points_percent = None
                     # subsample_dimensions_percent = None
                     num_points = path_length
                     if subsample_points_percent is not None:
                         num_points = int(subsample_points_percent * path_length)
-                        
 
                         # Generate unique indices for each path using torch.randperm
                         indices_even = torch.stack(
@@ -638,7 +637,7 @@ class GaussianDiffusion(nn.Module):
 
                         indices_odd = torch.stack(
                             [
-                                torch.arange(1, path_length-1, 2)[
+                                torch.arange(1, path_length - 1, 2)[
                                     torch.randperm(int(path_length / 2) - 1)
                                 ]
                                 for _ in range(num_paths)
@@ -650,8 +649,12 @@ class GaussianDiffusion(nn.Module):
                         next_indices_odd = indices_odd + 1
 
                         # Interleave indices and next_indices
-                        indices_even = torch.stack((indices_even, next_indices_even), dim=-1).view(num_paths, -1)[:, :num_points]
-                        indices_odd = torch.stack((indices_odd, next_indices_odd), dim=-1).view(num_paths, -1)[:, :num_points]
+                        indices_even = torch.stack(
+                            (indices_even, next_indices_even), dim=-1
+                        ).view(num_paths, -1)[:, :num_points]
+                        indices_odd = torch.stack(
+                            (indices_odd, next_indices_odd), dim=-1
+                        ).view(num_paths, -1)[:, :num_points]
                         indices = torch.cat((indices_even, indices_odd), dim=-1)
 
                         indices = (
@@ -669,6 +672,7 @@ class GaussianDiffusion(nn.Module):
                         )
 
                         noised_xs_input = noised_xs.gather(1, indices)
+                        # don't replicate indices for force calculation
                         noised_xs_input_unique = noised_xs.gather(1, indices_even)
                     else:
                         noised_xs_input = noised_xs
@@ -686,26 +690,23 @@ class GaussianDiffusion(nn.Module):
                         num_dims = int(
                             subsample_dimensions_percent * 3 * self.num_atoms
                         )
-                        indices = torch.stack(
-                            [
-                                torch.randperm(3 * self.num_atoms)[:num_dims]
-                                for _ in range(num_paths)
-                            ]
-                        )
                         indices = (
-                            indices.unsqueeze(1)
-                            .expand(-1, noised_xs_input.shape[1], -1)
+                            torch.stack(
+                                [
+                                    torch.randperm(3 * self.num_atoms)[:num_dims]
+                                    for _ in range(num_paths)
+                                ]
+                            )
+                            .unsqueeze(1)
                             .to(self.device)
                         )
 
-                        import pdb; pdb.set_trace()
                         forces = forces.reshape(num_paths, forces.shape[1], -1).gather(
-                            -1, indices
+                            -1, indices.expand(-1, forces.shape[1], -1)
                         )
                         noised_xs_input = noised_xs_input.reshape(
                             num_paths, noised_xs_input.shape[1], -1
-                        ).gather(-1, indices)
-
+                        ).gather(-1, indices.expand(-1, noised_xs_input.shape[1], -1))
 
                 action_func = action_cls(
                     force_func=force_func,
