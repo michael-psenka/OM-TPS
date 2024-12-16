@@ -38,13 +38,12 @@
 python sample.py \
     --model_path saved_models/chignolin \
     --gen_mode om_interpolate \
-    --action hutch \
+    --action truncated \
     --num_samples_eval 8 \
     --batch_size_gen 8 \
     --latent_time 20 \
     --initial_guess_level 25 \
     --no_encode_and_decode \
-    --action "hutch" \
     --optimizer sgd \
     --lr 1e-3 \
     --append_exp_name test_initial_latent_time_250_hutch_minus_SGD \

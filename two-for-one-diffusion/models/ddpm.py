@@ -620,7 +620,9 @@ class GaussianDiffusion(nn.Module):
 
                     # Subsample points
                     # TODO: this seems to not be working again, revisit
-
+                    # subsample_points_percent = None #(specifically this one causes path contributions to vanish - force contributions are fine)
+                    # subsample_dimensions_percent = None
+                    num_points = path_length
                     if subsample_points_percent is not None:
                         num_points = int(subsample_points_percent * path_length)
                         half_points = int(0.5 * num_points)
@@ -658,6 +660,8 @@ class GaussianDiffusion(nn.Module):
                     forces = force_func(
                         noised_xs_input.reshape(-1, self.num_atoms, 3)
                     ).reshape(num_paths, num_points, self.num_atoms, 3)
+
+                    # TODO: gradients of forces w.r.t noised_xs_input are zero for some reason
 
                     # Subsample dimensions
                     if subsample_dimensions_percent is not None:
