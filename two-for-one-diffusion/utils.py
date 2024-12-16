@@ -362,6 +362,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         lr=2e-1,
         dt=0.1,
         gamma=10,
+        D=0.01,
         anneal=False,
         sample_latent_time=False,
         cosine_scheduler=False,
@@ -387,6 +388,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         self.lr = lr
         self.dt = dt
         self.gamma = gamma
+        self.D = D
         self.anneal = anneal
         self.sample_latent_time = sample_latent_time
         self.cosine_scheduler = cosine_scheduler
@@ -412,6 +414,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
             lr=self.lr,
             dt=self.dt,
             gamma=self.gamma,
+            D=self.D,
             anneal=self.anneal,
             sample_latent_time=self.sample_latent_time,
             cosine_scheduler=self.cosine_scheduler,

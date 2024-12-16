@@ -198,6 +198,13 @@ parser.add_argument(
     "--om_gamma", type=float, help="gamma for OM optimization", default=10
 )
 
+parser.add_argument(
+    "--om_d",
+    type=float,
+    help="difffusion constant for OM optimization (only used for hutchinson action)",
+    default=0.01,
+)
+
 
 parser.add_argument(
     "--interpolation_temp",
@@ -450,6 +457,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
                     lr=samp_args.lr,
                     dt=samp_args.om_dt,
                     gamma=samp_args.om_gamma,
+                    D=samp_args.om_d,
                     anneal=samp_args.anneal,
                     sample_latent_time=samp_args.sample_latent_time,
                     cosine_scheduler=samp_args.cosine_scheduler,

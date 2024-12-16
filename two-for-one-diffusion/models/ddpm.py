@@ -435,6 +435,7 @@ class GaussianDiffusion(nn.Module):
         lr=2e-1,
         dt=0.1,
         gamma=10,
+        D=0.01,
         anneal=False,
         sample_latent_time=False,
         cosine_scheduler=False,
@@ -671,7 +672,6 @@ class GaussianDiffusion(nn.Module):
                             .to(self.device)
                         )
 
-
                         noised_xs_input = noised_xs.gather(1, indices)
                         # don't replicate indices for force calculation
                         noised_xs_input_unique = noised_xs.gather(1, indices_even)
@@ -690,7 +690,10 @@ class GaussianDiffusion(nn.Module):
                     # TODO: gradients of forces w.r.t noised_xs_input are zero for some reason
 
                     # Subsample dimensions
-                    if subsample_dimensions_percent is not None and action_cls != HutchinsonAction:
+                    if (
+                        subsample_dimensions_percent is not None
+                        and action_cls != HutchinsonAction
+                    ):
                         num_dims = int(
                             subsample_dimensions_percent * 3 * self.num_atoms
                         )
@@ -716,14 +719,17 @@ class GaussianDiffusion(nn.Module):
                     force_func=force_func,
                     dt=dt,
                     gamma=gamma,
-                    D=0.01,
+                    D=D,
                 )  # (D is only used for HessianAction)
 
                 # TODO: vmap over batch dimension
                 # (currently not possible because of calling requires_grad on x in GraphTransformer)
                 terms = [
                     action_func(
-                        x, force, chunks_of_two=subsample_points_percent is not None, subsample_dimensions_percent=subsample_dimensions_percent
+                        x,
+                        force,
+                        chunks_of_two=subsample_points_percent is not None,
+                        subsample_dimensions_percent=subsample_dimensions_percent,
                     )
                     for x, force in zip(noised_xs_input, forces)
                 ]
