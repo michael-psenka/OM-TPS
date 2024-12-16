@@ -42,10 +42,11 @@ python sample.py \
     --num_samples_eval 8 \
     --batch_size_gen 8 \
     --latent_time 20 \
-    --initial_guess_level 25 \
-    --subsample_points_percent 0.25 \
-    --subsample_dimensions_percent 0.25 \
+    --initial_guess_level 250 \
+    --subsample_points_percent 1.0 \
+    --subsample_dimensions_percent 1.0 \
     --no_encode_and_decode \
+    --actio hutch \
     --optimizer sgd \
     --lr 1e-3 \
     --append_exp_name test_initial_latent_time_250_hutch_minus_SGD \

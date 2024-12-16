@@ -13,7 +13,7 @@ from ase import units
 import warnings
 from tqdm import tqdm
 from rmsd import kabsch_rotate
-from actions import S2Action, TruncatedAction, SimpleAction
+from actions import S2Action, TruncatedAction, SimpleAction, HutchinsonAction
 from dynamics.langevin import ForcesWrapper, temp_dict
 
 from utils import (
@@ -671,6 +671,7 @@ class GaussianDiffusion(nn.Module):
                             .to(self.device)
                         )
 
+
                         noised_xs_input = noised_xs.gather(1, indices)
                         # don't replicate indices for force calculation
                         noised_xs_input_unique = noised_xs.gather(1, indices_even)
@@ -679,14 +680,17 @@ class GaussianDiffusion(nn.Module):
                         noised_xs_input_unique = noised_xs
 
                     # compute the forces (fully vectorized for speed)
-                    forces = force_func(
-                        noised_xs_input_unique.reshape(-1, self.num_atoms, 3)
-                    ).reshape(num_paths, num_points, self.num_atoms, 3)
+                    if action_cls == HutchinsonAction:
+                        forces = [None] * len(noised_xs)
+                    else:
+                        forces = force_func(
+                            noised_xs_input_unique.reshape(-1, self.num_atoms, 3)
+                        ).reshape(num_paths, num_points, self.num_atoms, 3)
 
                     # TODO: gradients of forces w.r.t noised_xs_input are zero for some reason
 
                     # Subsample dimensions
-                    if subsample_dimensions_percent is not None:
+                    if subsample_dimensions_percent is not None and action_cls != HutchinsonAction:
                         num_dims = int(
                             subsample_dimensions_percent * 3 * self.num_atoms
                         )
@@ -719,7 +723,7 @@ class GaussianDiffusion(nn.Module):
                 # (currently not possible because of calling requires_grad on x in GraphTransformer)
                 terms = [
                     action_func(
-                        x, force, chunks_of_two=subsample_points_percent is not None
+                        x, force, chunks_of_two=subsample_points_percent is not None, subsample_dimensions_percent=subsample_dimensions_percent
                     )
                     for x, force in zip(noised_xs_input, forces)
                 ]
