@@ -620,8 +620,11 @@ class GaussianDiffusion(nn.Module):
                     force_func = lambda x: self.force_func(center_zero(x), diff_time)
 
                     # Subsample points
-                    # subsample_points_percent = None
-                    # subsample_dimensions_percent = None
+                    # TODO: the subsampling stuff isn't working with Hessian action r.n (need to revisit)
+                    # Should be ok for now since it doesn't yield any speedup anyways
+                    if action_cls == HutchinsonAction:
+                        subsample_points_percent = None
+                        subsample_dimensions_percent = None
                     num_points = path_length
                     if subsample_points_percent is not None:
                         num_points = int(subsample_points_percent * path_length)
