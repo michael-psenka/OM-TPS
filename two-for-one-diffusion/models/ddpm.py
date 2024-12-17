@@ -618,106 +618,8 @@ class GaussianDiffusion(nn.Module):
                     forces = [None] * len(noised_xs)
                 else:
                     force_func = lambda x: self.force_func(center_zero(x), diff_time)
-
-                    # Subsample points
-                    # TODO: the subsampling stuff isn't working with Hessian action r.n (need to revisit)
-                    # Should be ok for now since it doesn't yield any speedup anyways
-                    if action_cls == HutchinsonAction:
-                        subsample_points_percent = None
-                        subsample_dimensions_percent = None
-                    num_points = path_length
-                    if subsample_points_percent is not None:
-                        num_points = int(subsample_points_percent * path_length)
-
-                        # Generate unique indices for each path using torch.randperm
-                        indices_even = torch.stack(
-                            [
-                                torch.arange(0, path_length, 2)[
-                                    torch.randperm(int(path_length / 2))
-                                ]
-                                for _ in range(num_paths)
-                            ]
-                        )
-
-                        indices_odd = torch.stack(
-                            [
-                                torch.arange(1, path_length - 1, 2)[
-                                    torch.randperm(int(path_length / 2) - 1)
-                                ]
-                                for _ in range(num_paths)
-                            ]
-                        )
-
-                        # Compute the next_indices
-                        next_indices_even = indices_even + 1
-                        next_indices_odd = indices_odd + 1
-
-                        # Interleave indices and next_indices
-                        indices_even = torch.stack(
-                            (indices_even, next_indices_even), dim=-1
-                        ).view(num_paths, -1)[:, :num_points]
-                        indices_odd = torch.stack(
-                            (indices_odd, next_indices_odd), dim=-1
-                        ).view(num_paths, -1)[:, :num_points]
-                        indices = torch.cat((indices_even, indices_odd), dim=-1)
-
-                        indices = (
-                            indices.unsqueeze(-1)
-                            .unsqueeze(-1)
-                            .expand(-1, -1, self.num_atoms, 3)
-                            .to(self.device)
-                        )
-
-                        indices_even = (
-                            indices_even.unsqueeze(-1)
-                            .unsqueeze(-1)
-                            .expand(-1, -1, self.num_atoms, 3)
-                            .to(self.device)
-                        )
-
-                        noised_xs_input = noised_xs.gather(1, indices)
-                        # don't replicate indices for force calculation
-                        noised_xs_input_unique = noised_xs.gather(1, indices_even)
-                    else:
-                        noised_xs_input = noised_xs
-                        noised_xs_input_unique = noised_xs
-
-                    # compute the forces (fully vectorized for speed)
-                    if action_cls == HutchinsonAction:
-                        forces = [None] * len(noised_xs)
-                    else:
-                        forces = force_func(
-                            noised_xs_input_unique.reshape(-1, self.num_atoms, 3)
-                        ).reshape(num_paths, num_points, self.num_atoms, 3)
-
-                    # TODO: gradients of forces w.r.t noised_xs_input are zero for some reason
-
-                    # Subsample dimensions
-                    if (
-                        subsample_dimensions_percent is not None
-                        and action_cls != HutchinsonAction
-                    ):
-                        num_dims = int(
-                            subsample_dimensions_percent * 3 * self.num_atoms
-                        )
-                        indices = (
-                            torch.stack(
-                                [
-                                    torch.randperm(3 * self.num_atoms)[:num_dims]
-                                    for _ in range(num_paths)
-                                ]
-                            )
-                            .unsqueeze(1)
-                            .to(self.device)
-                        )
-
-                        forces = forces.reshape(num_paths, forces.shape[1], -1).gather(
-                            -1, indices.expand(-1, forces.shape[1], -1)
-                        )
-                        noised_xs_input = noised_xs_input.reshape(
-                            num_paths, noised_xs_input.shape[1], -1
-                        ).gather(-1, indices.expand(-1, noised_xs_input.shape[1], -1))
-
+                    forces = [None] * len(noised_xs)
+                 
                 action_func = action_cls(
                     force_func=force_func,
                     dt=dt,
@@ -728,13 +630,8 @@ class GaussianDiffusion(nn.Module):
                 # TODO: vmap over batch dimension
                 # (currently not possible because of calling requires_grad on x in GraphTransformer)
                 terms = [
-                    action_func(
-                        x,
-                        force,
-                        chunks_of_two=subsample_points_percent is not None,
-                        subsample_dimensions_percent=subsample_dimensions_percent,
-                    )
-                    for x, force in zip(noised_xs_input, forces)
+                    action_func(x, force)
+                    for x, force in zip(noised_xs, forces)
                 ]
                 first_term = torch.cat([term[0].unsqueeze(0) for term in terms]).mean()
                 second_term = torch.cat([term[1].unsqueeze(0) for term in terms]).mean()

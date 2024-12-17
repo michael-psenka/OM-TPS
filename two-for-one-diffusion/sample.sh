@@ -36,7 +36,7 @@
 #     --steps 100 \
 
 python sample.py \
-    --model_path saved_models/bba \
+    --model_path saved_models/chignolin \
     --gen_mode om_interpolate \
     --num_samples_eval 8 \
     --batch_size_gen 8 \
@@ -47,25 +47,25 @@ python sample.py \
     --optimizer sgd \
     --lr 1e-3 \
     --om_d 0.1 \
-    --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_D=0.1_repr2 \
+    --append_exp_name D=0.1_test \
     --path_length 200 \
     --steps 1000
 
-python sample.py \
-    --model_path saved_models/trp_cage \
-    --gen_mode om_interpolate \
-    --num_samples_eval 8 \
-    --batch_size_gen 8 \
-    --latent_time 15 \
-    --initial_guess_level 250 \
-    --no_encode_and_decode \
-    --action hutch \
-    --optimizer sgd \
-    --lr 1e-3 \
-    --om_d 0.1 \
-    --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_D=0.1_repr2 \
-    --path_length 200 \
-    --steps 1000
+# python sample.py \
+#     --model_path saved_models/trp_cage \
+#     --gen_mode om_interpolate \
+#     --num_samples_eval 8 \
+#     --batch_size_gen 8 \
+#     --latent_time 15 \
+#     --initial_guess_level 25 \
+#     --no_encode_and_decode \
+#     --action hutch \
+#     --optimizer sgd \
+#     --lr 1e-3 \
+#     --om_d 0.1 \
+#     --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_D=0.1_repr2 \
+#     --path_length 200 \
+#     --steps 1000
 
 
 # python sample.py \
