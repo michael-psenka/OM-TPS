@@ -469,7 +469,7 @@ class MainModel(BaseModel):
         tr_init,  # option to provide initial translation
         rot_mat_init,  # option to provide initial rotation
         use_tqdm=True,
-        temperature=0.25,
+        temperature=0,
     ):
         """
         Sample i.i.d conformations from the model.

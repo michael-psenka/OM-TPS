@@ -520,10 +520,10 @@ def main(args):
         torch.save(all_CA, sampled_CA_file)
         gsd_file = eval_folder + f"/sample-{args.gen_mode}.gsd"
         save_ovito_traj(
-            sampled_mol,
+            all_CA,
             gsd_file,
-            alpha_carbon_lim=all_CA.shape[1],
-            all_backbone=not (args.pdb_id in PDB_ID_TO_NAME),
+            # alpha_carbon_lim=all_CA.shape[1],
+            # all_backbone=not (args.pdb_id in PDB_ID_TO_NAME),
             align=args.gen_mode == "iid",
         )
 
