@@ -137,18 +137,9 @@ class HutchinsonAction(torch.nn.Module):
         ):
             result = 0
 
-            if forces is None:
-                forces = self.force_func(x)
-            else:
-                forces = forces[:-1]
+            
+            forces = self.force_func(x)
 
-            if subsample_dimensions is not None:
-                forces = forces.reshape(forces.shape[0], -1).gather(
-                    -1, subsample_dimensions.expand(forces.shape[0], -1)
-                )
-                # noised_xs_input = noised_xs_input.reshape(
-                #     num_paths, noised_xs_input.shape[1], -1
-                # ).gather(-1, indices.expand(-1, noised_xs_input.shape[1], -1))
 
             for _ in range(self.N):
                 # Generate random vector of -1s and 1s.
@@ -158,11 +149,6 @@ class HutchinsonAction(torch.nn.Module):
                 (Av,) = torch.autograd.grad(
                     forces, x, grad_outputs=v, retain_graph=True, create_graph=True
                 )
-                if subsample_dimensions is not None:
-                    Av = Av.reshape(Av.shape[0], -1).gather(
-                        -1, subsample_dimensions.expand(forces.shape[0], -1)
-                    )
-
                 # Make it a scalar. Minus is because we want the energy Hessian, which is the negative force Jacobian.
                 result += -torch.sum(v * Av)
 
@@ -174,47 +160,18 @@ class HutchinsonAction(torch.nn.Module):
         self,
         path: torch.Tensor,
         forces: torch.Tensor = None,
-        chunks_of_two=False,
-        subsample_dimensions_percent=None,
     ):
         """
         Args: path of shape [P, N, 3], forces of shape [P, N, 3]
         """
-        num_atoms = path.shape[-2]
-        subsample_dimensions = None
-        if subsample_dimensions_percent is not None:
-            num_dims = int(subsample_dimensions_percent * 3 * num_atoms)
-            subsample_dimensions = torch.randperm(3 * num_atoms)[:num_dims].to(
-                path.device
-            )
-
+        
         f_n, laplace = self.force_and_laplace(
-            path[: int(path.shape[0] / 2) - 1] if chunks_of_two else path[:-1],
-            forces,
-            subsample_dimensions,
+            path[:-1],
         )
 
-        # now remove dims from path
-        if subsample_dimensions is not None:
-            path = path.reshape(-1, 3 * num_atoms).gather(
-                -1, subsample_dimensions.expand(path.shape[0], -1)
-            )
-
-        # Make sure the terms are [batch, 1] as is the third term
-        if chunks_of_two:
-            # this is necessary if we subsampled points in the path
-            # need to make sure that path terms are computed only on adjacent points
-            if len(path.shape) == 2:
-                path = path.reshape(-1, 2, path.shape[-1])
-            else:
-                path = path.reshape(-1, 2, path.shape[-2], path.shape[-1])
-            first_term = torch.square((path[:, 1] - path[:, 0])) * (
-                self.gamma / 4 / self.dt
-            )
-        else:
-            first_term = torch.square((path[1:] - path[:-1])) * (
-                self.gamma / 4 / self.dt
-            )
+        first_term = torch.square((path[1:] - path[:-1])) * (
+            self.gamma / 4 / self.dt
+        )
         second_term = torch.sum(torch.square(f_n) * (self.dt / 4 / self.gamma), axis=-1)
 
         third_term = laplace * self.dt * self.D / torch.tensor(2.0)
