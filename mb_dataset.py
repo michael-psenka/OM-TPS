@@ -35,6 +35,7 @@ class MBDataset(Dataset):
 
     def __init__(
         self,
+        calculator: MullerBrownPotential,
         seed: int = 0,
         temperature: float = 450.0,
         n_sims: int = 100,
@@ -69,7 +70,7 @@ class MBDataset(Dataset):
         self.use_langevin = use_langevin
         self.transition_path_guess = transition_path_guess
 
-        self.calculator = MullerBrownPotential(device=device)
+        self.calculator = calculator
 
         self.data = {}
 
@@ -183,7 +184,7 @@ class MBDataset(Dataset):
         # pe = np.array([a.get_potential_energy() for a in traj])
         force = np.array([a.get_forces() for a in traj])
         # ke = np.array([a.get_kinetic_energy() for a in traj])
-        
+
         return {"pos": pos, "force": force}  # , "pe": pe, "force": force, "ke": ke}
 
     def load_simulations(self):
