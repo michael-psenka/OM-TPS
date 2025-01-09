@@ -11,7 +11,8 @@ python sample.py \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
-    --append_exp_name test_initial_latent_time_250_longer_pathlength \
-    --path_length 2000 \
+    --append_exp_name test_initial_latent_time_250_higher_dt \
+    --path_length 200 \
+    --om_dt 1.0 \
     --om_d 0.1 \
     --steps 1000

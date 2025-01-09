@@ -49,23 +49,36 @@
 
 
 python sample.py \
-    --model_path saved_models/trp_cage \
+    --model_path saved_models/bba \
+    --gen_mode langevin \
+    --append_exp_name test_MD_unbiased \
+    --batch_size_gen 1600 \
+    --noise_level 5 \
+    --parallel_sim 1600 \
+    --n_timesteps 10000  \
+    --save_interval 250 \
+    --kb consistent   \
+    --dt 2e-3 
+
+python sample.py \
+    --model_path saved_models/bba \
     --gen_mode om_interpolate \
     --num_samples_eval 8 \
     --batch_size_gen 2 \
-    --latent_time 15 \
+    --latent_time 20 \
     --initial_guess_level 250 \
     --subsample_points_percent 1.0 \
     --subsample_dimensions_percent 1.0 \
     --no_encode_and_decode \
     --action truncated \
-    --optimizer adam \
-    --lr 2e-1 \
+    --optimizer sgd \
+    --lr 1e-3 \
     --append_exp_name test_MD \
     --path_length 200 \
     --om_d 0.1 \
     --steps 1000 \
-    --n_timesteps 10000
+    --n_timesteps 10000 \
+    --noise_level 5 # to match the noise level in the unbiased MD simulations
 
 
 # python sample.py \
