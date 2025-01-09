@@ -10,45 +10,6 @@
 # done
 
 
-# python sample.py \
-#     --model_path saved_models/trp_cage \
-#     --gen_mode iid \
-#     --num_samples_eval 1000 \
-#     --batch_size_gen 256 \
-#     --latent_time 20 \
-#     --initial_guess_level 100 \
-#     --no_encode_and_decode \
-#     --append_exp_name no_noise \
-#     --path_length 200 \
-#     --steps 100 \
-#     --disable_logging
-
-# python sample.py \
-#     --model_path saved_models/chignolin \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 20 \
-#     --initial_guess_level 0 \
-#     --no_encode_and_decode \
-#     --append_exp_name test \
-#     --path_length 200 \
-#     --steps 100 \
-#     --mlff \
-
-
-# python sample.py \
-#     --model_path saved_models/chignolin \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 20 \
-#     --initial_guess_level 400 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=400 \
-#     --path_length 200 \
-#     --steps 2000
-
 
 # python sample.py \
 #     --model_path saved_models/chignolin \
@@ -57,142 +18,34 @@
 #     --batch_size_gen 8 \
 #     --latent_time 20 \
 #     --initial_guess_level 250 \
+#     --subsample_points_percent 1.0 \
+#     --subsample_dimensions_percent 1.0 \
 #     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=250 \
+#     --action hutch \
+#     --optimizer sgd \
+#     --lr 1e-3 \
+#     --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_D=0.1_repr \
 #     --path_length 200 \
-#     --steps 2000
-
-# python sample.py \
-#     --model_path saved_models/chignolin \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 20 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=250_less_noise \
-#     --path_length 200 \
-#     --add_noise \
-#     --steps 2000
-
-# python sample.py \
-#     --model_path saved_models/chignolin \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 20 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --truncated_gradient \
-#     --append_exp_name test_initial_latent_time=250_truncated_gradient \
-#     --path_length 200 \
-#     --steps 2000
-
-
-# python sample.py \
-#     --model_path saved_models/chignolin \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 20 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=250_mlff \
-#     --mlff \
-#     --om_dt 0.01 \
-#     --path_length 200 \
-#     --steps 2000
-
-# python sample.py \
-#     --model_path saved_models/chignolin \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 20 \
-#     --initial_guess_level 0 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=0_mlff \
-#     --mlff \
-#     --om_dt 0.01 \
-#     --path_length 200 \
-#     --steps 2000
-
-# python sample.py \
-#     --model_path saved_models/trp_cage \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 15 \
-#     --initial_guess_level 100 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=100 \
-#     --path_length 200 \
-#     --steps 2000
-
-
-# python sample.py \
-#     --model_path saved_models/trp_cage \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 15 \
-#     --initial_guess_level 400 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=400 \
-#     --path_length 200 \
-#     --steps 2000
+#     --om_d 0.1 \
+#     --steps 1000
 
 # python sample.py \
 #     --model_path saved_models/bba \
 #     --gen_mode om_interpolate \
 #     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
+#     --batch_size_gen 2 \
 #     --latent_time 20 \
 #     --initial_guess_level 250 \
+#     --subsample_points_percent 1.0 \
+#     --subsample_dimensions_percent 1.0 \
 #     --no_encode_and_decode \
+#     --action hutch \
 #     --optimizer sgd \
 #     --lr 1e-3 \
-#     --subsample_points_percent 0.5 \
-#     --append_exp_name test_initial_latent_time=250_subsample_points=0.5_SGD \
+#     --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_D=0.1_repr \
 #     --path_length 200 \
-#     --steps 2000 
-
-
-python sample.py \
-    --model_path saved_models/chignolin \
-    --gen_mode om_interpolate \
-    --num_samples_eval 8 \
-    --batch_size_gen 8 \
-    --latent_time 20 \
-    --initial_guess_level 250 \
-    --subsample_points_percent 1.0 \
-    --subsample_dimensions_percent 1.0 \
-    --no_encode_and_decode \
-    --action hutch \
-    --optimizer sgd \
-    --lr 1e-3 \
-    --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_D=0.1_repr \
-    --path_length 200 \
-    --om_d 0.1 \
-    --steps 1000
-
-python sample.py \
-    --model_path saved_models/bba \
-    --gen_mode om_interpolate \
-    --num_samples_eval 8 \
-    --batch_size_gen 2 \
-    --latent_time 20 \
-    --initial_guess_level 250 \
-    --subsample_points_percent 1.0 \
-    --subsample_dimensions_percent 1.0 \
-    --no_encode_and_decode \
-    --action hutch \
-    --optimizer sgd \
-    --lr 1e-3 \
-    --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_D=0.1_repr \
-    --path_length 200 \
-    --om_d 0.1 \
-    --steps 1000
+#     --om_d 0.1 \
+#     --steps 1000
 
 
 python sample.py \
@@ -205,13 +58,33 @@ python sample.py \
     --subsample_points_percent 1.0 \
     --subsample_dimensions_percent 1.0 \
     --no_encode_and_decode \
-    --action hutch \
-    --optimizer sgd \
-    --lr 1e-3 \
-    --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_D=0.1_repr \
+    --action truncated \
+    --optimizer adam \
+    --lr 2e-1 \
+    --append_exp_name test_MD \
     --path_length 200 \
     --om_d 0.1 \
-    --steps 1000
+    --steps 1000 \
+    --n_timesteps 10000
+
+
+# python sample.py \
+#     --model_path saved_models/trp_cage \
+#     --gen_mode om_interpolate \
+#     --num_samples_eval 4 \
+#     --batch_size_gen 1 \
+#     --latent_time 15 \
+#     --initial_guess_level 250 \
+#     --subsample_points_percent 1.0 \
+#     --subsample_dimensions_percent 1.0 \
+#     --no_encode_and_decode \
+#     --action truncated \
+#     --optimizer adam \
+#     --lr 2e-1 \
+#     --append_exp_name test_initial_latent_time_250_longer_pathlength \
+#     --path_length 2000 \
+#     --om_d 0.1 \
+#     --steps 250
 
 
 # python sample.py \
@@ -245,320 +118,7 @@ python sample.py \
 #     --steps 2000 
 
 
-# python sample.py \
-#     --model_path saved_models/trp_cage \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 15 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --truncated_gradient \
-#     --append_exp_name test_initial_latent_time=250_truncated_gradient \
-#     --path_length 200 \
-#     --steps 2000
 
-
-# python sample.py \
-#     --model_path saved_models/trp_cage \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 15 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=250_mlff \
-#     --mlff \
-#     --om_dt 0.01 \
-#     --path_length 200 \
-#     --steps 2000
-
-
-
-# python sample.py \
-#     --model_path saved_models/trp_cage \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 15 \
-#     --initial_guess_level 0 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=0_mlff \
-#     --mlff \
-#     --om_dt 0.01 \
-#     --path_length 200 \
-#     --steps 2000 \
-
-# python sample.py \
-#     --model_path saved_models/bba \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 20 \
-#     --initial_guess_level 100 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=100 \
-#     --path_length 200 \
-#     --steps 2000
-
-
-# python sample.py \
-#     --model_path saved_models/bba \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 20 \
-#     --initial_guess_level 400 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=400 \
-#     --path_length 200 \
-#     --steps 2000
-
-
-# python sample.py \
-#     --model_path saved_models/bba \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 20 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=250_less_noise \
-#     --path_length 200 \
-#     --add_noise \
-#     --steps 2000
-
-# python sample.py \
-#     --model_path saved_models/bba \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 20 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --truncated_gradient \
-#     --append_exp_name test_initial_latent_time=250_truncated_gradient \
-#     --path_length 200 \
-#     --steps 2000
-
-
-# python sample.py \
-#     --model_path saved_models/bba \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 20 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=250_mlff \
-#     --mlff \
-#     --om_dt 0.01 \
-#     --path_length 200 \
-#     --steps 2000
-
-
-# python sample.py \
-#     --model_path saved_models/bba \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 20 \
-#     --initial_guess_level 0 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=0_mlff \
-#     --mlff \
-#     --om_dt 0.01 \
-#     --path_length 200 \
-#     --steps 2000
-
-
-
-# python sample.py \
-#     --model_path saved_models/villin \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 5 \
-#     --initial_guess_level 100 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=100 \
-#     --path_length 200 \
-#     --steps 2000
-
-# python sample.py \
-#     --model_path saved_models/villin \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 5 \
-#     --initial_guess_level 400 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=400 \
-#     --path_length 200 \
-#     --steps 2000
-
-
-# python sample.py \
-#     --model_path saved_models/villin \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 5 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=250 \
-#     --path_length 200 \
-#     --steps 2000
-
-# python sample.py \
-#     --model_path saved_models/villin \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 5 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=250_less_noise \
-#     --path_length 200 \
-#     --add_noise \
-#     --steps 2000
-
-# python sample.py \
-#     --model_path saved_models/villin \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 5 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --truncated_gradient \
-#     --append_exp_name test_initial_latent_time=250_truncated_gradient \
-#     --path_length 200 \
-#     --steps 2000
-
-
-# python sample.py \
-#     --model_path saved_models/villin \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 5 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=250_mlff \
-#     --mlff \
-#     --om_dt 0.01 \
-#     --path_length 200 \
-#     --steps 2000
-
-# python sample.py \
-#     --model_path saved_models/villin \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 8 \
-#     --latent_time 5 \
-#     --initial_guess_level 0 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=0_mlff \
-#     --mlff \
-#     --om_dt 0.01 \
-#     --path_length 200 \
-#     --steps 2000
-
-
-# python sample.py \
-#     --model_path saved_models/protein_g \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 2 \
-#     --latent_time 5 \
-#     --initial_guess_level 100 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=100 \
-#     --path_length 200 \
-#     --steps 2000
-
-# python sample.py \
-#     --model_path saved_models/protein_g \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 2 \
-#     --latent_time 5 \
-#     --initial_guess_level 400 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=400 \
-#     --path_length 200 \
-#     --steps 2000
-
-# python sample.py \
-#     --model_path saved_models/protein_g \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 2 \
-#     --latent_time 5 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=250 \
-#     --path_length 200 \
-#     --steps 2000
-
-
-# python sample.py \
-#     --model_path saved_models/protein_g \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 2 \
-#     --latent_time 5 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=250_less_noise \
-#     --path_length 200 \
-#     --add_noise \
-#     --steps 2000
-
-
-# python sample.py \
-#     --model_path saved_models/protein_g \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 2 \
-#     --latent_time 5 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --truncated_gradient \
-#     --append_exp_name test_initial_latent_time=250_truncated_gradient \
-#     --path_length 200 \
-#     --steps 2000
-
-
-# python sample.py \
-#     --model_path saved_models/protein_g \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 2 \
-#     --latent_time 5 \
-#     --initial_guess_level 250 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=250_mlff \
-#     --mlff \
-#     --om_dt 0.01 \
-#     --path_length 200 \
-#     --steps 2000
-
-
-# python sample.py \
-#     --model_path saved_models/protein_g \
-#     --gen_mode om_interpolate \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 2 \
-#     --latent_time 5 \
-#     --initial_guess_level 0 \
-#     --no_encode_and_decode \
-#     --append_exp_name test_initial_latent_time=0_mlff \
-#     --mlff \
-#     --om_dt 0.01 \
-#     --path_length 200 \
-#     --steps 2000
 
 
 

@@ -221,7 +221,7 @@ def evaluate_fastfolders(
     if subsample != 0:
         if gen_mode == "langevin":
             # 100 parallel langevin sims were generated
-            # remove the first subsample frames from each sim
+            # take the first subsample frames from each sim
             sampled_mol = sampled_mol.reshape(
                 100, -1, sampled_mol.shape[1], sampled_mol.shape[2]
             )
@@ -249,7 +249,7 @@ def evaluate_fastfolders(
     gt_transition_ensemble = np.load(gt_transition_ensemble_file)
 
     n_ref_samples = 1000
-    traj_len = 100 # corresponds to horizon of 20 ns (since lagtime is 200 ps)
+    traj_len = 100  # corresponds to horizon of 20 ns (since lagtime is 200 ps)
 
     # Discretize the interpolation trajectory based on the reference cluster centers
     cluster_assignments, transformed_samples = discretize_trajectory(
@@ -432,7 +432,7 @@ def evaluate_fastfolders(
             else None
         ),
         ref_paths=kmeans_cluster_centers[ref_sampled_traj[:20]],
-        gif=True,
+        gif=gif,
         window_size=window_size,
         num_paths=num_paths,
         ref_dihedrals=ref_dihedrals,
@@ -581,7 +581,6 @@ def get_tic_free_energy_plots(
     )  # The evalset is the set we'll compare to in the next evaluation steps
 
     loop = [sampled_mol]
-
     # Load path along optimization if OM interpolation is used
     if gif and gen_mode == "om_interpolate":
         path_history = Path(eval_folder, f"path_history-{gen_mode}.pt")
