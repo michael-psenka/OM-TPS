@@ -432,6 +432,7 @@ def evaluate_fastfolders(
             else None
         ),
         ref_paths=kmeans_cluster_centers[ref_sampled_traj[:20]],
+        bin_committor_probs=bin_committor_probs,
         gif=gif,
         window_size=window_size,
         num_paths=num_paths,
@@ -514,6 +515,7 @@ def get_tic_free_energy_plots(
     sampled_mol,
     gen_paths=None,
     ref_paths=None,
+    bin_committor_probs=None,
     window_size=7,
     gif=False,
     num_paths=8,
@@ -611,6 +613,9 @@ def get_tic_free_energy_plots(
     free_energy_paths = (
         []
     )  # To keep track of the free energy image paths for creating a GIF
+    committor_paths = (
+        []
+    )  # To keep track of the committor image paths for creating a GIF
     dihedral_hist_paths = (
         []
     )  # To keep track of the dihedral angle histograms for creating a GIF
@@ -681,6 +686,8 @@ def get_tic_free_energy_plots(
         # clip the bins to the maximum bin index
         bins_x = np.clip(bins_x, 0, tic_evaluator.bins - 1)
         bins_y = np.clip(bins_y, 0, tic_evaluator.bins - 1)
+        bin_idx = bins_x * tic_evaluator.bins + bins_y
+        path_committor_probs = bin_committor_probs[bin_idx]
 
         # probabilities of the samples as a function of path position
         gt_probs = np.zeros((path.shape[0],))
@@ -791,6 +798,25 @@ def get_tic_free_energy_plots(
         plt.close()
         free_energy_paths.append(file_name)
 
+        # Plot the committor function along the path
+
+        plt.figure()
+        # plot free energy profile of all paths
+        for profile in torch.tensor(path_committor_probs).chunk(num_paths):
+            plt.plot(profile)
+        plt.ylim(-0.1, 1.1)
+        plt.xlabel("Path Step")
+        plt.ylabel("Committor Probability")
+        plt.title(f"Step {i}: Transition free energy profile: {protein_name}")
+        plt.axhline(0, color="blue", linestyle="--", label="Starting State")
+        plt.axhline(1, color="red", linestyle="--", label="Ending State")
+        plt.legend()
+        plt.show()
+        file_name = join(gif_folder, f"path_committor_{i}.png")
+        plt.savefig(file_name)
+        plt.close()
+        committor_paths.append(file_name)
+
     # Create a GIF from the saved TICA images
     tica_gif_path = join(tic_evaluator.plots_folder, "tica_samples.gif")
     images = [Image.open(tic_path) for tic_path in tic_paths]
@@ -812,6 +838,20 @@ def get_tic_free_energy_plots(
     # Save as GIF
     images[0].save(
         free_energy_gif_path,
+        save_all=True,
+        append_images=images[1:],
+        optimize=False,
+        duration=100,  # Duration for each frame in milliseconds
+        loop=0,  # Loop forever
+    )
+
+    # Repeat for the committor images
+    committor_gif_path = join(tic_evaluator.plots_folder, "path_committor.gif")
+    images = [Image.open(committor_path) for committor_path in committor_paths]
+
+    # Save as GIF
+    images[0].save(
+        committor_gif_path,
         save_all=True,
         append_images=images[1:],
         optimize=False,
@@ -884,6 +924,7 @@ def get_tic_free_energy_plots(
         + dihedral_hist_paths
         + pwd_hist_paths
         + transition_rate_paths
+        + committor_paths
     ):
         os.remove(image_path)
 

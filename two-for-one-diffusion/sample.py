@@ -505,32 +505,32 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
         sampled_mol = output["sampled_mol"]
 
         # initiate MD simulations from the interpolated path
-        print(
-            f"Initiating Langevin MD simulations from transition paths. Total steps: {int(samp_args.n_timesteps)}"
-        )
+        # print(
+        #     f"Initiating Langevin MD simulations from transition paths. Total steps: {int(samp_args.n_timesteps)}"
+        # )
 
-        masses = samp_args.masses
-        if masses is None:
-            if "alanine" in args.mol:
-                masses = [12.8] * trainset.num_beads
-            else:
-                masses = [12.0] * trainset.num_beads
+        # masses = samp_args.masses
+        # if masses is None:
+        #     if "alanine" in args.mol:
+        #         masses = [12.8] * trainset.num_beads
+        #     else:
+        #         masses = [12.0] * trainset.num_beads
 
-        langevin_sampler = LangevinDiffusion(
-            model.ema_model,
-            sampled_mol,
-            samp_args.n_timesteps,
-            save_interval=samp_args.save_interval,
-            t=noise_level,
-            diffusion_steps=args.diffusion_steps,
-            temp_data=samp_args.temp_data,
-            temp_sim=samp_args.temp_sim,
-            dt=samp_args.dt,
-            masses=masses,
-            friction=samp_args.friction,
-            kb=samp_args.kb,
-        )
-        sampled_mol = langevin_sampler.sample()
+        # langevin_sampler = LangevinDiffusion(
+        #     model.ema_model,
+        #     sampled_mol,
+        #     samp_args.n_timesteps,
+        #     save_interval=samp_args.save_interval,
+        #     t=noise_level,
+        #     diffusion_steps=args.diffusion_steps,
+        #     temp_data=samp_args.temp_data,
+        #     temp_sim=samp_args.temp_sim,
+        #     dt=samp_args.dt,
+        #     masses=masses,
+        #     friction=samp_args.friction,
+        #     kb=samp_args.kb,
+        # )
+        # sampled_mol = langevin_sampler.sample()
 
         if "actions" in output.keys():
             actions = output["actions"]
@@ -635,7 +635,7 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
         num_paths=samp_args.num_samples_eval,
         endpoints=clusters if "interpolate" in samp_args.gen_mode else None,
         log=not samp_args.disable_logging,
-        gif = False,
+        gif=True,
     )
     print("Evaluation complete.")
 

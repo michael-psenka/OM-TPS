@@ -1,8 +1,8 @@
 python sample.py \
     --model_path saved_models/trp_cage \
     --gen_mode om_interpolate \
-    --num_samples_eval 4 \
-    --batch_size_gen 1 \
+    --num_samples_eval 2 \
+    --batch_size_gen 2 \
     --latent_time 15 \
     --initial_guess_level 250 \
     --subsample_points_percent 1.0 \
@@ -11,8 +11,8 @@ python sample.py \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
-    --append_exp_name test_initial_latent_time_250_higher_dt \
+    --append_exp_name test \
     --path_length 200 \
     --om_dt 1.0 \
     --om_d 0.1 \
-    --steps 1000
+    --steps 100
