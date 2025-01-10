@@ -88,6 +88,7 @@ def evaluate_fastfolders(
     reference_folder,
     pdb_folder,
     subsample=0,
+    opt_steps=0,
     window_size=3,
     gif=True,
     model=None,
@@ -105,10 +106,13 @@ def evaluate_fastfolders(
 
     if "interpolate" in gen_mode:
         assert subsample == 0, "Subsampling is not supported for interpolation"
-
     # Adjust number of paths for iid and langevin generation
     if "interpolate" not in gen_mode:
         num_paths = 1
+    if "om_interpolate" not in gen_mode:
+        assert (
+            opt_steps == 0
+        ), "Truncating optimization steps is only supported for OM interpolation"
 
     append_exp_name_str = "_" + append_exp_name if append_exp_name else ""
     eval_folder = os.path.join(
@@ -217,6 +221,12 @@ def evaluate_fastfolders(
     pdb_file = os.path.join(
         pdb_folder, f"folded_pdbs/{Molecules[protein_name.upper()].value}-0-c-alpha.pdb"
     )
+
+    if opt_steps != 0:
+        # sample from an intermdiate point in the optimization trajectory
+        path_history = Path(eval_folder, f"path_history-{gen_mode}.pt")
+        path_history = torch.load(path_history)
+        sampled_mol = path_history[opt_steps // 20]
 
     if subsample != 0:
         if gen_mode == "langevin":
@@ -426,6 +436,7 @@ def evaluate_fastfolders(
         reference_folder,
         pdb_folder,
         sampled_mol,
+        opt_steps=opt_steps,
         gen_paths=(
             kmeans_cluster_centers[sampled_traj[:20]]
             if ("langevin" in gen_mode or "gt" in gen_mode) and not no_transition
@@ -513,6 +524,7 @@ def get_tic_free_energy_plots(
     reference_folder,
     pdb_folder,
     sampled_mol,
+    opt_steps=0,
     gen_paths=None,
     ref_paths=None,
     bin_committor_probs=None,
@@ -587,7 +599,7 @@ def get_tic_free_energy_plots(
     if gif and gen_mode == "om_interpolate":
         path_history = Path(eval_folder, f"path_history-{gen_mode}.pt")
         path_history = torch.load(path_history)
-        loop = path_history
+        loop = path_history[: (opt_steps // 20)] if opt_steps != 0 else path_history
         if isinstance(loop, dict):
             loop = loop["tr"].cpu()  # keep only alpha carbon coords
 
@@ -1107,6 +1119,13 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--opt_steps",
+        type=int,
+        default=0,
+        help="First n timesteps of OM optimization trajectory to evaluate (0 means full trajectory). Only used for om_interpolate mode",
+    )
+
+    parser.add_argument(
         "--disable_logging", action="store_true", help="Don't log to wandb"
     )
 
@@ -1120,11 +1139,20 @@ if __name__ == "__main__":
         )
         if args.subsample != 0 and args.gen_mode != "iid":
             subsample_append += f"ns"
+
+        opt_steps_append = (
+            f"_opt_steps={int(args.opt_steps)}" if args.opt_steps != 0 else ""
+        )
         wandb.login()
         # TODO: append DiG if needed
         wandb.init(
             project="fastfolders",
-            name=args.protein_name + "_" + args.gen_mode + append + subsample_append,
+            name=args.protein_name
+            + "_"
+            + args.gen_mode
+            + append
+            + subsample_append
+            + opt_steps_append,
             config=args,
         )
 
@@ -1135,14 +1163,17 @@ if __name__ == "__main__":
             "/home/sanjeevr/om-diffusion/two-for-one-diffusion/saved_models"
         )
 
+    new_append = append + subsample_append + opt_steps_append
+
     evaluate_fastfolders(
         args.protein_name,
         args.gen_mode,
-        args.append_exp_name,
+        args.append_exp_name,  # TODO: add another argument for saving to new_append (so we don't overwrite)
         checkpoint_folder,
         args.reference_folder,
         args.pdb_folder,
         args.subsample,
+        args.opt_steps,
         log=not args.disable_logging,
     )
 
