@@ -557,15 +557,15 @@ class TicEvaluator:
         probs,
         title,
         file_name,
-        endpoints=None,
-        gen_paths=None,
-        ref_paths=None,
         path=None,
         cmap="OrRd",
         gradient=True,
         steps=3,
         linewidth=2,
         save_plot=True,
+        endpoints=None,
+        gen_paths=None,
+        ref_paths=None,
     ):
         """
         Plot slowest two TIC components versus each other. Mostly based on CG flow matching plotting code.

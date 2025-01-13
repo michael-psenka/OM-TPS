@@ -325,6 +325,7 @@ if __name__ == "__main__":
             timesteps=args.diffusion_steps,
             norm_factor=norm_factor,
             loss_weights=args.loss_weights,
+            objective="pred_velocity",
         )
     else:
         DDPM_model = GaussianDiffusion(

@@ -29,6 +29,11 @@ from utils import (
 
 from torchmdnet.models.model import load_model as load_mlff_model
 
+# flow matching imports
+from flow_matching.path.scheduler import CondOTScheduler
+from flow_matching.path import AffineProbPath
+from flow_matching.solver import Solver, ODESolver
+
 KB = 0.83144626181  # This is the Boltzmann constant converted from J/K (Kg, m^2 / s^2 / K) to -> g/mol, angstroms, ps and K.
 
 
@@ -58,6 +63,7 @@ class FlowMatching(nn.Module):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.h = features.to(self.device)
         self.objective = objective
+        self.path = AffineProbPath(scheduler=CondOTScheduler())
 
         if beta_schedule == "linear":
             betas = linear_beta_schedule(timesteps)
@@ -287,14 +293,21 @@ class FlowMatching(nn.Module):
         num_atoms = self.num_atoms
         dims = self.dims
         starting_mol = center_zero(
-            torch.randn((batch_size, num_atoms, dims), device=self.betas.device)
+            torch.randn((batch_size, num_atoms, dims), device=self.device)
         )
-        return (
-            self.p_sample_loop(
-                mol_t=starting_mol, t=self.num_timesteps, temperature=temperature
-            )
-            * self.norm_factor
-        )
+        T = torch.linspace(0, 1, 10)  # sample times
+        T = T.to(device=self.device)
+        solver = ODESolver(
+            velocity_model=lambda x, t: self.model(x, self.h, t)
+        )  # create an ODESolver class
+        sol = solver.sample(
+            time_grid=T,
+            step_size=0.1,
+            x_init=starting_mol,
+            method="midpoint",
+            return_intermediates=False,
+        )  # sample from the model
+        return sol * self.norm_factor
 
     def q_sample(self, x_start, t, noise=None):
         """
@@ -838,10 +851,12 @@ class FlowMatching(nn.Module):
         """
         noise = default(noise, lambda: torch.randn_like(x_start))
         noise = center_zero(noise)
-        t = (1.0 * t / self.num_timesteps).unsqueeze(-1).unsqueeze(-1)
-        x = (1 - t) * x_start + t * noise  # forward diffusion
-        x = center_zero(x)
-        model_out = self.model(x, self.h, t)
+        # sample probability path
+
+        t = 1.0 * t / self.num_timesteps
+        path_sample = self.path.sample(t=t, x_0=noise, x_1=x_start)
+        path_sample.x_t = center_zero(path_sample.x_t)
+        model_out = self.model(path_sample.x_t, self.h, t)
 
         model_out = center_zero(model_out)
 
@@ -849,6 +864,8 @@ class FlowMatching(nn.Module):
             target = noise
         elif self.objective == "pred_x0":
             target = x_start
+        elif self.objective == "pred_velocity":
+            target = path_sample.dx_t
         else:
             raise ValueError(f"unknown objective {self.objective}")
 

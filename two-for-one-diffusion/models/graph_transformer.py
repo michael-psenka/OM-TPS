@@ -91,6 +91,8 @@ class GraphTransformer(nn.Module):
         with torch.enable_grad() if self.conservative else nullcontext():
             bs, n_nodes, _ = x.shape
             t = t.reshape(-1, 1, 1).repeat(1, x.shape[1], 1)
+            if t.shape[0] == 1:
+                t = t.repeat(bs, 1, 1)
             h = h.unsqueeze(0).repeat(bs, 1, 1).to(x.device)
 
             # Compute edge attributes if necessary
