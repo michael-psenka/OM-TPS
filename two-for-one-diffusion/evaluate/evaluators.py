@@ -88,18 +88,19 @@ class Evaluator:
             )
         elif "protein_g" != mol_name.lower():
             # Initialize tic evaluator
+
             self.tic = TicEvaluator(
                 self.ref_data,
                 mol_name,
                 eval_folder=self.eval_folder,
                 data_folder=data_folder,
                 folded_pdb_folder=folded_pdb_folder,
-                evalsetname=evalsetname,
+                evalset=evalsetname,
             )
         if "protein_g" != mol_name.lower():
             # Pairwise distance evaluator
             self.pwd_evaluator = PwdEvaluator(
-                self.ref_data, self.eval_folder, mol_name, evalsetname=evalsetname
+                self.ref_data, self.eval_folder, mol_name, evalset=evalsetname
             )
 
     def eval(self, sampled_mol, milestone, save_plots=False):
@@ -448,8 +449,7 @@ class TicEvaluator:
                 transformed_data[:, 0],
                 transformed_data[:, 1],
                 bins=self.bins,
-                density=None,
-                normed=True,
+                density=True,
             )
             # Save the computed TICA objects
             if not os.path.exists(os.path.dirname(saved_ref)):

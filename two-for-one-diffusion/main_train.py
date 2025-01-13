@@ -8,6 +8,7 @@ import warnings
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from models.ddpm import GaussianDiffusion
+from models.flow_matching import FlowMatching
 from trainer import Trainer
 from models import get_model
 from datasets.dataset_utils_empty import get_dataset, Molecules
@@ -71,6 +72,13 @@ parser.add_argument(
     default=True,
     help="use data augmentation (rotation) for training",
 )
+
+parser.add_argument(
+    "--flow_matching",
+    action="store_true",
+    help="use flow matching instead of diffusion",
+)
+
 parser.add_argument(
     "--hidden_features_gnn",
     type=int,
@@ -102,7 +110,7 @@ parser.add_argument(
     "--batch_size",
     type=int,
     default=256,
-    help="batch sized used in trianing and validation",
+    help="batch size used in training and validation",
 )
 parser.add_argument(
     "--learning_rate", type=float, default=2e-4, help="learning rate for Adam"
@@ -309,14 +317,24 @@ if __name__ == "__main__":
     print(model)
 
     # Diffusion model
-    DDPM_model = GaussianDiffusion(
-        model=model,
-        features=trainset.bead_onehot,
-        num_atoms=trainset.num_beads,
-        timesteps=args.diffusion_steps,
-        norm_factor=norm_factor,
-        loss_weights=args.loss_weights,
-    )
+    if args.flow_matching:
+        DDPM_model = FlowMatching(
+            model=model,
+            features=trainset.bead_onehot,
+            num_atoms=trainset.num_beads,
+            timesteps=args.diffusion_steps,
+            norm_factor=norm_factor,
+            loss_weights=args.loss_weights,
+        )
+    else:
+        DDPM_model = GaussianDiffusion(
+            model=model,
+            features=trainset.bead_onehot,
+            num_atoms=trainset.num_beads,
+            timesteps=args.diffusion_steps,
+            norm_factor=norm_factor,
+            loss_weights=args.loss_weights,
+        )
 
     # Trainer
     trainer = Trainer(
@@ -348,7 +366,6 @@ if __name__ == "__main__":
         pick_checkpoint=args.pick_checkpoint,
         iterations_on_val=args.iterations_on_val,
         t_diff_interval=args.t_diff_interval,
-        parallel_tempering=args.parallel_tempering,
         save_all_checkpoints=args.save_all_checkpoints,
     )
 

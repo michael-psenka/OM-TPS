@@ -175,7 +175,11 @@ def get_dataset(
             )
 
         dataset = CGDataset(
-            dataset, topology, molecule, mean0=mean0, shuffle=shuffle_before_splitting
+            dataset.traj.xyz,
+            topology,
+            molecule,
+            mean0=mean0,
+            shuffle=shuffle_before_splitting,
         )
 
         if dataset.dataset is not None:
@@ -187,6 +191,7 @@ def get_dataset(
             train_idx = idx_range[:num_train]
             val_idx = idx_range[num_train : num_train + num_val]
             test_idx = idx_range[num_train + num_val :]
+            # import pdb; pdb.set_trace()
             trainset = dataset.get_subset(train_idx, topology, train=True)
             valset = dataset.get_subset(val_idx, topology, train=False)
             testset = dataset.get_subset(test_idx, topology, train=False)
@@ -235,6 +240,7 @@ class CGDataset(torch.utils.data.TensorDataset):
         atom_selection=None,
         shuffle=False,
     ):
+        dataset = torch.tensor(dataset)
         self.dataset = dataset
         self.mean0 = mean0
         self.atom_selection = atom_selection
@@ -288,7 +294,11 @@ class CGDataset(torch.utils.data.TensorDataset):
         """
         subset = torch.utils.data.Subset(self.dataset, ind_range)
         subset = CGDataset(
-            subset, topology, self.molecule, self.mean0, self.atom_selection
+            subset.dataset[subset.indices],
+            topology,
+            self.molecule,
+            self.mean0,
+            self.atom_selection,
         )
         if train:
             assert topology is not None, "Provide topology for train set"
