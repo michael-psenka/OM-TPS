@@ -4,6 +4,7 @@ from pathlib import Path
 from tqdm.auto import tqdm
 from cmath import inf
 from torch.utils import data
+from torch.nn.utils import clip_grad_norm_
 from torch.utils.tensorboard import SummaryWriter
 from multiprocessing import cpu_count
 from torch.cuda.amp import autocast, GradScaler
@@ -252,17 +253,29 @@ class Trainer(object):
                         loss = self.model_dp(
                             input, t_diff_range=self.t_diff_interval
                         ).mean()
-                        self.scaler.scale(
-                            loss / self.gradient_accumulate_every
-                        ).backward()
+                        scaled_loss = loss / self.gradient_accumulate_every
+                        self.scaler.scale(scaled_loss).backward()
 
                     pbar.set_description(f"loss: {loss.item():.4f}")
 
                     if self.step % self.log_tensorboard_interval == 0:
                         self.writer.add_scalar("Loss", loss.item(), self.step)
 
-                self.scaler.step(self.opt)
-                self.scaler.update()
+                # Unscale the gradients for clipping
+                self.scaler.unscale_(self.opt)
+
+                # Calculate the gradient norm
+                grad_norm = clip_grad_norm_(
+                    self.model_dp.parameters(), max_norm=float("inf")
+                )
+
+                if grad_norm <= 100:
+                    self.scaler.step(self.opt)
+                    self.scaler.update()
+
+                else:
+                    print(f"Gradient norm {grad_norm} too large, skipping step")
+
                 self.opt.zero_grad()
 
                 self.ema.update()
@@ -300,8 +313,8 @@ class Trainer(object):
                         early_stopping_counter += 1
                     else:
                         early_stopping_counter = 0
-                    if early_stopping_counter > 9:
-                        break
+                    # if early_stopping_counter > 9:
+                    #     break
 
                 pbar.update(1)
                 if hasattr(self, "scheduler"):

@@ -82,7 +82,7 @@ parser.add_argument(
 parser.add_argument(
     "--hidden_features_gnn",
     type=int,
-    default=256,
+    default=64,
     help="number of hidden features used in gnn",
 )
 parser.add_argument(
@@ -109,11 +109,11 @@ parser.add_argument(
 parser.add_argument(
     "--batch_size",
     type=int,
-    default=256,
+    default=512,
     help="batch size used in training and validation",
 )
 parser.add_argument(
-    "--learning_rate", type=float, default=2e-4, help="learning rate for Adam"
+    "--learning_rate", type=float, default=4e-4, help="learning rate for Adam"
 )
 parser.add_argument(
     "--weight_decay", type=float, default=1e-12, help="weight decay in the optimizer"
@@ -121,7 +121,7 @@ parser.add_argument(
 parser.add_argument(
     "--train_iter",
     type=int,
-    default=2500000,
+    default=1000000,
     help="number of iterations to train the model",
 )
 parser.add_argument(
