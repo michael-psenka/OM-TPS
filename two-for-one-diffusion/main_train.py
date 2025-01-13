@@ -112,11 +112,18 @@ parser.add_argument(
     default=512,
     help="batch size used in training and validation",
 )
+
 parser.add_argument(
     "--learning_rate", type=float, default=4e-4, help="learning rate for Adam"
 )
 parser.add_argument(
     "--weight_decay", type=float, default=1e-12, help="weight decay in the optimizer"
+)
+parser.add_argument(
+    "--gradient_norm_threshold",
+    type=int,
+    default=100,
+    help="maximum allowed gradient norm before skipping the update",
 )
 parser.add_argument(
     "--train_iter",

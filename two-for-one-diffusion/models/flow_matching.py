@@ -146,13 +146,15 @@ class FlowMatching(nn.Module):
         if not isinstance(t, torch.Tensor):
             t = torch.tensor([t]).repeat(x.shape[0]).to(self.device)
 
-        noise_pred = self.model(
+        velocity_pred = self.model(
             x,
             self.h,
-            1.0 * t / self.num_timesteps,
-            alphas=self.sqrt_alphas_cumprod[t].pow(2),
+            1 - (1.0 * t / 10),
         )
         # force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * noise_pred
+        noise_pred = self.path.velocity_to_epsilon(
+            velocity_pred, x, (1 - (1.0 * t / 10)).unsqueeze(-1).unsqueeze(-1)
+        )
         return -noise_pred
 
     def predict_start_from_noise(self, x_t, t, noise):
@@ -264,25 +266,31 @@ class FlowMatching(nn.Module):
     def p_sample_loop(self, mol_t, t, temperature=1.0):
         """
         Loop over diffusion timesteps to go from noise to molecule starting at t=t.
+        Convention: t=0 is the molecule, t=T is the noise (opposite of normal flow matching, to keep rest of code consistent with diffusion models).
         """
-        device = self.betas.device
+        device = self.device
 
         b = mol_t.shape[0]
         mol = center_zero(mol_t)
         assert_center_zero(mol)
 
-        for j, i in tqdm(enumerate(reversed(range(0, t)))):
-            mol = self.p_sample(
-                mol,
-                torch.full((b,), i, device=device, dtype=torch.long),
-                temperature=temperature,
-            )
-            if (mol.max() > 1000) or (mol.min() < -1000):
-                warnings.warn("Large molecule encountered in sampling")
-                mol = torch.clamp(mol, min=-1000, max=1000)
-            mol = center_zero(mol)
-        assert_center_zero(mol)
+        t = 1 - (1.0 * t / 10)
+        num_steps = math.ceil((1 - t) * 10)
 
+        T = torch.linspace(t, 1, num_steps)  # sample times
+        T = T.to(device=self.device)
+        solver = ODESolver(
+            velocity_model=lambda x, t: self.model(x, self.h, t)
+        )  # create an ODESolver class
+        if num_steps > 0:
+            mol = solver.sample(
+                time_grid=T,
+                step_size=0.1,
+                x_init=mol,
+                method="midpoint",
+                return_intermediates=False,
+            )  # sample from the model
+            mol = center_zero(mol)
         return mol
 
     @torch.no_grad()
@@ -298,11 +306,11 @@ class FlowMatching(nn.Module):
         T = torch.linspace(0, 1, 10)  # sample times
         T = T.to(device=self.device)
         solver = ODESolver(
-            velocity_model=lambda x, t: self.model(x, self.h, t)
+            velocity_model=lambda x, t: center_zero(self.model(x, self.h, t))
         )  # create an ODESolver class
         sol = solver.sample(
             time_grid=T,
-            step_size=0.1,
+            step_size=T[1] - T[0],
             x_init=starting_mol,
             method="midpoint",
             return_intermediates=False,
@@ -320,10 +328,10 @@ class FlowMatching(nn.Module):
 
         noise = default(noise, lambda: torch.randn_like(x_start))
         noise = center_zero(noise)
-        return (
-            extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
-            + extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
-        )
+        # sample probability path
+        t = 1 - 1.0 * t / self.num_timesteps
+        path_sample = self.path.sample(t=t, x_0=noise, x_1=x_start)
+        return center_zero(path_sample.x_t)
 
     @torch.no_grad()
     def interpolate(
@@ -345,7 +353,9 @@ class FlowMatching(nn.Module):
             interpolation_fn: function, interpolation function
             temperature: float, temperature for sampling
         """
-
+        assert (
+            latent_time >= 0 and latent_time <= 10
+        ), "latent_time must be between 0 and 10 during sampling"
         num_paths, n_atoms = x1.shape[0], x1.shape[1]
 
         for i in range(num_paths):
@@ -445,6 +455,13 @@ class FlowMatching(nn.Module):
             truncated_gradient: bool, whether to use truncated gradient method
             temperature: float, temperature for sampling
         """
+        assert (
+            latent_time >= 0 and latent_time <= 10
+        ), "latent_time must be between 0 and 10 during sampling"
+        assert (
+            initial_guess_level >= 0 and initial_guess_level <= 10
+        ), "initial_guess_level must be between 0 and 10 during sampling"
+
         self.model.training = (
             True  # needed to track gradients through conservative force calculation
         )

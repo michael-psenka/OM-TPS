@@ -175,7 +175,7 @@ def get_dataset(
             )
 
         dataset = CGDataset(
-            dataset.traj.xyz,
+            to_angstrom(dataset.traj.xyz) if dataset is not None else dataset,
             topology,
             molecule,
             mean0=mean0,
@@ -240,7 +240,8 @@ class CGDataset(torch.utils.data.TensorDataset):
         atom_selection=None,
         shuffle=False,
     ):
-        dataset = torch.tensor(dataset)
+        if dataset is not None:
+            dataset = torch.tensor(dataset)
         self.dataset = dataset
         self.mean0 = mean0
         self.atom_selection = atom_selection
@@ -488,6 +489,32 @@ class DEShawDataset(MDTrajectory):
 
 
 class AtlasDataset(torch.utils.data.Dataset):
+    def __init__(
+        self,
+        data_root: str,
+        name,
+    ):
+        self.data_root = data_root
+        self.name = name
+
+        # assumes data is preprocessed and stored in npz files (by AlphaFlow repo)
+        path = os.path.join(data_root, f"{name}.npz")
+        xyz = dict(np.load(path, allow_pickle=True))["all_atom_positions"]
+        # extract only Alpha Carbons
+        xyz = np.expand_dims(xyz[:, :, 1], 0)
+        self.traj = DummyClass(
+            xyz=torch.tensor(xyz)
+        )  # shape is (1, n_frames, n_residues, 3)
+
+    def __len__(self):
+        return len(self.traj.xyz)
+
+    def __getitem__(self, idx):
+        x = self.traj.xyz[idx]
+        return x
+
+
+class TetraPeptide(torch.utils.data.Dataset):
     def __init__(
         self,
         data_root: str,

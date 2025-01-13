@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from models import get_model, CommittorNN
 from models.ddpm import GaussianDiffusion
+from models.flow_matching import FlowMatching
 from ema_pytorch import EMA
 from datasets.dataset_utils_empty import (
     get_dataset,
@@ -104,6 +105,13 @@ parser.add_argument(
 parser.add_argument(
     "--save_interval", type=int, default=250, help="save interval (in timesteps)"
 )
+
+parser.add_argument(
+    "--flow_matching",
+    action="store_true",
+    help="use flow matching instead of diffusion",
+)
+
 parser.add_argument(
     "--noise_level",
     type=int,
@@ -252,7 +260,13 @@ def main(samp_args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Load args from training
-    with open(join(samp_args.model_path, "args.pickle"), "rb") as f:
+    with open(
+        join(
+            samp_args.model_path,
+            "args-flow.pickle" if samp_args.flow_matching else "args.pickle",
+        ),
+        "rb",
+    ) as f:
         args = pickle.load(f)
 
     if samp_args.temp_data is None:
@@ -263,7 +277,10 @@ def main(samp_args):
         samp_args.temp_sim = samp_args.temp_sim
 
     basic_append = f"_{samp_args.gen_mode}"
+    flow_append = "_flowmatching" if samp_args.flow_matching else ""
+    samp_args.append_exp_name += flow_append
     samp_args.original_append_exp_name = samp_args.append_exp_name
+
     samp_args.append_exp_name = (
         basic_append
         if samp_args.append_exp_name is None
@@ -303,7 +320,12 @@ def main(samp_args):
     # print(model_nn)
 
     # Init DDPM from args
-    DDPM_model = GaussianDiffusion(
+    if samp_args.flow_matching:
+        model_cls = FlowMatching
+    else:
+        model_cls = GaussianDiffusion
+
+    DDPM_model = model_cls(
         model=model_nn,
         features=trainset.bead_onehot,
         num_atoms=trainset.num_beads,
@@ -315,15 +337,16 @@ def main(samp_args):
     model = EMA(DDPM_model)
 
     # Load weights into model
-    if torch.cuda.is_available():
-        data_dict = torch.load(
-            samp_args.model_path + f"/model-{samp_args.model_checkpoint}.pt"
+    if samp_args.flow_matching:
+        model_path = (
+            samp_args.model_path + f"/model-{samp_args.model_checkpoint}-flow.pt"
         )
     else:
-        data_dict = torch.load(
-            samp_args.model_path + f"/model-{samp_args.model_checkpoint}.pt",
-            map_location=torch.device("cpu"),
-        )
+        model_path = samp_args.model_path + f"/model-{samp_args.model_checkpoint}.pt"
+    if torch.cuda.is_available():
+        data_dict = torch.load(model_path)
+    else:
+        data_dict = torch.load(model_path, map_location=torch.device("cpu"))
 
     model.load_state_dict(data_dict["ema"])
 

@@ -269,7 +269,7 @@ class Trainer(object):
                     self.model_dp.parameters(), max_norm=float("inf")
                 )
 
-                if grad_norm <= 100:
+                if grad_norm <= self.args.gradient_norm_threshold:
                     self.scaler.step(self.opt)
                     self.scaler.update()
 
