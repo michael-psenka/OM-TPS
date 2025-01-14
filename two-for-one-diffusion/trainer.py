@@ -104,7 +104,7 @@ class Trainer(object):
         self.t_diff_interval = t_diff_interval
         self.save_all_checkpoints = save_all_checkpoints
 
-        num_workers = min(cpu_count(), 8)
+        num_workers = 0  # min(cpu_count(), 8)
 
         self.dl_train = cycle(
             data.DataLoader(
@@ -156,20 +156,22 @@ class Trainer(object):
         # Results folder from the new folder name
         self.results_folder = Path(results_folder + "/" + experiment_name)
 
-        self.evaluator_val = Evaluator(
-            self.val_data,
-            self.train_data.topology,
-            mol_name=mol_name,
-            eval_folder=str(self.results_folder),
-            data_folder=args.data_folder,
-        )
-        self.evaluator_test = Evaluator(
-            self.test_data,
-            self.train_data.topology,
-            mol_name=mol_name,
-            eval_folder=str(self.results_folder),
-            data_folder=args.data_folder,
-        )
+        if "tetrapeptides" not in self.mol_name:
+
+            self.evaluator_val = Evaluator(
+                self.val_data,
+                self.topology,
+                mol_name=mol_name,
+                eval_folder=str(self.results_folder),
+                data_folder=args.data_folder,
+            )
+            self.evaluator_test = Evaluator(
+                self.test_data,
+                self.topology,
+                mol_name=mol_name,
+                eval_folder=str(self.results_folder),
+                data_folder=args.data_folder,
+            )
         self.eval_langevin = eval_langevin
         self.best_val_loss = inf
         if start_from_last_saved:
@@ -227,8 +229,12 @@ class Trainer(object):
             iter_num = 0
             loss = 0
             while iter_num < val_iters:
-                val_data = next(dl)[0].to(self.device)
-                loss += self.model_ema_dp(val_data, t_diff_range=t_diff_range).mean()
+                val_data = next(dl)
+                mol = val_data[0].to(self.device)
+                z = val_data[1].to(self.device) if len(val_data) == 2 else None
+                loss += self.model_ema_dp(
+                    val_data, z=z, t_diff_range=t_diff_range
+                ).mean()
                 iter_num += 1
             loss /= val_iters
             self.writer.add_scalar(f"Loss {partition_name}", loss.item(), self.step)
@@ -245,13 +251,15 @@ class Trainer(object):
             early_stopping_counter = 0
             while self.step < self.train_num_steps:
                 for i in range(self.gradient_accumulate_every):
-                    input = next(self.dl_train)[0].to(self.device)
+                    input = next(self.dl_train)
+                    mol = input[0].to(self.device)
+                    z = input[1].to(self.device) if len(input) == 2 else None
                     if self.data_aug:
-                        input = random_rotation(input)
+                        mol = random_rotation(mol)
 
                     with autocast(enabled=self.amp):
                         loss = self.model_dp(
-                            input, t_diff_range=self.t_diff_interval
+                            mol, t_diff_range=self.t_diff_interval, z=z
                         ).mean()
                         scaled_loss = loss / self.gradient_accumulate_every
                         self.scaler.scale(scaled_loss).backward()
@@ -294,12 +302,16 @@ class Trainer(object):
                         self.num_saved_samples // self.parallel_batches,
                         self.batch_size // self.parallel_batches,
                     )
-                    results_dict = self.evaluator_val.eval(
-                        sampled_mol, milestone=str(milestone) + "_iid", save_plots=True
-                    )
-                    # Write metrics to Tensorboard
-                    for key in results_dict:
-                        self.writer.add_scalar(key, results_dict[key], self.step)
+
+                    if "tetrapeptides" not in self.mol_name:
+                        results_dict = self.evaluator_val.eval(
+                            sampled_mol,
+                            milestone=str(milestone) + "_iid",
+                            save_plots=True,
+                        )
+                        # Write metrics to Tensorboard
+                        for key in results_dict:
+                            self.writer.add_scalar(key, results_dict[key], self.step)
 
                     bool_new_best = val_loss_ff.item() < self.best_val_loss
                     self.best_val_loss = (
@@ -339,12 +351,13 @@ class Trainer(object):
                 milestone="final_iid",
             )
 
-        results_val_dict = self.evaluator_val.eval(
-            sampled_mol, milestone="final_iid_val", save_plots=True
-        )
-        results_test_dict = self.evaluator_test.eval(
-            sampled_mol, milestone="final_iid_test", save_plots=False
-        )
+        if self.mol_name != "tetrapeptides":
+            results_val_dict = self.evaluator_val.eval(
+                sampled_mol, milestone="final_iid_val", save_plots=True
+            )
+            results_test_dict = self.evaluator_test.eval(
+                sampled_mol, milestone="final_iid_test", save_plots=False
+            )
 
         # Write metrics to Tensorboard
         for key in results_val_dict:
@@ -387,16 +400,18 @@ class Trainer(object):
                             self.topology,
                             milestone=f"final_langevin_tdiff{langevin_t_diff}",
                         )
-                    results_val_dict = self.evaluator_val.eval(
-                        sampled_mol,
-                        milestone=f"final_langevin_tdiff{langevin_t_diff}_val",
-                        save_plots=True,
-                    )
-                    results_test_dict = self.evaluator_test.eval(
-                        sampled_mol,
-                        milestone=f"final_langevin_tdiff{langevin_t_diff}_test",
-                        save_plots=False,
-                    )
+
+                    if "tetrapeptides" not in self.mol_name:
+                        results_val_dict = self.evaluator_val.eval(
+                            sampled_mol,
+                            milestone=f"final_langevin_tdiff{langevin_t_diff}_val",
+                            save_plots=True,
+                        )
+                        results_test_dict = self.evaluator_test.eval(
+                            sampled_mol,
+                            milestone=f"final_langevin_tdiff{langevin_t_diff}_test",
+                            save_plots=False,
+                        )
                     # Write metrics to Tensorboard
                     for key in results_val_dict:
                         self.writer.add_scalar(

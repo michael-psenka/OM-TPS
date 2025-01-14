@@ -38,8 +38,8 @@ class GaussianDiffusion(nn.Module):
     def __init__(
         self,
         model,
-        features,
         num_atoms,
+        features=None,
         timesteps=1000,
         loss_type="l2",
         objective="pred_noise",
@@ -53,10 +53,12 @@ class GaussianDiffusion(nn.Module):
         super().__init__()
         self.dims = 3
         self.num_atoms = num_atoms
-        self.protein = NUM_RESIDUES_TO_PROTEIN[num_atoms]
+        if num_atoms in NUM_RESIDUES_TO_PROTEIN:
+            self.protein = NUM_RESIDUES_TO_PROTEIN[num_atoms]
         self.model = model
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.h = features.to(self.device)
+
         self.objective = objective
 
         if beta_schedule == "linear":
@@ -165,7 +167,7 @@ class GaussianDiffusion(nn.Module):
         scaling_factor = -1 / (kbt_inv * self.sqrt_one_minus_alphas_cumprod[t])
         return scaling_factor
 
-    def force_func(self, x, t):
+    def force_func(self, x, t, z=None):
         """
         Force function.
         """
@@ -177,6 +179,7 @@ class GaussianDiffusion(nn.Module):
             x,
             self.h,
             1.0 * t / self.num_timesteps,
+            z,
             alphas=self.sqrt_alphas_cumprod[t].pow(2),
         )
         # force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * noise_pred
@@ -237,7 +240,7 @@ class GaussianDiffusion(nn.Module):
             normal_kl.abs().max().item() <= eps
         ), f"Normal KL check at T failed, max value: {normal_kl.abs().max().item()}"
 
-    def p_mean_variance(self, x, t):
+    def p_mean_variance(self, x, t, z=None):
         """
         Get mean and variance of approximated posterior from model.
         """
@@ -246,6 +249,7 @@ class GaussianDiffusion(nn.Module):
             x,
             self.h,
             1.0 * t / self.num_timesteps,
+            z,
             alphas=self.sqrt_alphas_cumprod[t].pow(2),
         )
         model_output = center_zero(model_output)
@@ -865,7 +869,7 @@ class GaussianDiffusion(nn.Module):
         else:
             raise ValueError(f"invalid loss type {self.loss_type}")
 
-    def p_losses(self, x_start, t, noise=None):
+    def p_losses(self, x_start, t, noise=None, z=None):
         """
         Calculate loss from model.
         """
@@ -878,6 +882,7 @@ class GaussianDiffusion(nn.Module):
             x,
             self.h,
             1.0 * t / self.num_timesteps,
+            z,
             alphas=self.sqrt_alphas_cumprod[t].pow(2),
         )
         model_out = center_zero(model_out)

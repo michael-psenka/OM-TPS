@@ -58,7 +58,8 @@ class FlowMatching(nn.Module):
         super().__init__()
         self.dims = 3
         self.num_atoms = num_atoms
-        self.protein = NUM_RESIDUES_TO_PROTEIN[num_atoms]
+        if num_atoms in NUM_RESIDUES_TO_PROTEIN:
+            self.protein = NUM_RESIDUES_TO_PROTEIN[num_atoms]
         self.model = model
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.h = features.to(self.device)
@@ -138,7 +139,7 @@ class FlowMatching(nn.Module):
         scaling_factor = -1 / (kbt_inv * self.sqrt_one_minus_alphas_cumprod[t])
         return scaling_factor
 
-    def force_func(self, x, t):
+    def force_func(self, x, t, z=None):
         """
         Force function.
         """
@@ -150,6 +151,7 @@ class FlowMatching(nn.Module):
             x,
             self.h,
             1 - (1.0 * t / 10),
+            z,
         )
         # force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * noise_pred
         noise_pred = self.path.velocity_to_epsilon(
@@ -212,32 +214,6 @@ class FlowMatching(nn.Module):
             normal_kl.abs().max().item() <= eps
         ), f"Normal KL check at T failed, max value: {normal_kl.abs().max().item()}"
 
-    def p_mean_variance(self, x, t):
-        """
-        Get mean and variance of approximated posterior from model.
-        """
-        assert_center_zero(x)
-        model_output = self.model(
-            x,
-            self.h,
-            1.0 * t / self.num_timesteps,
-            alphas=self.sqrt_alphas_cumprod[t].pow(2),
-        )
-        model_output = center_zero(model_output)
-
-        if self.objective == "pred_noise":
-            x_start = self.predict_start_from_noise(x, t=t, noise=model_output)
-            x_start = center_zero(x_start)
-        elif self.objective == "pred_x0":
-            x_start = model_output
-        else:
-            raise ValueError(f"unknown objective {self.objective}")
-
-        model_mean, posterior_variance, posterior_log_variance = self.q_posterior(
-            x_start=x_start, x_t=x, t=t
-        )
-        return model_mean, posterior_variance, posterior_log_variance
-
     def add_noise_to_path(self, path, t, temperature=1.0):
         """
         Add noise to path according to learned variance.
@@ -263,7 +239,7 @@ class FlowMatching(nn.Module):
         )
 
     @torch.no_grad()
-    def p_sample_loop(self, mol_t, t, temperature=1.0):
+    def p_sample_loop(self, mol_t, t, z=None, temperature=1.0):
         """
         Loop over diffusion timesteps to go from noise to molecule starting at t=t.
         Convention: t=0 is the molecule, t=T is the noise (opposite of normal flow matching, to keep rest of code consistent with diffusion models).
@@ -280,7 +256,7 @@ class FlowMatching(nn.Module):
         T = torch.linspace(t, 1, num_steps)  # sample times
         T = T.to(device=self.device)
         solver = ODESolver(
-            velocity_model=lambda x, t: self.model(x, self.h, t)
+            velocity_model=lambda x, t: self.model(x, self.h, t, z)
         )  # create an ODESolver class
         if num_steps > 0:
             mol = solver.sample(
@@ -294,7 +270,7 @@ class FlowMatching(nn.Module):
         return mol
 
     @torch.no_grad()
-    def sample(self, batch_size, temperature=1.0):
+    def sample(self, batch_size, z=None, temperature=1.0):
         """
         Sample from model starting from t = T.
         """
@@ -306,7 +282,7 @@ class FlowMatching(nn.Module):
         T = torch.linspace(0, 1, 10)  # sample times
         T = T.to(device=self.device)
         solver = ODESolver(
-            velocity_model=lambda x, t: center_zero(self.model(x, self.h, t))
+            velocity_model=lambda x, t: center_zero(self.model(x, self.h, t, z))
         )  # create an ODESolver class
         sol = solver.sample(
             time_grid=T,
@@ -862,7 +838,7 @@ class FlowMatching(nn.Module):
         else:
             raise ValueError(f"invalid loss type {self.loss_type}")
 
-    def p_losses(self, x_start, t, noise=None):
+    def p_losses(self, x_start, t, z=None, noise=None):
         """
         Calculate loss from model.
         """
@@ -873,7 +849,7 @@ class FlowMatching(nn.Module):
         t = 1.0 * t / self.num_timesteps
         path_sample = self.path.sample(t=t, x_0=noise, x_1=x_start)
         path_sample.x_t = center_zero(path_sample.x_t)
-        model_out = self.model(path_sample.x_t, self.h, t)
+        model_out = self.model(path_sample.x_t, self.h, t, z)
 
         model_out = center_zero(model_out)
 

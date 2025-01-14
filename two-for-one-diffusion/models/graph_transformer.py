@@ -31,6 +31,7 @@ class GraphTransformer(nn.Module):
         use_abs_coords: bool = True,
         use_distances: bool = True,
         conservative: bool = True,
+        use_bead_identities: bool = False,
     ):
         """_summary_
 
@@ -43,6 +44,7 @@ class GraphTransformer(nn.Module):
             use_abs_coords (bool, optional): _description_. Defaults to True.
             use_distances (bool, optional): _description_. Defaults to True.
             conservative (bool, optional): _description_. Defaults to True.
+            use_bead_identities (bool, optional): _description_. Defaults to False.
         """
         super(GraphTransformer, self).__init__()
         self.device = device
@@ -50,8 +52,11 @@ class GraphTransformer(nn.Module):
         self.use_distances = use_distances
         self.use_abs_coords = use_abs_coords
         self.conservative = conservative
+        self.use_bead_identities = use_bead_identities
 
         in_node_nf = num_beads + 1 + use_abs_coords * 3
+        if use_bead_identities:
+            in_node_nf += hidden_nf
         in_edge_nf = (
             3 * use_intrinsic_coords
             + use_distances
@@ -64,6 +69,10 @@ class GraphTransformer(nn.Module):
             self.node_decoder = nn.Linear(hidden_nf, 1)
         else:
             self.node_decoder = nn.Linear(hidden_nf, 3)
+
+        if self.use_bead_identities:
+            self.bead_embedding = nn.Embedding(20, hidden_nf)
+            self.bead_embedding = self.bead_embedding.to(self.device)
 
         self.graphtransformer = GraphTransformerLucid(
             dim=hidden_nf,
@@ -80,6 +89,7 @@ class GraphTransformer(nn.Module):
         x,
         h,
         t,
+        z=None,
         return_energy=False,
         alphas: Optional[torch.Tensor] = None,
     ):
@@ -98,6 +108,11 @@ class GraphTransformer(nn.Module):
             # Compute edge attributes if necessary
             edge_attr = self.get_edge_attr(x)
             edge_attr = self.edge_embedding(edge_attr)
+
+            if z is not None:
+                z = z.to(self.device)
+                z = self.bead_embedding(z)
+                h = torch.cat((h, z), dim=2)
 
             # Concatenate node inputs
             if self.use_abs_coords:

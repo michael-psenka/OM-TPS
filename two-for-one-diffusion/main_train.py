@@ -357,7 +357,7 @@ if __name__ == "__main__":
         ema_decay=args.ema_decay,
         save_and_sample_every=args.eval_interval,
         num_saved_samples=args.num_samples,
-        topology=trainset.topology,
+        topology=trainset.topology if hasattr(trainset, "topology") else None,
         results_folder=args.results_folder,
         data_aug=args.data_aug,
         tb_folder=args.tensorboard_folder,

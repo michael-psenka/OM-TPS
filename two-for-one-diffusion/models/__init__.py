@@ -13,6 +13,7 @@ def get_model(args, trainset, device):
             use_abs_coords=args.use_abs_coords,
             use_distances=args.use_distances,
             conservative=args.conservative,
+            use_bead_identities=args.mol == "tetrapeptides",
         )
     else:
         raise Exception(f"Network { args.backbone_network} not implemented")

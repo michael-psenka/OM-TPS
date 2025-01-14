@@ -3,6 +3,7 @@ import numpy as np
 from tqdm import tqdm
 import math
 import os, tempfile
+from copy import deepcopy
 import mdtraj as md
 from mdtraj import Trajectory
 import warnings
@@ -14,6 +15,14 @@ from torch_geometric.data.data import Data
 
 
 from utils import DummyClass
+
+# MDGen imports
+from mdgen.mdgen.rigid_utils import Rigid
+from mdgen.mdgen.residue_constants import restype_order
+import mdgen.mdgen.residue_constants as rc
+import numpy as np
+import pandas as pd
+from mdgen.mdgen.geometry import atom37_to_torsions, atom14_to_atom37, atom14_to_frames
 
 
 class AtomSelection(Enum):
@@ -144,6 +153,17 @@ def get_dataset(
         trainset = dataset
         valset = dataset
         testset = dataset
+
+    elif mol == "tetrapeptides":
+        trainset = MDGenDataset(
+            data_folder, suffix="_i100", split="./mdgen/splits/4AA_train.csv"
+        )
+        valset = MDGenDataset(
+            data_folder, suffix="_i100", split="./mdgen/splits/4AA_val.csv"
+        )
+        testset = MDGenDataset(
+            data_folder, suffix="_i100", split="./mdgen/splits/4AA_test.csv"
+        )
 
     elif "alanine_dipeptide" not in mol.lower():
         # D.E. Shaw fast folding proteins data
@@ -514,27 +534,66 @@ class AtlasDataset(torch.utils.data.Dataset):
         return x
 
 
-class TetraPeptide(torch.utils.data.Dataset):
+class MDGenDataset(torch.utils.data.Dataset):
     def __init__(
         self,
-        data_root: str,
-        name,
+        data_dir,
+        suffix,
+        split,
+        overfit=False,
+        overfit_peptide=None,
+        atlas=False,
+        repeat=1,
     ):
-        self.data_root = data_root
-        self.name = name
+        super().__init__()
+        self.df = pd.read_csv(split, index_col="name")
+        self.repeat = repeat
+        self.num_beads = 4  # for tetrapeptides
+        self.bead_onehot = torch.eye(self.num_beads)
+        self.data_dir = data_dir
+        self.suffix = suffix
+        self.overfit = overfit
+        self.overfit_peptide = overfit_peptide
 
-        # assumes data is preprocessed and stored in npz files (by AlphaFlow repo)
-        path = os.path.join(data_root, f"{name}.npz")
-        xyz = dict(np.load(path, allow_pickle=True))["all_atom_positions"]
-        # extract only Alpha Carbons
-        xyz = np.expand_dims(xyz[:, :, 1], 0)
-        self.traj = DummyClass(
-            xyz=torch.tensor(xyz)
-        )  # shape is (1, n_frames, n_residues, 3)
+        # remove proteins for which we don't have any data (not sure why we couldn't download these)
+        new_index = deepcopy(self.df.index)
+        for protein in self.df.index:
+            if not any([protein in f for f in os.listdir(data_dir)]):
+                new_index = new_index.drop(protein)
+        self.df = self.df.loc[new_index]
+        self.atlas = atlas
 
     def __len__(self):
-        return len(self.traj.xyz)
+        if self.overfit_peptide:
+            return 1000
+        return self.repeat * len(self.df)
 
     def __getitem__(self, idx):
-        x = self.traj.xyz[idx]
-        return x
+        idx = idx % len(self.df)
+        if self.overfit:
+            idx = 0
+
+        if self.overfit_peptide is None:
+            name = self.df.index[idx]
+            seqres = self.df.seqres[name]
+        else:
+            name = self.overfit_peptide
+            seqres = name
+
+        if self.atlas:
+            i = np.random.randint(1, 4)
+            full_name = f"{name}_R{i}"
+        else:
+            full_name = name
+
+        arr = np.lib.format.open_memmap(
+            f"{self.data_dir}/{full_name}{self.suffix}.npy", "r"
+        )
+
+        # arr should be in ANGSTROMS
+        t_idx = np.random.randint(0, arr.shape[0])
+        alpha_carbons = torch.tensor(arr[t_idx, :, 1], dtype=torch.float32)
+        seqres = np.array([restype_order[c] for c in seqres])
+        aatype = torch.from_numpy(seqres)
+
+        return alpha_carbons, aatype
