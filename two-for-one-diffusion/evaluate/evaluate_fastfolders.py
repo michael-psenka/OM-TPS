@@ -226,7 +226,7 @@ def evaluate_fastfolders(
         # sample from an intermdiate point in the optimization trajectory
         path_history = Path(eval_folder, f"path_history-{gen_mode}.pt")
         path_history = torch.load(path_history)
-        sampled_mol = path_history[opt_steps // 20]
+        sampled_mol = path_history[opt_steps // 50]
 
     if subsample != 0:
         if gen_mode == "langevin":
@@ -599,7 +599,7 @@ def get_tic_free_energy_plots(
     if gif and gen_mode == "om_interpolate":
         path_history = Path(eval_folder, f"path_history-{gen_mode}.pt")
         path_history = torch.load(path_history)
-        loop = path_history[: (opt_steps // 20)] if opt_steps != 0 else path_history
+        loop = path_history[: (opt_steps // 50)] if opt_steps != 0 else path_history
         if isinstance(loop, dict):
             loop = loop["tr"].cpu()  # keep only alpha carbon coords
 

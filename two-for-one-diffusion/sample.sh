@@ -2,7 +2,7 @@ python sample.py \
     --model_path saved_models/bba \
     --gen_mode om_interpolate \
     --flow_matching \
-    --num_samples_eval 8 \
+    --num_samples_eval 2 \
     --batch_size_gen 2 \
     --latent_time 1 \
     --initial_guess_level 8 \
@@ -15,4 +15,4 @@ python sample.py \
     --append_exp_name test \
     --path_length 200 \
     --om_d 0.1 \
-    --steps 1000
+    --steps 2000

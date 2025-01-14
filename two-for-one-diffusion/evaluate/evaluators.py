@@ -1147,8 +1147,10 @@ def sample_from_model(
     batches = num_to_groups(num_saved_samples, batch_size)
     all_mol_list = []
     for i, batch_size in enumerate(batches):
-        _, z = next(dataloader)
-        z = z.repeat(math.ceil(batch_size / z.shape[0]), 1)[:batch_size]
+        z = None
+        if dataloader is not None:
+            _, z = next(dataloader)
+            z = z.repeat(math.ceil(batch_size / z.shape[0]), 1)[:batch_size]
         all_mol_list.append(sampler(batch_size=batch_size, z=z))
         if verbose:
             print(f"Batch {i+1} from {len(batches)} generated")

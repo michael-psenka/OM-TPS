@@ -398,6 +398,7 @@ class FlowMatching(nn.Module):
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
         initial_guess_level=0,
+        initiate_with_iid = True,
         om_steps=100,
         optimizer=torch.optim.Adam,
         lr=2e-1,
@@ -425,6 +426,7 @@ class FlowMatching(nn.Module):
             action_cls: class, action class to use for optimization
             initial_guess_fn: function, function to use for initial guess
             initial_guess_level: int, level of denoising to use for initial guess
+            initiate_with_iid: bool, whether to initiate the path with iid samples
             om_steps: int, number of optimization steps
             lr: float, learning rate for optimization
             dt: float, time step for optimization
@@ -462,29 +464,34 @@ class FlowMatching(nn.Module):
         original_x2 = x2.clone()
 
         with torch.no_grad():
-
-            if encode_and_decode:
-                noised_x1 = self.q_sample(x1, latent_time)
-                noised_x2 = self.q_sample(x2, latent_time)
-            elif initial_guess_level != 0:
-                noised_x1 = self.q_sample(x1, initial_guess_level)
-                noised_x2 = self.q_sample(x2, initial_guess_level)
+            if initiate_with_iid:
+                # produce i.i.d samples
+                noised_xs = self.sample(batch_size=num_paths*path_length) / self.norm_factor
+                noised_xs = noised_xs.reshape(path_length, num_paths, n_atoms, 3)
+                noised_xs[0], noised_xs[-1] = x1, x2
             else:
-                noised_x1 = x1
-                noised_x2 = x2
+                if encode_and_decode:
+                    noised_x1 = self.q_sample(x1, latent_time)
+                    noised_x2 = self.q_sample(x2, latent_time)
+                elif initial_guess_level != 0:
+                    noised_x1 = self.q_sample(x1, initial_guess_level)
+                    noised_x2 = self.q_sample(x2, initial_guess_level)
+                else:
+                    noised_x1 = x1
+                    noised_x2 = x2
 
-            noised_x1 = center_zero(noised_x1)
-            noised_x2 = center_zero(noised_x2)
+                noised_x1 = center_zero(noised_x1)
+                noised_x2 = center_zero(noised_x2)
 
-        # linear interpolation of noised_x1 and noised_x2
-        noised_xs = torch.stack(
-            [
-                center_zero(initial_guess_fn(noised_x1.cpu(), noised_x2.cpu(), alpha))
-                for alpha in torch.linspace(0, 1, path_length)
-            ]
-        ).to(self.device)
+                # linear interpolation of noised_x1 and noised_x2
+                noised_xs = torch.stack(
+                    [
+                        center_zero(initial_guess_fn(noised_x1.cpu(), noised_x2.cpu(), alpha))
+                        for alpha in torch.linspace(0, 1, path_length)
+                    ]
+                ).to(self.device)
 
-        if initial_guess_level != 0:
+        if initial_guess_level != 0 and not initiate_with_iid:
             # denoise to data space before optimization
             noised_xs = self.p_sample_loop(
                 noised_xs.reshape(-1, n_atoms, 3),
@@ -785,8 +792,8 @@ class FlowMatching(nn.Module):
                     )
 
         all_denoised_paths = []
-        # decode the optimized paths (keeping every 20 for future visualization)
-        for path in all_noised_xs[::20]:
+        # decode the optimized paths (keeping every 50 for future visualization)
+        for path in all_noised_xs[::50]:
             if encode_and_decode:
                 denoised_path = self.p_sample_loop(
                     path.reshape(-1, n_atoms, 3), latent_time, temperature=temperature
