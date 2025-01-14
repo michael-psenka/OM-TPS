@@ -156,13 +156,13 @@ def get_dataset(
 
     elif mol == "tetrapeptides":
         trainset = MDGenDataset(
-            data_folder, suffix="_i100", split="./mdgen/splits/4AA_train.csv"
+            data_folder, suffix="_i100", split="./mdgen/splits/4AA_train_small.csv"
         )
         valset = MDGenDataset(
-            data_folder, suffix="_i100", split="./mdgen/splits/4AA_val.csv"
+            data_folder, suffix="_i100", split="./mdgen/splits/4AA_val_small.csv"
         )
         testset = MDGenDataset(
-            data_folder, suffix="_i100", split="./mdgen/splits/4AA_test.csv"
+            data_folder, suffix="_i100", split="./mdgen/splits/4AA_test_small.csv"
         )
 
     elif "alanine_dipeptide" not in mol.lower():

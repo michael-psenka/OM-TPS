@@ -1,9 +1,9 @@
 python sample.py \
-    --model_path saved_models/trp_cage \
+    --model_path saved_models/bba \
     --gen_mode om_interpolate \
     --flow_matching \
-    --num_samples_eval 4 \
-    --batch_size_gen 4 \
+    --num_samples_eval 8 \
+    --batch_size_gen 2 \
     --latent_time 1 \
     --initial_guess_level 8 \
     --subsample_points_percent 1.0 \
@@ -12,7 +12,7 @@ python sample.py \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
-    --append_exp_name test_latent_time=1 \
+    --append_exp_name test \
     --path_length 200 \
     --om_d 0.1 \
-    --steps 2000
+    --steps 1000

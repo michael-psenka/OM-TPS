@@ -274,14 +274,14 @@ class GaussianDiffusion(nn.Module):
         pass
 
     @torch.no_grad()
-    def p_sample(self, x, t, temperature=1.0):
+    def p_sample(self, x, t, z=None, temperature=1.0):
         """
         Single sample from model given (noisy) molecule x and timestep t.
         """
         if not isinstance(t, torch.Tensor):
             t = torch.tensor([t]).repeat(x.shape[0]).to(self.device)
         b = x.shape[0]
-        model_mean, _, model_log_variance = self.p_mean_variance(x=x, t=t)
+        model_mean, _, model_log_variance = self.p_mean_variance(x=x, t=t, z=z)
         noise = torch.randn_like(x)
         noise = center_zero(noise)
         # no noise when t == 0
@@ -292,7 +292,7 @@ class GaussianDiffusion(nn.Module):
         )
 
     @torch.no_grad()
-    def p_sample_loop(self, mol_t, t, temperature=1.0):
+    def p_sample_loop(self, mol_t, t, z=None, temperature=1.0):
         """
         Loop over diffusion timesteps to go from noise to molecule starting at t=t.
         """
@@ -306,6 +306,7 @@ class GaussianDiffusion(nn.Module):
             mol = self.p_sample(
                 mol,
                 torch.full((b,), i, device=device, dtype=torch.long),
+                z=z,
                 temperature=temperature,
             )
             if (mol.max() > 1000) or (mol.min() < -1000):
@@ -317,7 +318,7 @@ class GaussianDiffusion(nn.Module):
         return mol
 
     @torch.no_grad()
-    def sample(self, batch_size, temperature=1.0):
+    def sample(self, batch_size, z=None, temperature=1.0):
         """
         Sample from model starting from t = T.
         """
@@ -328,7 +329,7 @@ class GaussianDiffusion(nn.Module):
         )
         return (
             self.p_sample_loop(
-                mol_t=starting_mol, t=self.num_timesteps, temperature=temperature
+                mol_t=starting_mol, t=self.num_timesteps, z=z, temperature=temperature
             )
             * self.norm_factor
         )

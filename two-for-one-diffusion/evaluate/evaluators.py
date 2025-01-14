@@ -1137,7 +1137,9 @@ def process_pdb(pdb_path, mol_name):
     return folded.atom_slice(ind_CA)
 
 
-def sample_from_model(sampler, num_saved_samples, batch_size, verbose=False):
+def sample_from_model(
+    sampler, num_saved_samples, batch_size, verbose=False, dataloader=None
+):
     """
     Sample molecules from the model.
     """
@@ -1145,7 +1147,9 @@ def sample_from_model(sampler, num_saved_samples, batch_size, verbose=False):
     batches = num_to_groups(num_saved_samples, batch_size)
     all_mol_list = []
     for i, batch_size in enumerate(batches):
-        all_mol_list.append(sampler(batch_size=batch_size))
+        _, z = next(dataloader)
+        z = z.repeat(math.ceil(batch_size / z.shape[0]), 1)[:batch_size]
+        all_mol_list.append(sampler(batch_size=batch_size, z=z))
         if verbose:
             print(f"Batch {i+1} from {len(batches)} generated")
     # all_mol_list = list(map(lambda n: model.sample(batch_size=n), batches))

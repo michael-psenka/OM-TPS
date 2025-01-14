@@ -21,6 +21,8 @@ from utils import (
     random_rotation,
 )
 
+from logging_utils import save_ovito_traj
+
 
 class Trainer(object):
     """
@@ -116,14 +118,16 @@ class Trainer(object):
                 drop_last=True,
             )
         )
+
         self.dl_val = data.DataLoader(
             self.val_data,
-            batch_size=train_batch_size,
+            batch_size=min(len(self.val_data), train_batch_size),
             shuffle=True,
             pin_memory=True,
             num_workers=num_workers,
             drop_last=True,
         )
+
         self.val_iters = iterations_on_val * len(self.dl_val)
         self.dl_val = cycle(self.dl_val)
 
@@ -232,9 +236,7 @@ class Trainer(object):
                 val_data = next(dl)
                 mol = val_data[0].to(self.device)
                 z = val_data[1].to(self.device) if len(val_data) == 2 else None
-                loss += self.model_ema_dp(
-                    val_data, z=z, t_diff_range=t_diff_range
-                ).mean()
+                loss += self.model_ema_dp(mol, z=z, t_diff_range=t_diff_range).mean()
                 iter_num += 1
             loss /= val_iters
             self.writer.add_scalar(f"Loss {partition_name}", loss.item(), self.step)
@@ -295,12 +297,26 @@ class Trainer(object):
                         self.dl_val, self.val_iters, partition_name="val"
                     )
 
-                    # Evaluate i.i.d.
+                    bool_new_best = val_loss_ff.item() < self.best_val_loss
+                    self.best_val_loss = (
+                        val_loss_ff.item() if bool_new_best else self.best_val_loss
+                    )
                     self.results_folder.mkdir(exist_ok=True, parents=True)
+                    self.save(milestone, save_best=bool_new_best)
+
+                    # Evaluate i.i.d.
                     sampled_mol = sample_from_model(
                         self.sampler_ema_dp,
                         self.num_saved_samples // self.parallel_batches,
                         self.batch_size // self.parallel_batches,
+                        dataloader=self.dl_val,
+                    )
+
+                    # Save as gsd
+                    save_ovito_traj(
+                        sampled_mol,
+                        str(self.results_folder) + f"/samples.gsd",
+                        align=True,
                     )
 
                     if "tetrapeptides" not in self.mol_name:
@@ -313,11 +329,6 @@ class Trainer(object):
                         for key in results_dict:
                             self.writer.add_scalar(key, results_dict[key], self.step)
 
-                    bool_new_best = val_loss_ff.item() < self.best_val_loss
-                    self.best_val_loss = (
-                        val_loss_ff.item() if bool_new_best else self.best_val_loss
-                    )
-                    self.save(milestone, save_best=bool_new_best)
                     self.model.train()
                     self.model_dp.train()
 

@@ -60,6 +60,8 @@ class FlowMatching(nn.Module):
         self.num_atoms = num_atoms
         if num_atoms in NUM_RESIDUES_TO_PROTEIN:
             self.protein = NUM_RESIDUES_TO_PROTEIN[num_atoms]
+        elif num_atoms == 4:
+            self.protein = "tetrapeptides"
         self.model = model
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.h = features.to(self.device)
