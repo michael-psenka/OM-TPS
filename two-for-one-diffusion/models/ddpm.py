@@ -597,6 +597,9 @@ class GaussianDiffusion(nn.Module):
                 f"{self.protein} Cosine Similarity between MLFF and Diffusion model forces"
             )
             plt.savefig(f"cosine_similarity_diffusion_{self.protein}.png")
+            import pdb
+
+            pdb.set_trace()
             exit()
 
         anneal_schedule = torch.linspace(200, latent_time, om_steps // 4)

@@ -134,7 +134,7 @@ parser.add_argument("--kb", type=str, default="consistent", help="consistent, kc
 
 parser.add_argument(
     "--latent_time",
-    type=int,
+    type=float,
     default=0,
     help="time at which to do latent interpolation",
 )

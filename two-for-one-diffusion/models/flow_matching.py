@@ -152,7 +152,6 @@ class FlowMatching(nn.Module):
                 .repeat(x.shape[0])
                 .to(self.device)
             )
-
         velocity_pred = self.model(
             x,
             self.h,
@@ -472,8 +471,16 @@ class FlowMatching(nn.Module):
                 noised_xs = (
                     self.sample(batch_size=num_paths * path_length) / self.norm_factor
                 )
+
                 noised_xs = noised_xs.reshape(path_length, num_paths, n_atoms, 3)
-                noised_xs[0], noised_xs[-1] = x1, x2
+                noised_xs[0], noised_xs[-1] = original_x1, original_x2
+
+                # align all samples
+                for i in range(path_length):
+                    for j in range(num_paths):
+                        noised_xs[i, j] = torch.tensor(
+                            kabsch_rotate(noised_xs[i, j].cpu(), x1[j].cpu())
+                        ).to(x1.device)
             else:
                 if encode_and_decode:
                     noised_x1 = self.q_sample(x1, latent_time)
@@ -597,6 +604,9 @@ class FlowMatching(nn.Module):
                 f"{self.protein} Cosine Similarity between MLFF and Flow Matching forces"
             )
             plt.savefig(f"cosine_similarity_flow_{self.protein}.png")
+            import pdb
+
+            pdb.set_trace()
             exit()
 
         anneal_schedule = torch.linspace(200, latent_time, om_steps // 4)
