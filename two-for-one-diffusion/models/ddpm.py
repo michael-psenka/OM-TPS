@@ -38,7 +38,7 @@ class GaussianDiffusion(nn.Module):
     def __init__(
         self,
         model,
-        num_atoms,
+        num_atoms=None,
         features=None,
         timesteps=1000,
         loss_type="l2",
@@ -57,7 +57,9 @@ class GaussianDiffusion(nn.Module):
             self.protein = NUM_RESIDUES_TO_PROTEIN[num_atoms]
         self.model = model
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.h = features.to(self.device)
+        self.h = features
+        if self.h is not None:
+            self.h = self.h.to(self.device)
 
         self.objective = objective
 
@@ -322,10 +324,11 @@ class GaussianDiffusion(nn.Module):
         """
         Sample from model starting from t = T.
         """
-        num_atoms = self.num_atoms
+        if z is not None:
+            self.num_atoms = z.shape[1]
         dims = self.dims
         starting_mol = center_zero(
-            torch.randn((batch_size, num_atoms, dims), device=self.betas.device)
+            torch.randn((batch_size, self.num_atoms, dims), device=self.betas.device)
         )
         return (
             self.p_sample_loop(
@@ -908,13 +911,15 @@ class GaussianDiffusion(nn.Module):
             mol.shape[1],
             mol.shape[2],
             mol.device,
-            self.num_atoms,
+            self.num_atoms if self.num_atoms is not None else mol.shape[1],
             self.dims,
             self.num_timesteps - 1,
         )
         assert (
             n == num_atoms and d == dims
         ), f"Molecule shape must be {(num_atoms, dims)}"
+
+        self.num_atoms = n
 
         t = torch.multinomial(self.p2_loss_weight, b, replacement=True).long()
         self.assert_normal_kl(

@@ -71,7 +71,7 @@ class GraphTransformer(nn.Module):
             self.node_decoder = nn.Linear(hidden_nf, 3)
 
         if self.use_bead_identities:
-            self.bead_embedding = nn.Embedding(20, hidden_nf)
+            self.bead_embedding = nn.Embedding(40, hidden_nf)
             self.bead_embedding = self.bead_embedding.to(self.device)
 
         self.graphtransformer = GraphTransformerLucid(
@@ -103,6 +103,8 @@ class GraphTransformer(nn.Module):
             t = t.reshape(-1, 1, 1).repeat(1, x.shape[1], 1)
             if t.shape[0] == 1:
                 t = t.repeat(bs, 1, 1)
+            if h is None:
+                h = torch.eye(n_nodes).to(x.device)
             h = h.unsqueeze(0).repeat(bs, 1, 1).to(x.device)
 
             # Compute edge attributes if necessary

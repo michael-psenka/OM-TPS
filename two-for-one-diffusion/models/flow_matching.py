@@ -398,7 +398,7 @@ class FlowMatching(nn.Module):
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
         initial_guess_level=0,
-        initiate_with_iid = True,
+        initiate_with_iid=True,
         om_steps=100,
         optimizer=torch.optim.Adam,
         lr=2e-1,
@@ -466,7 +466,9 @@ class FlowMatching(nn.Module):
         with torch.no_grad():
             if initiate_with_iid:
                 # produce i.i.d samples
-                noised_xs = self.sample(batch_size=num_paths*path_length) / self.norm_factor
+                noised_xs = (
+                    self.sample(batch_size=num_paths * path_length) / self.norm_factor
+                )
                 noised_xs = noised_xs.reshape(path_length, num_paths, n_atoms, 3)
                 noised_xs[0], noised_xs[-1] = x1, x2
             else:
@@ -486,7 +488,9 @@ class FlowMatching(nn.Module):
                 # linear interpolation of noised_x1 and noised_x2
                 noised_xs = torch.stack(
                     [
-                        center_zero(initial_guess_fn(noised_x1.cpu(), noised_x2.cpu(), alpha))
+                        center_zero(
+                            initial_guess_fn(noised_x1.cpu(), noised_x2.cpu(), alpha)
+                        )
                         for alpha in torch.linspace(0, 1, path_length)
                     ]
                 ).to(self.device)

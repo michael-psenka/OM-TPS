@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from itertools import chain
 from tqdm import tqdm
 import math
 import os, tempfile
@@ -12,7 +13,7 @@ from typing import Optional, Any, Callable, Sequence, Union
 import pandas as pd
 from torch.utils.data import Dataset
 from torch_geometric.data.data import Data
-
+from ase.data import atomic_numbers
 
 from utils import DummyClass
 
@@ -544,16 +545,23 @@ class MDGenDataset(torch.utils.data.Dataset):
         overfit_peptide=None,
         atlas=False,
         repeat=1,
+        atom_selection="backbone",
     ):
         super().__init__()
         self.df = pd.read_csv(split, index_col="name")
         self.repeat = repeat
-        self.num_beads = 4  # for tetrapeptides
+        if atom_selection == "c-alpha":
+            self.num_beads = 4
+        elif atom_selection == "backbone":
+            self.num_beads = 12
+        else:
+            self.num_beads = None
         self.bead_onehot = torch.eye(self.num_beads)
         self.data_dir = data_dir
         self.suffix = suffix
         self.overfit = overfit
         self.overfit_peptide = overfit_peptide
+        self.atom_selection = atom_selection
 
         # remove proteins for which we don't have any data (not sure why we couldn't download these)
         new_index = deepcopy(self.df.index)
@@ -591,9 +599,34 @@ class MDGenDataset(torch.utils.data.Dataset):
         )
 
         # arr should be in ANGSTROMS
-        t_idx = np.random.randint(0, arr.shape[0])
-        alpha_carbons = torch.tensor(arr[t_idx, :, 1], dtype=torch.float32)
-        seqres = np.array([restype_order[c] for c in seqres])
-        aatype = torch.from_numpy(seqres)
 
-        return alpha_carbons, aatype
+        t_idx = np.random.randint(0, arr.shape[0])
+        frame = torch.tensor(arr[t_idx], dtype=torch.float32)
+
+        if self.atom_selection == "c-alpha":
+            frame = frame[:, 1]
+            seqres = np.array([restype_order[c] for c in seqres])
+            atom_types = torch.from_numpy(seqres)  # Amino acid types
+
+        elif self.atom_selection == "backbone":
+            frame = frame[:, 0:3]
+            seqres = np.array([restype_order[c] for c in seqres])
+            atom_types = 2 * torch.from_numpy(seqres).repeat_interleave(
+                3
+            )  # Amino acid types
+            atom_types[::3] += 1  # distinguish between N and C backbone atoms
+
+        else:  # all-atom - this doesn't yet work because of variable number of atoms per protein - need to add padding
+            atom_names = [
+                rc.restype_name_to_atom14_names[rc.aa_one_to_three_letter[c]]
+                for c in seqres
+            ]
+            atom_names = list(chain.from_iterable(atom_names))
+
+            # remove '' elements from list
+            atom_names = [x[0] for x in atom_names if x]
+            atom_types = torch.tensor([atomic_numbers[a] for a in atom_names]).long()
+
+        frame = frame[frame != 0].reshape(-1, 3)
+
+        return frame, atom_types
