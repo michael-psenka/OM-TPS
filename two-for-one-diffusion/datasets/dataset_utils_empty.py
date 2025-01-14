@@ -626,7 +626,7 @@ class MDGenDataset(torch.utils.data.Dataset):
             # remove '' elements from list
             atom_names = [x[0] for x in atom_names if x]
             atom_types = torch.tensor([atomic_numbers[a] for a in atom_names]).long()
-
-        frame = frame[frame != 0].reshape(-1, 3)
+            frame = frame[frame != 0]
+        frame = frame.reshape(-1, 3)
 
         return frame, atom_types

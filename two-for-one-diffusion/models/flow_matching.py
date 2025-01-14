@@ -147,7 +147,11 @@ class FlowMatching(nn.Module):
         """
 
         if not isinstance(t, torch.Tensor):
-            t = torch.tensor([t]).repeat(x.shape[0]).to(self.device)
+            t = (
+                torch.tensor([t], dtype=torch.float32)
+                .repeat(x.shape[0])
+                .to(self.device)
+            )
 
         velocity_pred = self.model(
             x,
@@ -155,7 +159,6 @@ class FlowMatching(nn.Module):
             1 - (1.0 * t / 10),
             z,
         )
-        # force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * noise_pred
         noise_pred = self.path.velocity_to_epsilon(
             velocity_pred, x, (1 - (1.0 * t / 10)).unsqueeze(-1).unsqueeze(-1)
         )
@@ -551,6 +554,50 @@ class FlowMatching(nn.Module):
                 x = x.reshape(-1, 3) * self.norm_factor
                 force = model(z=z, pos=x, batch=batch)[1].reshape(-1, self.num_atoms, 3)
                 return force
+
+            samples = noised_xs.reshape(-1, self.num_atoms, 3)
+            cosine_sims = []
+            mlff_forces = get_force_from_mlff(samples)
+            for t in tqdm(np.linspace(0, 1, 100)):
+                cosine_sims.append(
+                    F.cosine_similarity(
+                        mlff_forces, self.force_func(samples, t=t), dim=-1
+                    )
+                    .mean()
+                    .detach()
+                    .cpu()
+                )
+            import matplotlib.pyplot as plt
+
+            # Find the t value where cosine similarity peaks
+            cosine_sims = np.array(cosine_sims)
+            max_index = np.argmax(cosine_sims)
+            t_values = np.linspace(0, 1, 100)
+            peak_t = t_values[max_index]
+            peak_cosine_sim = cosine_sims[max_index]
+            plt.axvline(
+                x=1 - peak_t,
+                color="red",
+                linestyle="--",
+                label=f"Peak t = {peak_t:.2f}",
+            )
+            plt.text(
+                1 - peak_t,
+                peak_cosine_sim,
+                f"{1-peak_t:.2f}",
+                color="red",
+                ha="right",
+                va="bottom",
+            )
+
+            plt.plot(1 - np.linspace(0, 1, 100), cosine_sims)
+            plt.xlabel("Flow Time")
+            plt.ylabel("Cosine Similarity")
+            plt.title(
+                f"{self.protein} Cosine Similarity between MLFF and Flow Matching forces"
+            )
+            plt.savefig(f"cosine_similarity_flow_{self.protein}.png")
+            exit()
 
         anneal_schedule = torch.linspace(200, latent_time, om_steps // 4)
         # add a bunch latent times to the anneal schedule

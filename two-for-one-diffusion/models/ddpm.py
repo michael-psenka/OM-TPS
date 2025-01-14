@@ -175,7 +175,7 @@ class GaussianDiffusion(nn.Module):
         """
 
         if not isinstance(t, torch.Tensor):
-            t = torch.tensor([t]).repeat(x.shape[0]).to(self.device)
+            t = torch.tensor([t], dtype=torch.long).repeat(x.shape[0]).to(self.device)
 
         noise_pred = self.model(
             x,
@@ -573,6 +573,31 @@ class GaussianDiffusion(nn.Module):
                 x = x.reshape(-1, 3) * self.norm_factor
                 force = model(z=z, pos=x, batch=batch)[1].reshape(-1, self.num_atoms, 3)
                 return force
+
+            # produce i.i.d samples
+            samples = self.sample(batch_size=num_paths * path_length) / self.norm_factor
+            samples = samples.reshape(-1, self.num_atoms, 3)
+            cosine_sims = []
+            mlff_forces = get_force_from_mlff(samples)
+            for t in tqdm(range(0, self.num_timesteps, 10)):
+                cosine_sims.append(
+                    F.cosine_similarity(
+                        mlff_forces, self.force_func(samples, t=t), dim=-1
+                    )
+                    .mean()
+                    .detach()
+                    .cpu()
+                )
+            import matplotlib.pyplot as plt
+
+            plt.plot(range(0, self.num_timesteps, 10), cosine_sims)
+            plt.xlabel("Diffusion Time")
+            plt.ylabel("Cosine Similarity")
+            plt.title(
+                f"{self.protein} Cosine Similarity between MLFF and Diffusion model forces"
+            )
+            plt.savefig(f"cosine_similarity_diffusion_{self.protein}.png")
+            exit()
 
         anneal_schedule = torch.linspace(200, latent_time, om_steps // 4)
         # add a bunch latent times to the anneal schedule

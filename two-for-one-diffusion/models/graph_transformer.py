@@ -271,9 +271,9 @@ class Attention(nn.Module):
 
         if exists(mask):
             mask = rearrange(mask, "b i -> b i ()") & rearrange(mask, "b j -> b () j")
-            mask = repeat(mask, "b i j -> (b h) i j", h=h)
+            mask = repeat(mask, "b i j -> (b h) i j", h=h)  # repeat for heads
             max_neg_value = -torch.finfo(sim.dtype).max
-            sim.masked_fill_(~mask, max_neg_value)
+            sim.masked_fill_(~mask, max_neg_value)  # mask with negative infinity
 
         attn = sim.softmax(dim=-1)
         out = einsum("b i j, b i j d -> b i d", attn, v)
