@@ -520,6 +520,8 @@ class FlowMatching(nn.Module):
             (1, 0, 2, 3)
         )  # make batch dimension come first [num_paths, path_length, n_atoms, 3]
 
+        # noised_xs = torch.load("bba_diffusion_ics.pt").to(self.device)
+
         if optimizer == torch.optim.SGD:
             optimizer = optimizer([noised_xs], lr=lr, momentum=0.9)
         else:

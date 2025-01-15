@@ -32,6 +32,7 @@ from utils import (
     filter_by_rmsd,
     slerp,
     validate_git_status,
+    cycle,
 )
 from logging_utils import save_ovito_traj
 from actions import SimpleAction, TruncatedAction, S2Action, HutchinsonAction
@@ -269,12 +270,12 @@ def main(samp_args):
     ) as f:
         args = pickle.load(f)
 
-    if samp_args.temp_data is None:
-        samp_args.temp_data = temp_dict[args.mol.upper()]
-    if samp_args.temp_sim is None:
-        samp_args.temp_sim = temp_dict[args.mol.upper()]
-    else:
-        samp_args.temp_sim = samp_args.temp_sim
+    # if samp_args.temp_data is None:
+    #     samp_args.temp_data = temp_dict[args.mol.upper()]
+    # if samp_args.temp_sim is None:
+    #     samp_args.temp_sim = temp_dict[args.mol.upper()]
+    # else:
+    #     samp_args.temp_sim = samp_args.temp_sim
 
     basic_append = f"_{samp_args.gen_mode}"
     flow_append = "_flowmatching" if samp_args.flow_matching else ""
@@ -305,7 +306,7 @@ def main(samp_args):
     # writer = SummaryWriter(str(eval_folder))
 
     # Load dataset from args
-    trainset, _, _ = get_dataset(
+    trainset, valset, testset = get_dataset(
         args.mol,
         args.mean0,
         args.data_folder,
@@ -350,14 +351,16 @@ def main(samp_args):
 
     model.load_state_dict(data_dict["ema"])
 
-    generate_samples(model, trainset, samp_args.noise_level, args, device, eval_folder)
+    generate_samples(
+        model, trainset, samp_args.noise_level, args, device, eval_folder, testset
+    )
 
     # writer.flush()
     # writer.close()
     # time.sleep(2)
 
 
-def generate_samples(model, trainset, noise_level, args, device, eval_folder):
+def generate_samples(model, trainset, noise_level, args, device, eval_folder, testset):
     # Generate samples from diffusion model
     iid_sample_path = Path(
         os.path.join(os.path.dirname(eval_folder), "main_eval_output_iid")
@@ -371,11 +374,17 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
             parallel_batches = torch.cuda.device_count()
         else:
             parallel_batches = 1
+
+        dl = torch.utils.data.DataLoader(
+            testset, batch_size=samp_args.batch_size_gen, shuffle=False
+        )
+
         sampled_mol = sample_from_model(
             sampler,
             samp_args.num_samples_eval // parallel_batches,
             samp_args.batch_size_gen // parallel_batches,
             verbose=True,
+            dataloader=cycle(dl) if "tetrapeptide" in protein_name else None,
         )
 
     # Generate interpolated samples
@@ -644,6 +653,8 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder):
         sampled_mol,
         str(eval_folder) + f"/sample-{samp_args.gen_mode}.gsd",
         align=samp_args.gen_mode == "iid",
+        all_backbone="tetrapeptide" in protein_name
+        and trainset.atom_selection == "backbone",
     )
 
     # Perform final evaluations (producing plots, GIFs, etc.)

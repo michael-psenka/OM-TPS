@@ -19,6 +19,7 @@ def save_ovito_traj(
     filename,
     align=False,
     create_bonds=True,
+    all_backbone=False,
 ):
     """
     Save the given positions to a GSD file using Ovito.
@@ -34,12 +35,12 @@ def save_ovito_traj(
     for i, pos in enumerate(positions):
         if align:
             pos = kabsch_rotate(pos, positions[0])
-        t.append(create_frame(i, pos, cell, create_bonds))
+        t.append(create_frame(i, pos, cell, create_bonds, all_backbone))
 
     t.close()
 
 
-def create_frame(step, position, cell, create_bonds=True):
+def create_frame(step, position, cell, create_bonds=True, all_backbone=False):
     """
     Create an Ovito frame from the given positions.
     """
@@ -60,10 +61,25 @@ def create_frame(step, position, cell, create_bonds=True):
     s.configuration.box = [cell[0][0], cell[1][1], cell[2][2], 0, 0, 0]
 
     # Bonds for visualization
-    # TODO: add option to include bonds between backbone and CB/N atoms
     if create_bonds:
-        senders = np.arange(position.shape[0] - 1)
-        receivers = np.arange(1, position.shape[0])
+        if all_backbone:
+            # construct bonds between CA and N atoms AND between CA and CB atoms
+            senders = np.arange(position.shape[0] - 3)[1::3]
+            receivers = np.arange(3, position.shape[0])[1::3]
+            N_senders = senders
+            N_receivers = N_senders - 1
+            CB_senders = senders
+            CB_receivers = CB_senders + 1
+            last_sender = np.array([position.shape[0] - 2, position.shape[0] - 2])
+            last_receiver = np.array([position.shape[0] - 3, position.shape[0] - 1])
+            senders = np.concatenate([senders, N_senders, CB_senders, last_sender])
+            receivers = np.concatenate(
+                [receivers, N_receivers, CB_receivers, last_receiver]
+            )
+
+        else:
+            senders = np.arange(position.shape[0] - 1)
+            receivers = np.arange(1, position.shape[0])
 
         bonds = np.stack([senders, receivers], axis=1)
 

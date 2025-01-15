@@ -317,6 +317,8 @@ class Trainer(object):
                         sampled_mol,
                         str(self.results_folder) + f"/samples.gsd",
                         align=True,
+                        all_backbone="tetrapeptides" in self.mol_name
+                        and self.train_data.atom_selection == "backbone",
                     )
 
                     if "tetrapeptides" not in self.mol_name:
