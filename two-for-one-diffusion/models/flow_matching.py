@@ -27,7 +27,7 @@ from utils import (
     NUM_RESIDUES_TO_PROTEIN,
 )
 
-from torchmdnet.models.model import load_model as load_mlff_model
+# from torchmdnet.models.model import load_model as load_mlff_model
 
 # flow matching imports
 from flow_matching.path.scheduler import CondOTScheduler

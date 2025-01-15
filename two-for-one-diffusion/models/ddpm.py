@@ -27,7 +27,7 @@ from utils import (
     NUM_RESIDUES_TO_PROTEIN,
 )
 
-from torchmdnet.models.model import load_model as load_mlff_model
+# from torchmdnet.models.model import load_model as load_mlff_model
 
 KB = 0.83144626181  # This is the Boltzmann constant converted from J/K (Kg, m^2 / s^2 / K) to -> g/mol, angstroms, ps and K.
 
@@ -358,6 +358,7 @@ class GaussianDiffusion(nn.Module):
         self,
         x1,
         x2,
+        z,
         path_length,
         latent_time,
         interpolation_fn=torch.lerp,
@@ -366,8 +367,9 @@ class GaussianDiffusion(nn.Module):
         """
         Encode the two points into latent space, linearly or spherically interpolate, and decode.
         Args:
-            x1: torch.Tensor, shape of [n_paths, num_atoms x 3]
-            x2: torch.Tensor, shape of [n_paths, num_atoms x 3]
+            x1: torch.Tensor, shape of [n_paths, num_atoms, 3]
+            x2: torch.Tensor, shape of [n_paths, num_atoms, 3]
+            z: torch.Tensor, shape of [n_paths, num_atoms]
             path_length: int, length of the path to interpolate
             latent_time: float, time at which to interpolate
             interpolation_fn: function, interpolation function
@@ -375,6 +377,7 @@ class GaussianDiffusion(nn.Module):
         """
 
         num_paths, n_atoms = x1.shape[0], x1.shape[1]
+        latent_time = int(latent_time)
 
         for i in range(num_paths):
             # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
@@ -393,7 +396,6 @@ class GaussianDiffusion(nn.Module):
 
         # Encode (sample from q(x_t | x_0))
         with torch.no_grad():
-
             noised_x1 = self.q_sample(x1, latent_time)
             noised_x2 = self.q_sample(x2, latent_time)
 
@@ -414,7 +416,10 @@ class GaussianDiffusion(nn.Module):
 
         # decode
         xs = self.p_sample_loop(
-            noised_xs.reshape(-1, n_atoms, 3), latent_time, temperature=temperature
+            noised_xs.reshape(-1, n_atoms, 3),
+            latent_time,
+            z=z.unsqueeze(0).repeat(path_length * num_paths, 1),
+            temperature=temperature,
         )
 
         xs = xs.reshape(num_paths, path_length, n_atoms, 3)
@@ -431,6 +436,7 @@ class GaussianDiffusion(nn.Module):
         self,
         x1,
         x2,
+        z,
         path_length,
         latent_time,
         encode_and_decode=True,
@@ -456,8 +462,9 @@ class GaussianDiffusion(nn.Module):
         """
         Encode the two points into latent space, linearly or spherically interpolate, optimize OM action, and decode.
         Args:
-            x1: torch.Tensor, shape of [n_paths, num_atoms x 3]
-            x2: torch.Tensor, shape of [n_paths, num_atoms x 3]
+            x1: torch.Tensor, shape of [n_paths, num_atoms, 3]
+            x2: torch.Tensor, shape of [n_paths, num_atoms, 3]
+            z: torch.Tensor, shape of [n_paths, num_atoms]
             path_length: int, length of the path to interpolate
             latent_time: float, time at which to interpolate
             encode_and_decode: bool, whether to encode and decode the path
@@ -478,6 +485,7 @@ class GaussianDiffusion(nn.Module):
         )
 
         num_paths, n_atoms = x1.shape[0], x1.shape[1]
+        latent_time = int(latent_time)
 
         for i in range(num_paths):
             # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
@@ -522,6 +530,7 @@ class GaussianDiffusion(nn.Module):
             noised_xs = self.p_sample_loop(
                 noised_xs.reshape(-1, n_atoms, 3),
                 initial_guess_level,
+                z=z.unsqueeze(0).repeat(path_length * num_paths, 1),
                 temperature=temperature,
             )
             noised_xs = noised_xs.reshape(path_length, num_paths, n_atoms, 3)
@@ -653,7 +662,11 @@ class GaussianDiffusion(nn.Module):
                     force_func = get_force_from_mlff
                     forces = [None] * len(noised_xs)
                 else:
-                    force_func = lambda x: self.force_func(center_zero(x), diff_time)
+                    force_func = lambda x, z: self.force_func(
+                        center_zero(x),
+                        diff_time,
+                        z=z.unsqueeze(0).repeat(num_paths * path_length, 1),
+                    )
 
                     # Subsample points
                     num_points = path_length
@@ -850,7 +863,10 @@ class GaussianDiffusion(nn.Module):
         for path in all_noised_xs[::20]:
             if encode_and_decode:
                 denoised_path = self.p_sample_loop(
-                    path.reshape(-1, n_atoms, 3), latent_time, temperature=temperature
+                    path.reshape(-1, n_atoms, 3),
+                    latent_time,
+                    z=z.unsqueeze(0).repeat(num_paths * path_length, 1),
+                    temperature=temperature,
                 )
             else:
                 denoised_path = path

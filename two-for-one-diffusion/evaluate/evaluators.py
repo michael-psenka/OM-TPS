@@ -1137,9 +1137,7 @@ def process_pdb(pdb_path, mol_name):
     return folded.atom_slice(ind_CA)
 
 
-def sample_from_model(
-    sampler, num_saved_samples, batch_size, verbose=False, dataloader=None
-):
+def sample_from_model(sampler, num_saved_samples, batch_size, verbose=False, z=None):
     """
     Sample molecules from the model.
     """
@@ -1147,9 +1145,7 @@ def sample_from_model(
     batches = num_to_groups(num_saved_samples, batch_size)
     all_mol_list = []
     for i, batch_size in enumerate(batches):
-        z = None
-        if dataloader is not None:
-            _, z = next(dataloader)
+        if z is not None:
             z = z.repeat(math.ceil(batch_size / z.shape[0]), 1)[:batch_size]
         all_mol_list.append(sampler(batch_size=batch_size, z=z))
         if verbose:
@@ -1161,7 +1157,12 @@ def sample_from_model(
 
 
 def sample_interpolations_from_model(
-    interpolator, endpoint_1_samples, endpoint_2_samples, batch_size, verbose=False
+    interpolator,
+    endpoint_1_samples,
+    endpoint_2_samples,
+    batch_size,
+    verbose=False,
+    z=None,
 ):
     """
     Sample interpolations from the model.
@@ -1178,7 +1179,7 @@ def sample_interpolations_from_model(
     endpoint_1_split = endpoint_1_samples.split(batch_size)
     endpoint_2_split = endpoint_2_samples.split(batch_size)
     for i, (x1, x2) in enumerate(zip(endpoint_1_split, endpoint_2_split)):
-        output = interpolator(x1, x2)
+        output = interpolator(x1, x2, z)
         all_path_list.append(output["final_path"])
 
         if "all_paths" in output.keys():

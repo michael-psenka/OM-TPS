@@ -331,10 +331,11 @@ class InterpolatorWrapper(torch.nn.Module):
         self.interpolation_fn = interpolation_fn
         self.temperature = temperature
 
-    def forward(self, x1, x2):
+    def forward(self, x1, x2, z=None):
         return self.model.interpolate(
             x1=x1,
             x2=x2,
+            z=z,
             path_length=self.path_length,
             latent_time=self.latent_time,
             temperature=self.temperature,
@@ -398,10 +399,11 @@ class OMInterpolatorWrapper(torch.nn.Module):
         self.truncated_gradient = truncated_gradient
         self.temperature = temperature
 
-    def forward(self, x1, x2):
+    def forward(self, x1, x2, z=None):
         return self.model.om_interpolate(
             x1=x1,
             x2=x2,
+            z=z,
             path_length=self.path_length,
             encode_and_decode=self.encode_and_decode,
             latent_time=self.latent_time,

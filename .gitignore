@@ -10,6 +10,8 @@ data
 *.png
 *.pyc
 *.gsd
+*.pickle
+*.pkl
 *ipynb_checkpoints/
 wandb/
 guided_diffusion/
@@ -20,6 +22,7 @@ mlff_residue_numbers/
 alphaflow/saved_references
 msas/
 alphaflow/
+saved_models/
 
 # Two for One stuff:
 

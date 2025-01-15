@@ -1,5 +1,6 @@
 import os
 import wandb
+import json
 import argparse
 import pickle
 from os.path import join
@@ -10,6 +11,7 @@ from models import get_model, CommittorNN
 from models.ddpm import GaussianDiffusion
 from models.flow_matching import FlowMatching
 from ema_pytorch import EMA
+import mdtraj
 from datasets.dataset_utils_empty import (
     get_dataset,
     Molecules,
@@ -18,6 +20,7 @@ from datasets.dataset_utils_empty import (
     to_angstrom,
 )
 from evaluate.evaluate_fastfolders import evaluate_fastfolders, CLUSTER_ENDPOINTS
+from evaluate.evaluate_tetrapeptides import evaluate_tetrapeptides
 from evaluate.evaluators import (
     sample_from_model,
     sample_interpolations_from_model,
@@ -42,6 +45,20 @@ import mdtraj as md
 from torch.utils.tensorboard import SummaryWriter
 import time
 import matplotlib.pyplot as plt
+import contextlib
+import mdgen.mdgen.analysis
+from mdgen.mdgen.utils import get_tetrapeptide_sample, atom14_to_pdb
+from mdgen.mdgen.residue_constants import restype_order
+
+
+@contextlib.contextmanager
+def temp_seed(seed):
+    state = np.random.get_state()
+    np.random.seed(seed)
+    try:
+        yield
+    finally:
+        np.random.set_state(state)
 
 
 parser = argparse.ArgumentParser(description="coarse-graining-evaluator")
@@ -53,6 +70,12 @@ parser.add_argument(
     type=str,
     help="root directory where models and args are stored",
     required=True,
+)
+parser.add_argument(
+    "--tetra_seq",
+    type=str,
+    help="Which amino acid sequence to use for tetrapeptide",
+    default="",
 )
 parser.add_argument(
     "--model_checkpoint", type=str, default="best", help="best, last, 1, 2, 3, ..."
@@ -352,7 +375,14 @@ def main(samp_args):
     model.load_state_dict(data_dict["ema"])
 
     generate_samples(
-        model, trainset, samp_args.noise_level, args, device, eval_folder, testset
+        model,
+        trainset,
+        samp_args.noise_level,
+        args,
+        device,
+        eval_folder,
+        testset,
+        samp_args.tetra_seq,
     )
 
     # writer.flush()
@@ -360,13 +390,25 @@ def main(samp_args):
     # time.sleep(2)
 
 
-def generate_samples(model, trainset, noise_level, args, device, eval_folder, testset):
+def generate_samples(
+    model, trainset, noise_level, args, device, eval_folder, testset, name=None
+):
     # Generate samples from diffusion model
     iid_sample_path = Path(
         os.path.join(os.path.dirname(eval_folder), "main_eval_output_iid")
     )
 
     protein_name = iid_sample_path.parts[-2]
+
+    dl = torch.utils.data.DataLoader(
+        testset,
+        batch_size=min(len(testset), samp_args.batch_size_gen),
+        shuffle=True,
+        pin_memory=True,
+        num_workers=0,
+        drop_last=True,
+    )
+
     if samp_args.gen_mode == "iid":
         sampler = SamplerWrapper(model.ema_model).to(device).eval()
         if torch.cuda.device_count() > 1 and device == "cuda":
@@ -375,89 +417,150 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder, te
         else:
             parallel_batches = 1
 
-        dl = torch.utils.data.DataLoader(
-            testset,
-            batch_size=min(len(testset), samp_args.batch_size_gen),
-            shuffle=True,
-            pin_memory=True,
-            num_workers=0,
-            drop_last=True,
-        )
-
         sampled_mol = sample_from_model(
             sampler,
             samp_args.num_samples_eval // parallel_batches,
             samp_args.batch_size_gen // parallel_batches,
             verbose=True,
-            dataloader=cycle(dl) if "tetrapeptide" in protein_name else None,
+            dataloader=(
+                cycle(dl) if "tetrapeptide" in protein_name else None
+            ),  # TODO: change this to just a single pdb_id
         )
 
     # Generate interpolated samples
     elif "interpolate" in samp_args.gen_mode:
 
-        # choose two endpoints as cluster centers (calculated from min flux paths)
+        if "tetrapeptide" in protein_name:
 
-        cluster_endpoints_path = Path(
-            os.path.join(
-                "evaluate",
-                "saved_references",
-                f"saved_cluster_endpoints_{protein_name.upper()}.npy",
+            if os.path.exists(f"{eval_folder}/{name}_metadata.pkl"):
+                # load the existing data
+                pkl_metadata = pickle.load(
+                    open(f"{eval_folder}/{name}_metadata.pkl", "rb")
+                )
+                msm = pkl_metadata["msm"]
+                cmsm = pkl_metadata["cmsm"]
+                ref_kmeans = pkl_metadata["ref_kmeans"]
+            else:
+                with temp_seed(137):
+                    feats, ref = mdgen.mdgen.analysis.get_featurized_traj(
+                        f"{args.data_folder}/{name}/{name}", sidechains=False
+                    )
+                    tica, _ = mdgen.mdgen.analysis.get_tica(ref)
+                    kmeans, ref_kmeans = mdgen.mdgen.analysis.get_kmeans(
+                        tica.transform(ref)
+                    )
+                    msm, pcca, cmsm = mdgen.mdgen.analysis.get_msm(
+                        ref_kmeans, nstates=10
+                    )
+
+                pickle.dump(
+                    {
+                        "msm": msm,
+                        "cmsm": cmsm,
+                        "tica": tica,
+                        "pcca": pcca,
+                        "kmeans": kmeans,
+                        "ref_kmeans": ref_kmeans,
+                    },
+                    open(f"{eval_folder}/{name}_metadata.pkl", "wb"),
+                )
+
+            flux_mat = cmsm.transition_matrix * cmsm.pi[None, :]
+            flux_mat[flux_mat < 0.0000001] = (
+                np.inf
+            )  # set 0 flux to inf so we do not choose that as the argmin
+            start_state, end_state = np.unravel_index(
+                np.argmin(flux_mat, axis=None), flux_mat.shape
             )
-        )
+            ref_discrete = msm.metastable_assignments[ref_kmeans]
+            start_idxs = np.where(ref_discrete == start_state)[0]
+            end_idxs = np.where(ref_discrete == end_state)[0]
+            if (ref_discrete == start_state).sum() == 0 or (
+                ref_discrete == end_state
+            ).sum() == 0:
+                RuntimeError("No start or end state found for ", name, "skipping...")
 
-        # clusters = np.load(cluster_endpoints_path)
-        # use pre-defined cluster centers (min flux endpoints aren't always reasonable)
-        clusters = CLUSTER_ENDPOINTS[protein_name]
-
-        cluster_centers_path = Path(
-            os.path.join(
-                "evaluate",
-                "saved_references",
-                f"saved_cluster_centers_{protein_name.upper()}.npy",
+            # Now get start and end samples
+            arr = np.lib.format.open_memmap(f"{args.data_folder}/{name}.npy", "r")
+            (
+                endpoint_1_samples,
+                endpoint_2_samples,
+                z,
+                chosen_start_idxs,
+                chosen_end_idxs,
+            ) = get_tetrapeptide_sample(
+                arr,
+                name,
+                start_idxs,
+                end_idxs,
+                start_state,
+                end_state,
+                samp_args.num_samples_eval,
             )
-        )
-        cluster_coords = np.load(cluster_centers_path)
 
-        # Load samples from the ground truth simulations to serve as endpoints for interpolation
-        dataset = DEShawDataset(
-            data_root="/data/sanjeevr/Reference_MD_Sims",
-            molecule=Molecules[protein_name.upper()],
-            simulation_id=0,
-            atom_selection=AtomSelection.A_CARBON,
-            return_bond_graph=False,
-            transform=to_angstrom,
-            align=False,
-        )
+        else:
+            # choose two endpoints as cluster centers (calculated from min flux paths)
+            cluster_endpoints_path = Path(
+                os.path.join(
+                    "evaluate",
+                    "saved_references",
+                    f"saved_cluster_endpoints_{protein_name.upper()}.npy",
+                )
+            )
 
-        gt_traj = 10 * torch.tensor(dataset.traj.xyz)  # convert to angstroms
-        gt_traj -= gt_traj.mean(1, keepdims=True)  # center
+            # clusters = np.load(cluster_endpoints_path)
+            # use pre-defined cluster centers (min flux endpoints aren't always reasonable)
+            clusters = CLUSTER_ENDPOINTS[protein_name]
 
-        # Get TICA
-        tic_evaluator = TicEvaluator(
-            val_data=None,
-            mol_name=protein_name,
-            eval_folder=iid_sample_path,
-            data_folder="datasets",
-            folded_pdb_folder="datasets/folded_pdbs",
-            bins=101,
-            evalset="testset",
-        )
-        # assign cluster centers to the ground truth samples
-        cluster_assignments, _ = discretize_trajectory(
-            gt_traj, tic_evaluator, cluster_coords
-        )
+            cluster_centers_path = Path(
+                os.path.join(
+                    "evaluate",
+                    "saved_references",
+                    f"saved_cluster_centers_{protein_name.upper()}.npy",
+                )
+            )
+            cluster_coords = np.load(cluster_centers_path)
 
-        # Sample endpoints from the cluster centers
-        endpoint_1 = gt_traj[cluster_assignments == clusters[0]].to(device)
-        endpoint_2 = gt_traj[cluster_assignments == clusters[1]].to(device)
+            # Load samples from the ground truth simulations to serve as endpoints for interpolation
+            dataset = DEShawDataset(
+                data_root="/data/sanjeevr/Reference_MD_Sims",
+                molecule=Molecules[protein_name.upper()],
+                simulation_id=0,
+                atom_selection=AtomSelection.A_CARBON,
+                return_bond_graph=False,
+                transform=to_angstrom,
+                align=False,
+            )
 
-        # # Replicate the endpoints to have samp_args.num_samples_eval samples
-        endpoint_1_samples = endpoint_1.repeat(
-            samp_args.num_samples_eval // len(endpoint_1) + 1, 1, 1
-        )[: samp_args.num_samples_eval]
-        endpoint_2_samples = endpoint_2.repeat(
-            samp_args.num_samples_eval // len(endpoint_2) + 1, 1, 1
-        )[: samp_args.num_samples_eval]
+            gt_traj = 10 * torch.tensor(dataset.traj.xyz)  # convert to angstroms
+            gt_traj -= gt_traj.mean(1, keepdims=True)  # center
+
+            # Get TICA
+            tic_evaluator = TicEvaluator(
+                val_data=None,
+                mol_name=protein_name,
+                eval_folder=iid_sample_path,
+                data_folder="datasets",
+                folded_pdb_folder="datasets/folded_pdbs",
+                bins=101,
+                evalset="testset",
+            )
+            # assign cluster centers to the ground truth samples
+            cluster_assignments, _ = discretize_trajectory(
+                gt_traj, tic_evaluator, cluster_coords
+            )
+
+            # Sample endpoints from the cluster centers
+            endpoint_1 = gt_traj[cluster_assignments == clusters[0]]
+            endpoint_2 = gt_traj[cluster_assignments == clusters[1]]
+
+            # # Replicate the endpoints to have samp_args.num_samples_eval samples
+            endpoint_1_samples = endpoint_1.repeat(
+                samp_args.num_samples_eval // len(endpoint_1) + 1, 1, 1
+            )[: samp_args.num_samples_eval]
+            endpoint_2_samples = endpoint_2.repeat(
+                samp_args.num_samples_eval // len(endpoint_2) + 1, 1, 1
+            )[: samp_args.num_samples_eval]
 
         if "om" in samp_args.gen_mode:
             if samp_args.action == "hessian":
@@ -530,15 +633,14 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder, te
             parallel_batches = torch.cuda.device_count()
         else:
             parallel_batches = 1
-
         output = sample_interpolations_from_model(
             interpolator,
-            endpoint_1_samples,
-            endpoint_2_samples,
+            endpoint_1_samples.to(device),
+            endpoint_1_samples.to(device),
             batch_size=samp_args.batch_size_gen // parallel_batches,
             verbose=True,
+            z=z.to(device) if "tetrapeptide" in protein_name else None,
         )
-
         sampled_mol = output["sampled_mol"]
 
         # initiate MD simulations from the interpolated path
@@ -648,7 +750,34 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder, te
     torch.save(sampled_mol, str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pt"))
 
     # Save subset as pdb - convert from angstrom to nm
-    if hasattr(trainset, "topology"):
+    if "tetrapeptide" in protein_name:
+        path = os.path.join(eval_folder, f"{name}_0.pdb")
+        mol = sampled_mol.reshape(sampled_mol.shape[0], 4, 3, 3)
+        new_mol = torch.zeros(mol.shape[0], 4, 14, 3)
+        new_mol[:, :, 0:3, :] = mol
+        atom14_to_pdb(
+            new_mol.cpu().numpy(), np.array([restype_order[c] for c in name]), path
+        )
+
+        traj = mdtraj.load(path)
+        traj.superpose(traj)
+        traj.save(os.path.join(eval_folder, f"{name}_0.xtc"))
+        traj[0].save(os.path.join(eval_folder, f"{name}_0.pdb"))
+        metadata = []
+
+        metadata.append(
+            {
+                "name": name,
+                "start_idx": [a.item() for a in list(np.array(chosen_start_idxs))],
+                "end_idx": [a.item() for a in list(np.array(chosen_start_idxs))],
+                "start_state": start_state.item(),
+                "end_state": end_state.item(),
+                "path": path,
+            }
+        )
+        json.dump(metadata, open(f"{eval_folder}/{name}_metadata.json", "w"))
+
+    else:
         all_mol_traj = md.Trajectory(
             sampled_mol[0:1000].numpy() / 10, topology=trainset.topology
         )
@@ -665,20 +794,38 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder, te
         and trainset.atom_selection == "backbone",
     )
 
+    import pdb
+
+    pdb.set_trace()
     # Perform final evaluations (producing plots, GIFs, etc.)
-    evaluate_fastfolders(
-        protein_name,
-        samp_args.gen_mode,
-        samp_args.original_append_exp_name,
-        checkpoint_folder="./saved_models",
-        reference_folder="./evaluate/saved_references",
-        pdb_folder="./datasets",
-        model=model.ema_model,
-        num_paths=samp_args.num_samples_eval,
-        endpoints=clusters if "interpolate" in samp_args.gen_mode else None,
-        log=not samp_args.disable_logging,
-        gif=True,
-    )
+    if "tetrapeptide" in protein_name:
+        evaluate_tetrapeptides(
+            samp_args.gen_mode,
+            samp_args.original_append_exp_name,
+            checkpoint_folder="./saved_models",
+            reference_folder="./evaluate/saved_references",
+            pdb_folder="/data/sanjeevr/4AA_data",
+            model=model.ema_model,
+            num_paths=samp_args.num_samples_eval,
+            endpoints=clusters if "interpolate" in samp_args.gen_mode else None,
+            log=not samp_args.disable_logging,
+            gif=True,
+        )
+
+    else:
+        evaluate_fastfolders(
+            protein_name,
+            samp_args.gen_mode,
+            samp_args.original_append_exp_name,
+            checkpoint_folder="./saved_models",
+            reference_folder="./evaluate/saved_references",
+            pdb_folder="./datasets",
+            model=model.ema_model,
+            num_paths=samp_args.num_samples_eval,
+            endpoints=clusters if "interpolate" in samp_args.gen_mode else None,
+            log=not samp_args.disable_logging,
+            gif=True,
+        )
     print("Evaluation complete.")
 
     return sampled_mol
