@@ -376,7 +376,12 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder, te
             parallel_batches = 1
 
         dl = torch.utils.data.DataLoader(
-            testset, batch_size=samp_args.batch_size_gen, shuffle=False
+            testset,
+            batch_size=min(len(testset), samp_args.batch_size_gen),
+            shuffle=True,
+            pin_memory=True,
+            num_workers=0,
+            drop_last=True,
         )
 
         sampled_mol = sample_from_model(
@@ -643,10 +648,13 @@ def generate_samples(model, trainset, noise_level, args, device, eval_folder, te
     torch.save(sampled_mol, str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pt"))
 
     # Save subset as pdb - convert from angstrom to nm
-    all_mol_traj = md.Trajectory(
-        sampled_mol[0:1000].numpy() / 10, topology=trainset.topology
-    )
-    all_mol_traj.save_pdb(str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb"))
+    if hasattr(trainset, "topology"):
+        all_mol_traj = md.Trajectory(
+            sampled_mol[0:1000].numpy() / 10, topology=trainset.topology
+        )
+        all_mol_traj.save_pdb(
+            str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb")
+        )
 
     # Also save as gsd
     save_ovito_traj(

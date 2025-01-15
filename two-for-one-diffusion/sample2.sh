@@ -1,7 +1,8 @@
 python sample.py \
     --model_path saved_models/tetrapeptides \
     --gen_mode iid \
-    --num_samples_eval 10000 \
+    --data_folder /data/sanjeevr/4AA_data \
+    --num_samples_eval 1000 \
     --batch_size_gen 1000 \
     --latent_time 0.6 \
     --initial_guess_level 8 \

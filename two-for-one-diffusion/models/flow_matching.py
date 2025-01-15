@@ -12,7 +12,7 @@ from einops import reduce
 from ase import units
 import warnings
 from tqdm import tqdm
-from rmsd import kabsch_rotate
+from rmsd import kabsch_rotate, kabsch_rmsd
 from actions import S2Action, TruncatedAction, SimpleAction, HutchinsonAction
 from dynamics.langevin import ForcesWrapper, temp_dict
 
@@ -309,7 +309,7 @@ class FlowMatching(nn.Module):
         noise = default(noise, lambda: torch.randn_like(x_start))
         noise = center_zero(noise)
         # sample probability path
-        t = 1 - 1.0 * t / self.num_timesteps
+        t = 1 - 1.0 * t / 10
         path_sample = self.path.sample(t=t, x_0=noise, x_1=x_start)
         return center_zero(path_sample.x_t)
 
@@ -400,7 +400,7 @@ class FlowMatching(nn.Module):
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
         initial_guess_level=0,
-        initiate_with_iid=True,
+        initiate_with_iid=False,
         om_steps=100,
         optimizer=torch.optim.Adam,
         lr=2e-1,
@@ -473,14 +473,31 @@ class FlowMatching(nn.Module):
                 )
 
                 noised_xs = noised_xs.reshape(path_length, num_paths, n_atoms, 3)
-                noised_xs[0], noised_xs[-1] = original_x1, original_x2
 
                 # align all samples
+                dists = torch.zeros((path_length, num_paths))
                 for i in range(path_length):
                     for j in range(num_paths):
                         noised_xs[i, j] = torch.tensor(
                             kabsch_rotate(noised_xs[i, j].cpu(), x1[j].cpu())
                         ).to(x1.device)
+                        dists[i, j] = torch.tensor(
+                            kabsch_rmsd(
+                                noised_xs[i, j].cpu().numpy(), x1[j].cpu().numpy()
+                            )
+                        )
+
+                # re-order the samples by distance to x1
+                sorted_idxs = torch.argsort(dists, dim=0).to(self.device)
+                for i in range(num_paths):
+                    noised_xs[:, i] = noised_xs[:, i][sorted_idxs[:, i]]
+                # sorted_idxs = sorted_idxs.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, n_atoms, 3)
+                # batch_indices = torch.arange(path_length).unsqueeze(1).unsqueeze(-1).unsqueeze(-1).expand(-1, num_paths, num_atoms, 3)  # Shape [200, 8, 28, 3]
+
+                # import pdb; pdb.set_trace()
+                # noised_xs = noised_xs.gather(2, sorted_idxs)
+                # noised_xs[0], noised_xs[-1] = original_x1, original_x2
+
             else:
                 if encode_and_decode:
                     noised_x1 = self.q_sample(x1, latent_time)
