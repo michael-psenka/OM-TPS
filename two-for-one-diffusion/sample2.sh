@@ -1,19 +1,18 @@
 python sample.py \
     --model_path saved_models/tetrapeptides \
-    --tetra_seq IPGD \
     --gen_mode om_interpolate \
     --data_folder /data/sanjeevr/4AA_sim \
     --num_samples_eval 16 \
     --batch_size_gen 16 \
     --latent_time 0 \
-    --initial_guess_level 250 \
+    --initial_guess_level 0 \
     --subsample_points_percent 1.0 \
     --subsample_dimensions_percent 1.0 \
     --no_encode_and_decode \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
-    --append_exp_name test2 \
+    --append_exp_name test \
     --path_length 25 \
     --om_d 0.1 \
     --steps 250

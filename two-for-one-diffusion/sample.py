@@ -7,6 +7,7 @@ import pickle
 from os.path import join
 from pathlib import Path
 import numpy as np
+import pandas as pd
 import torch
 from models import get_model, CommittorNN
 from models.ddpm import GaussianDiffusion
@@ -72,6 +73,14 @@ parser.add_argument(
     help="root directory where models and args are stored",
     required=True,
 )
+
+parser.add_argument(
+    "--split",
+    type=str,
+    default="./mdgen/splits/4AA_test_small.csv",
+    help="CSV file containing the split of the dataset for tetrapeptides",
+)
+
 parser.add_argument(
     "--tetra_seq",
     type=str,
@@ -391,16 +400,22 @@ def main(samp_args):
 
     model.load_state_dict(data_dict["ema"])
 
-    generate_samples(
-        model,
-        trainset,
-        samp_args.noise_level,
-        args,
-        device,
-        eval_folder,
-        testset,
-        samp_args.tetra_seq,
+    names = (
+        [samp_args.tetra_seq]
+        if samp_args.split is None
+        else pd.read_csv(samp_args.split, index_col="name").index
     )
+    for name in names:
+        generate_samples(
+            model,
+            trainset,
+            samp_args.noise_level,
+            args,
+            device,
+            eval_folder,
+            testset,
+            name,
+        )
 
     # writer.flush()
     # writer.close()
