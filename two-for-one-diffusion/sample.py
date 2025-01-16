@@ -20,7 +20,7 @@ from datasets.dataset_utils_empty import (
     to_angstrom,
 )
 from evaluate.evaluate_fastfolders import evaluate_fastfolders, CLUSTER_ENDPOINTS
-from evaluate.evaluate_tetrapeptides import evaluate_tetrapeptides
+from evaluate.evaluate_tetrapeptides import evaluate_tetrapeptide
 from evaluate.evaluators import (
     sample_from_model,
     sample_interpolations_from_model,
@@ -755,26 +755,28 @@ def generate_samples(
         mol = sampled_mol.reshape(sampled_mol.shape[0], 4, 3, 3)
         new_mol = torch.zeros(mol.shape[0], 4, 14, 3)
         new_mol[:, :, 0:3, :] = mol
-        atom14_to_pdb(
-            new_mol.cpu().numpy(), np.array([restype_order[c] for c in name]), path
-        )
-
-        traj = mdtraj.load(path)
-        traj.superpose(traj)
-        traj.save(os.path.join(eval_folder, f"{name}_0.xtc"))
-        traj[0].save(os.path.join(eval_folder, f"{name}_0.pdb"))
         metadata = []
+        # save pdb files of each sample separately
+        for i, batch in enumerate(new_mol.chunk(samp_args.num_samples_eval)):
+            atom14_to_pdb(
+                batch.cpu().numpy(), np.array([restype_order[c] for c in name]), path
+            )
 
-        metadata.append(
-            {
-                "name": name,
-                "start_idx": [a.item() for a in list(np.array(chosen_start_idxs))],
-                "end_idx": [a.item() for a in list(np.array(chosen_start_idxs))],
-                "start_state": start_state.item(),
-                "end_state": end_state.item(),
-                "path": path,
-            }
-        )
+            traj = mdtraj.load(path)
+            traj.superpose(traj)
+            traj.save(os.path.join(eval_folder, f"{name}_{i}.xtc"))
+            traj[0].save(os.path.join(eval_folder, f"{name}_{i}.pdb"))
+
+            metadata.append(
+                {
+                    "name": name,
+                    "start_idx": chosen_start_idxs[i].item(),
+                    "end_idx": chosen_end_idxs[i].item(),
+                    "start_state": start_state.item(),
+                    "end_state": end_state.item(),
+                    "path": path,
+                }
+            )
         json.dump(metadata, open(f"{eval_folder}/{name}_metadata.json", "w"))
 
     else:
@@ -794,22 +796,17 @@ def generate_samples(
         and trainset.atom_selection == "backbone",
     )
 
-    import pdb
-
-    pdb.set_trace()
     # Perform final evaluations (producing plots, GIFs, etc.)
     if "tetrapeptide" in protein_name:
-        evaluate_tetrapeptides(
-            samp_args.gen_mode,
-            samp_args.original_append_exp_name,
-            checkpoint_folder="./saved_models",
-            reference_folder="./evaluate/saved_references",
-            pdb_folder="/data/sanjeevr/4AA_data",
-            model=model.ema_model,
-            num_paths=samp_args.num_samples_eval,
-            endpoints=clusters if "interpolate" in samp_args.gen_mode else None,
-            log=not samp_args.disable_logging,
-            gif=True,
+        evaluate_tetrapeptide(
+            name,
+            args.data_folder,
+            eval_folder,
+            eval_folder,
+            args.data_folder,
+            sidechains=False,
+            save=True,
+            plot=True,
         )
 
     else:

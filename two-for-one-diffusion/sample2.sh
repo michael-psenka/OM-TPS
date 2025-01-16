@@ -3,7 +3,7 @@ python sample.py \
     --tetra_seq CMYH \
     --gen_mode interpolate \
     --data_folder /data/sanjeevr/4AA_sim \
-    --num_samples_eval 8 \
+    --num_samples_eval 16 \
     --batch_size_gen 8 \
     --latent_time 20 \
     --initial_guess_level 8 \
