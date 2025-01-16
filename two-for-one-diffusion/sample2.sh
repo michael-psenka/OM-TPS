@@ -4,7 +4,7 @@ python sample.py \
     --gen_mode om_interpolate \
     --data_folder /data/sanjeevr/4AA_sim \
     --num_samples_eval 16 \
-    --batch_size_gen 8 \
+    --batch_size_gen 16 \
     --latent_time 0 \
     --initial_guess_level 250 \
     --subsample_points_percent 1.0 \
@@ -13,7 +13,7 @@ python sample.py \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
-    --append_exp_name test \
+    --append_exp_name test2 \
     --path_length 25 \
     --om_d 0.1 \
     --steps 250

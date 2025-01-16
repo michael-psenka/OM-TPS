@@ -1,4 +1,5 @@
 import os
+import shutil
 import wandb
 import json
 import argparse
@@ -311,21 +312,37 @@ def main(samp_args):
         else f"{basic_append}_{samp_args.append_exp_name}"
     )
 
-    eval_folder = Path(
-        join(samp_args.model_path, "main_eval_output" + samp_args.append_exp_name)
-    )
+    if "tetrapeptide" in samp_args.model_path:
+        eval_folder = Path(
+            join(
+                samp_args.model_path,
+                "main_eval_output" + samp_args.append_exp_name,
+                samp_args.tetra_seq,
+            )
+        )
+
+    else:
+        eval_folder = Path(
+            join(samp_args.model_path, "main_eval_output" + samp_args.append_exp_name)
+        )
 
     if not samp_args.disable_logging:
         # validate_git_status()
         wandb.login()
         wandb.init(
-            project="fastfolders",
+            project=(
+                "fastfolders"
+                if "tetrapeptide" not in samp_args.model_path
+                else "tetrapeptide"
+            ),
             name=samp_args.model_path.split("/")[-1] + samp_args.append_exp_name,
             config=samp_args,
         )
 
     args.data_folder = samp_args.data_folder
-    eval_folder.mkdir(exist_ok=True, parents=False)
+    args.model_path = samp_args.model_path
+    eval_folder.mkdir(exist_ok=True, parents=True)
+
     # writer = SummaryWriter(str(eval_folder))
 
     # Load dataset from args
@@ -394,11 +411,13 @@ def generate_samples(
     model, trainset, noise_level, args, device, eval_folder, testset, name=None
 ):
     # Generate samples from diffusion model
-    iid_sample_path = Path(
-        os.path.join(os.path.dirname(eval_folder), "main_eval_output_iid")
-    )
-
-    protein_name = iid_sample_path.parts[-2]
+    if name is None:
+        iid_sample_path = Path(
+            os.path.join(os.path.dirname(eval_folder), "main_eval_output_iid")
+        )
+        protein_name = iid_sample_path.parts[-2]
+    else:
+        protein_name = "tetrapeptide"
 
     dl = torch.utils.data.DataLoader(
         testset,
@@ -431,6 +450,14 @@ def generate_samples(
     elif "interpolate" in samp_args.gen_mode:
 
         if "tetrapeptide" in protein_name:
+            for root, dirs, files in os.walk(args.model_path):
+                for file in files:
+                    if file.endswith(f"{name}_metadata.pkl") and root != str(
+                        eval_folder
+                    ):
+                        # copy the metadata file to the eval_folder
+                        shutil.copy(f"{root}/{name}_metadata.pkl", eval_folder)
+                        break
 
             if os.path.exists(
                 f"{eval_folder}/{name}_metadata.pkl"
