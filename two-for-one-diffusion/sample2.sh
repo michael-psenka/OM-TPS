@@ -1,11 +1,12 @@
 python sample.py \
     --model_path saved_models/tetrapeptides \
     --gen_mode om_interpolate \
+    --tetra_seq AVGR \
     --data_folder /data/sanjeevr/4AA_sim \
-    --num_samples_eval 16 \
+    --num_samples_eval  \
     --batch_size_gen 16 \
     --latent_time 0 \
-    --initial_guess_level 0 \
+    --initial_guess_level 100 \
     --subsample_points_percent 1.0 \
     --subsample_dimensions_percent 1.0 \
     --no_encode_and_decode \
@@ -14,8 +15,10 @@ python sample.py \
     --lr 2e-1 \
     --append_exp_name test \
     --path_length 25 \
+    --om_dt 1 \
     --om_d 0.1 \
-    --steps 250
+    --steps 250 \
+    # --split mdgen/splits/4AA_test_small.csv \
 
 
 # python sample.py \

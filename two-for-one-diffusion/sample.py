@@ -77,7 +77,7 @@ parser.add_argument(
 parser.add_argument(
     "--split",
     type=str,
-    default="./mdgen/splits/4AA_test_small.csv",
+    default="",
     help="CSV file containing the split of the dataset for tetrapeptides",
 )
 
@@ -402,7 +402,7 @@ def main(samp_args):
 
     names = (
         [samp_args.tetra_seq]
-        if samp_args.split is None
+        if samp_args.split == ""
         else pd.read_csv(samp_args.split, index_col="name").index
     )
     for name in names:
