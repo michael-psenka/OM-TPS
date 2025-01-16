@@ -326,7 +326,7 @@ def main(samp_args):
             join(
                 samp_args.model_path,
                 "main_eval_output" + samp_args.append_exp_name,
-                samp_args.tetra_seq,
+                samp_args.tetra_seq, # TODO: fix this - if we specify none then it doesn't work
             )
         )
 
@@ -406,16 +406,20 @@ def main(samp_args):
         else pd.read_csv(samp_args.split, index_col="name").index
     )
     for name in names:
-        generate_samples(
-            model,
-            trainset,
-            samp_args.noise_level,
-            args,
-            device,
-            eval_folder,
-            testset,
-            name,
-        )
+        try:
+            generate_samples(
+                model,
+                trainset,
+                samp_args.noise_level,
+                args,
+                device,
+                eval_folder,
+                testset,
+                name,
+            )
+        except:
+            print(f"Failed to generate samples for {name}")
+            continue
 
     # writer.flush()
     # writer.close()
