@@ -432,7 +432,9 @@ def generate_samples(
 
         if "tetrapeptide" in protein_name:
 
-            if os.path.exists(f"{eval_folder}/{name}_metadata.pkl"):
+            if os.path.exists(
+                f"{eval_folder}/{name}_metadata.pkl"
+            ):  # TODO: fix this so it looks at the top level tetrapeptide folder
                 # load the existing data
                 pkl_metadata = pickle.load(
                     open(f"{eval_folder}/{name}_metadata.pkl", "rb")

@@ -240,9 +240,9 @@ def evaluate_tetrapeptide(
     if plot:
         os.makedirs(out_dir, exist_ok=True)
         fig.savefig(f"{out_dir}/{name}.pdf")
-
-    with open(f"{out_dir}/{name}.pkl", "wb") as f:
-        f.write(pickle.dumps(out))
+    if save:
+        with open(f"{out_dir}/{name}.pkl", "wb") as f:
+            f.write(pickle.dumps(out))
 
     return name, out
 

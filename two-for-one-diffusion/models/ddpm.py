@@ -176,12 +176,13 @@ class GaussianDiffusion(nn.Module):
 
         if not isinstance(t, torch.Tensor):
             t = torch.tensor([t], dtype=torch.long).repeat(x.shape[0]).to(self.device)
-
+        if z is not None and len(z.shape) == 1:
+            z = z.unsqueeze(0).repeat(x.shape[0], 1)
         noise_pred = self.model(
             x,
             self.h,
             1.0 * t / self.num_timesteps,
-            z,
+            z=z,
             alphas=self.sqrt_alphas_cumprod[t].pow(2),
         )
         # force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * noise_pred
@@ -662,14 +663,18 @@ class GaussianDiffusion(nn.Module):
                     force_func = get_force_from_mlff
                     forces = [None] * len(noised_xs)
                 else:
-                    force_func = lambda x, z: self.force_func(
+                    force_func = lambda x: self.force_func(
                         center_zero(x),
                         diff_time,
-                        z=z.unsqueeze(0).repeat(num_paths * path_length, 1),
+                        z=z,
                     )
 
                     # Subsample points
                     num_points = path_length
+                    # TODO: fix this - subsampling yields shape errors for tetrapeptide interpolations
+                    subsample_points_percent = None
+                    subsample_dimensions_percent = None
+
                     if subsample_points_percent is not None:
                         num_points = int(subsample_points_percent * path_length)
 
