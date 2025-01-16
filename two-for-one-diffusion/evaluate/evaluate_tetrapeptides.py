@@ -78,6 +78,7 @@ def evaluate_tetrapeptide(
         c="black",
     )
     axs[0, 0].set_title("Reference MD in TICA space with start and end state")
+
     pyemma.plots.plot_markov_model(
         cmsm, minflux=4e-4, arrow_label_format="%.3f", ax=axs[1, 0]
     )
@@ -197,6 +198,7 @@ def evaluate_tetrapeptide(
 
     gen_stack_all = np.stack(gen_traj_list, axis=0)
 
+    # Plot 16 example generated transition paths superimposed on the TICA free energy landscape
     for i in range(4):
         for j in range(4):
             idx = i * 4 + j

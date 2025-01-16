@@ -1,11 +1,11 @@
 python sample.py \
     --model_path saved_models/tetrapeptides \
-    --tetra_seq CMYH \
+    --tetra_seq AVGR \
     --gen_mode interpolate \
     --data_folder /data/sanjeevr/4AA_sim \
     --num_samples_eval 16 \
     --batch_size_gen 8 \
-    --latent_time 20 \
+    --latent_time 0 \
     --initial_guess_level 8 \
     --subsample_points_percent 1.0 \
     --subsample_dimensions_percent 1.0 \
@@ -14,7 +14,7 @@ python sample.py \
     --optimizer adam \
     --lr 2e-1 \
     --append_exp_name test \
-    --path_length 200 \
+    --path_length 25 \
     --om_d 0.1 \
     --steps 2000
 

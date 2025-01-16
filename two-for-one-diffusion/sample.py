@@ -636,7 +636,7 @@ def generate_samples(
         output = sample_interpolations_from_model(
             interpolator,
             endpoint_1_samples.to(device),
-            endpoint_1_samples.to(device),
+            endpoint_2_samples.to(device),
             batch_size=samp_args.batch_size_gen // parallel_batches,
             verbose=True,
             z=z.to(device) if "tetrapeptide" in protein_name else None,
