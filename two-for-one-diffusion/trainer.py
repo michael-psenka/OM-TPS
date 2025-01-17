@@ -304,12 +304,13 @@ class Trainer(object):
                     self.results_folder.mkdir(exist_ok=True, parents=True)
                     self.save(milestone, save_best=bool_new_best)
 
+                    z = next(self.dl_val)[1].to(self.device) if "tetrapeptide" in self.mol_name else None
                     # Evaluate i.i.d.
                     sampled_mol = sample_from_model(
                         self.sampler_ema_dp,
                         self.num_saved_samples // self.parallel_batches,
                         self.batch_size // self.parallel_batches,
-                        dataloader=self.dl_val,
+                        z=z,
                     )
 
                     # Save as gsd
