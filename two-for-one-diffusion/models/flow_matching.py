@@ -682,10 +682,13 @@ class FlowMatching(nn.Module):
                     force_func = get_force_from_mlff
                     forces = [None] * len(noised_xs)
                 else:
-                    force_func = lambda x: self.force_func(center_zero(x), diff_time)
+                    force_func = lambda x: self.force_func(center_zero(x), diff_time, z)
 
                     # Subsample points
                     num_points = path_length
+                    # TODO: fix this - subsampling yields shape errors for tetrapeptide interpolations
+                    subsample_points_percent = None
+                    subsample_dimensions_percent = None
                     if subsample_points_percent is not None:
                         num_points = int(subsample_points_percent * path_length)
 

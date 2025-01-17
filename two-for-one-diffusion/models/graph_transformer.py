@@ -113,6 +113,8 @@ class GraphTransformer(nn.Module):
 
             if z is not None:
                 z = z.to(self.device)
+                if len(z.shape) == 1:
+                    z = z.unsqueeze(0).repeat(bs, 1)
                 z = self.bead_embedding(z)
                 h = torch.cat((h, z), dim=2)
 

@@ -1,6 +1,6 @@
 
 
-## Current best tetrapeptide Run ##
+## Current best tetrapeptide Run with Diffusion ##
 # python sample.py \
 #     --model_path saved_models/tetrapeptides \
 #     --gen_mode om_interpolate \
