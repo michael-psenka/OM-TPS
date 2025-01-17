@@ -531,7 +531,11 @@ class GaussianDiffusion(nn.Module):
             noised_xs = self.p_sample_loop(
                 noised_xs.reshape(-1, n_atoms, 3),
                 initial_guess_level,
-                z=z.unsqueeze(0).repeat(path_length * num_paths, 1),
+                z=(
+                    z.unsqueeze(0).repeat(path_length * num_paths, 1)
+                    if z is not None
+                    else None
+                ),
                 temperature=temperature,
             )
             noised_xs = noised_xs.reshape(path_length, num_paths, n_atoms, 3)
@@ -870,7 +874,11 @@ class GaussianDiffusion(nn.Module):
                 denoised_path = self.p_sample_loop(
                     path.reshape(-1, n_atoms, 3),
                     latent_time,
-                    z=z.unsqueeze(0).repeat(num_paths * path_length, 1),
+                    z=(
+                        z.unsqueeze(0).repeat(num_paths * path_length, 1)
+                        if z is not None
+                        else None
+                    ),
                     temperature=temperature,
                 )
             else:

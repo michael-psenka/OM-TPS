@@ -318,6 +318,7 @@ class FlowMatching(nn.Module):
         self,
         x1,
         x2,
+        z,
         path_length,
         latent_time,
         interpolation_fn=torch.lerp,
@@ -376,7 +377,7 @@ class FlowMatching(nn.Module):
 
         # decode
         xs = self.p_sample_loop(
-            noised_xs.reshape(-1, n_atoms, 3), latent_time, temperature=temperature
+            noised_xs.reshape(-1, n_atoms, 3), latent_time, z=z, temperature=temperature
         )
 
         xs = xs.reshape(num_paths, path_length, n_atoms, 3)
@@ -393,6 +394,7 @@ class FlowMatching(nn.Module):
         self,
         x1,
         x2,
+        z,
         path_length,
         latent_time,
         encode_and_decode=True,
@@ -527,6 +529,7 @@ class FlowMatching(nn.Module):
             noised_xs = self.p_sample_loop(
                 noised_xs.reshape(-1, n_atoms, 3),
                 initial_guess_level,
+                z=z,
                 temperature=temperature,
             )
             noised_xs = noised_xs.reshape(path_length, num_paths, n_atoms, 3)
@@ -876,7 +879,10 @@ class FlowMatching(nn.Module):
         for path in all_noised_xs[::50]:
             if encode_and_decode:
                 denoised_path = self.p_sample_loop(
-                    path.reshape(-1, n_atoms, 3), latent_time, temperature=temperature
+                    path.reshape(-1, n_atoms, 3),
+                    latent_time,
+                    z=z,
+                    temperature=temperature,
                 )
             else:
                 denoised_path = path
