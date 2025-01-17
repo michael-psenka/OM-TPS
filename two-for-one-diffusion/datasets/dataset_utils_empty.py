@@ -1,5 +1,7 @@
 import torch
 import numpy as np
+import os
+from pathlib import Path
 from itertools import chain
 from tqdm import tqdm
 import math
@@ -16,6 +18,8 @@ from torch_geometric.data.data import Data
 from ase.data import atomic_numbers
 
 from utils import DummyClass
+
+from evaluate.msm_utils import discretize_trajectory
 
 # MDGen imports
 from mdgen.mdgen.rigid_utils import Rigid
@@ -63,6 +67,14 @@ ATLAS_PDB_ID_TO_NAME = {
     "3wp8_A": "adhesin",
 }
 
+PDB_ID_TO_NAME = {
+    "cln025": "chignolin",
+    "2jof": "trp_cage",
+    "1fme": "bba",
+    "2f4k": "villin",
+    "1mi0": "protein_g",
+}
+
 
 all_molecules = ["alanine_dipeptide"] + [mol.name.lower() for mol in Molecules]
 
@@ -87,6 +99,9 @@ def get_dataset(
     traindata_subset=None,
     shuffle_before_splitting=False,
     pdb_folder=None,
+    tic_evaluator=None,
+    remove_clusters=[],  # list of clusters to remove,
+    remove_freq=0.0,  # frequency of removing clusters from data
 ):
     """
     Get dataset for a specific molecule.
@@ -193,6 +208,9 @@ def get_dataset(
                 return_bond_graph=False,
                 transform=to_angstrom,
                 align=False,
+                tic_evaluator=tic_evaluator,
+                remove_clusters=remove_clusters,  # list of clusters to remove,
+                remove_freq=remove_freq,  # frequency of removing clusters from data
             )
 
         dataset = CGDataset(
@@ -212,7 +230,6 @@ def get_dataset(
             train_idx = idx_range[:num_train]
             val_idx = idx_range[num_train : num_train + num_val]
             test_idx = idx_range[num_train + num_val :]
-            # import pdb; pdb.set_trace()
             trainset = dataset.get_subset(train_idx, topology, train=True)
             valset = dataset.get_subset(val_idx, topology, train=False)
             testset = dataset.get_subset(test_idx, topology, train=False)
@@ -467,10 +484,14 @@ class DEShawDataset(MDTrajectory):
         transform: Optional[Callable[[Any], Any]] = None,
         return_bond_graph: bool = False,
         align: bool = False,
+        tic_evaluator=None,
+        remove_clusters=[],  # list of clusters to remove,
+        remove_freq=0.0,  # frequency of removing clusters from data
     ):
         self.data_root = data_root
         self.simulation_id = simulation_id
         self.atom_selection = atom_selection
+        self.tic_evaluator = tic_evaluator
 
         full_simulation_id = "-".join(
             [molecule.value, str(simulation_id), atom_selection.value]
@@ -507,6 +528,40 @@ class DEShawDataset(MDTrajectory):
             timestep=time_data["time"].values[0],
             align=align,
         )
+
+        if remove_clusters:
+            # remove clusters from the data
+
+            cluster_centers_path = Path(
+                os.path.join(
+                    "evaluate",
+                    "saved_references",
+                    f"saved_cluster_centers_{PDB_ID_TO_NAME[molecule.value.lower()].upper()}.npy",
+                )
+            )
+
+            cluster_coords = np.load(cluster_centers_path)
+            cluster_assignments, _ = discretize_trajectory(
+                10 * torch.tensor(self.traj.xyz), self.tic_evaluator, cluster_coords
+            )
+            remove_idxs = []
+            old_len = len(self.traj.xyz)
+            # remove a random fraction of the clustr according to remove_freq
+            if len(remove_clusters) != len(remove_freq):
+                remove_freq = [remove_freq[0]] * len(remove_clusters)
+            for cluster, freq in zip(remove_clusters, remove_freq):
+                cluster_idx = np.where(cluster_assignments == cluster)[0]
+                remove_idxs.append(
+                    np.random.choice(
+                        cluster_idx, int(len(cluster_idx) * freq), replace=False
+                    )
+                )
+            remove_idxs = np.concatenate(remove_idxs)
+            self.traj.xyz = np.delete(self.traj.xyz, remove_idxs, axis=0)
+            new_len = len(self.traj.xyz)
+            print(
+                f"Removed {old_len - new_len} out of {old_len} frames from the dataset"
+            )
 
 
 class AtlasDataset(torch.utils.data.Dataset):

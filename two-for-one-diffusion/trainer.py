@@ -176,6 +176,15 @@ class Trainer(object):
                 eval_folder=str(self.results_folder),
                 data_folder=args.data_folder,
             )
+
+            # Plot the TIC of training data as a reference
+            self.results_folder.mkdir(exist_ok=True, parents=True)
+            self.evaluator_val.tic.eval(
+                self.train_data.tensors[0],
+                title=f"Reference_TIC_training_data",
+                plot_tic=True,
+            )
+
         self.eval_langevin = eval_langevin
         self.best_val_loss = inf
         if start_from_last_saved:
@@ -304,7 +313,11 @@ class Trainer(object):
                     self.results_folder.mkdir(exist_ok=True, parents=True)
                     self.save(milestone, save_best=bool_new_best)
 
-                    z = next(self.dl_val)[1].to(self.device) if "tetrapeptide" in self.mol_name else None
+                    z = (
+                        next(self.dl_val)[1].to(self.device)
+                        if "tetrapeptide" in self.mol_name
+                        else None
+                    )
                     # Evaluate i.i.d.
                     sampled_mol = sample_from_model(
                         self.sampler_ema_dp,

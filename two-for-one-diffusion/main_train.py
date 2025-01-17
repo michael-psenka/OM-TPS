@@ -12,6 +12,7 @@ from models.flow_matching import FlowMatching
 from trainer import Trainer
 from models import get_model
 from datasets.dataset_utils_empty import get_dataset, Molecules
+from evaluate.evaluators import TicEvaluator
 
 
 all_molecules = ["alanine_dipeptide"] + [mol.name.lower() for mol in Molecules]
@@ -60,6 +61,22 @@ parser.add_argument(
     default=None,
     help="Take a randomly sampled subset from the training data to train on. In flow-matching paper: [750000,500000,200000,100000,50000,20000,10000]. Only for alanine_dipeptide",
 )
+
+parser.add_argument(
+    "--remove_clusters",
+    type=int,
+    nargs="+",
+    help="A list of integers (e.g., 1 2 3) corresponding to TIC clusters to remove from the dataset - only for fast folder proteins.",
+)
+
+parser.add_argument(
+    "--cluster_remove_freq",
+    type=float,
+    nargs="+",
+    help="A list of frequencies between 0 and 1 corresponding to TIC cluster removal frequencies - only for fast folder proteins.",
+)
+
+
 parser.add_argument(
     "--mean0",
     type=eval,
@@ -303,6 +320,19 @@ else:
 print(args)
 
 if __name__ == "__main__":
+
+    tic_evaluator = None
+    if args.mol.lower() in all_molecules:
+        tic_evaluator = TicEvaluator(
+            val_data=None,
+            mol_name=args.mol,
+            eval_folder=f"./saved_models/{args.mol}",
+            data_folder="./datasets",
+            folded_pdb_folder="./datasets/folded_pdbs",
+            bins=101,
+            evalset="testset",
+        )
+
     trainset, valset, testset = get_dataset(
         args.mol,
         args.mean0,
@@ -310,6 +340,9 @@ if __name__ == "__main__":
         args.fold,
         traindata_subset=args.traindata_subset,
         shuffle_before_splitting=args.shuffle_data_before_splitting,
+        tic_evaluator=tic_evaluator,
+        remove_clusters=args.remove_clusters,  # list of clusters to remove,
+        remove_freq=args.cluster_remove_freq,  # frequency of removing clusters from data
     )
 
     norm_factor = trainset.std if args.scale_data else 1.0
