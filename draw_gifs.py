@@ -7,7 +7,7 @@ from simpleMB import SimpleMB
 import matplotlib.pyplot as plt
 
 
-class GifDrawer():
+class GifDrawer:
 
     def __init__(self, write_every=100):
 
@@ -25,12 +25,19 @@ class GifDrawer():
         x, y = torch.meshgrid(self.x_values, self.y_values, indexing="xy")
         self.z = self.potential.U_split(x.to(device), y.to(device)).cpu()
 
-
-    def draw_image(self, draw_points: np.array, grads: np.array, name, color, canvas_tuple, quiver_draw=False):
-        # print(f"Total action for the step {i} is {(action+reverse_action).detach().numpy()}")    
+    def draw_image(
+        self,
+        draw_points: np.array,
+        grads: np.array,
+        name,
+        color,
+        canvas_tuple,
+        quiver_draw=False,
+    ):
+        # print(f"Total action for the step {i} is {(action+reverse_action).detach().numpy()}")
 
         fig, ax = canvas_tuple
-        
+
         ax.set(xlabel="x-axis", ylabel="y-axis", title="Contour Plot")
 
         scatter_plot = ax.scatter(
@@ -57,8 +64,8 @@ class GifDrawer():
 
         images = []
 
-        names = list(all_data.keys()) # len M
-        data = [d[::self.write_every] for d in all_data.values()] # len M x N
+        names = list(all_data.keys())  # len M
+        data = [d[:: self.write_every] for d in all_data.values()]  # len M x N
 
         # N is the number of datapoints in a series
         N = len(data[0])
@@ -93,9 +100,7 @@ class GifDrawer():
 
             image = np.frombuffer(fig.canvas.buffer_rgba(), dtype="uint8")
             image = image.reshape(fig.canvas.get_width_height()[::-1] + (4,))[:, :, :3]
-            image = image.reshape(
-                fig.canvas.get_width_height()[::-1] + (3,)
-            )
+            image = image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
             images.append(image)
             plt.close(fig)
 
@@ -152,7 +157,5 @@ class GifDrawer():
 
         fig.canvas.draw()
         image = np.frombuffer(fig.canvas.tostring_rgb(), dtype="uint8")
-        image = image.reshape(
-            fig.canvas.get_width_height()[::-1] + (3,)
-        )
+        image = image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
         return image

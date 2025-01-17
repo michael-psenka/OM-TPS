@@ -35,6 +35,7 @@ class MBDataset(Dataset):
 
     def __init__(
         self,
+        calculator: MullerBrownPotential,
         seed: int = 0,
         temperature: float = 450.0,
         n_sims: int = 100,
@@ -49,7 +50,7 @@ class MBDataset(Dataset):
         preload_sim_dir: Optional[str] = None,
         save_path: Optional[str] = None,
         use_langevin: bool = True,
-        transition_path_guess: np.array = None,
+        initial_positions: np.array = None,
     ):
 
         np.random.seed(seed)
@@ -67,9 +68,9 @@ class MBDataset(Dataset):
         self.preload_sim_dir = preload_sim_dir
         self.save_path = save_path
         self.use_langevin = use_langevin
-        self.transition_path_guess = transition_path_guess
+        self.initial_positions = initial_positions
 
-        self.calculator = MullerBrownPotential(device=device)
+        self.calculator = calculator
 
         self.data = {}
 
@@ -123,10 +124,10 @@ class MBDataset(Dataset):
 
         # set initial positions
         for i in tqdm(range(self.n_sims)):
-            if self.transition_path_guess is not None:
-                # sample point from the transition path guess
-                idx = np.random.randint(0, len(self.transition_path_guess))
-                positions = self.transition_path_guess[idx].reshape(1, 2)
+            if self.initial_positions is not None:
+                # sample uniformly from the initial positions
+                idx = np.random.randint(0, len(self.initial_positions))
+                positions = self.initial_positions[idx].reshape(1, 2)
                 # positions += np.random.normal(0, 0.0001, positions.shape)
                 # add zero to third dim
                 positions = np.concatenate([positions, np.zeros((1, 1))], axis=1)
@@ -183,7 +184,7 @@ class MBDataset(Dataset):
         # pe = np.array([a.get_potential_energy() for a in traj])
         force = np.array([a.get_forces() for a in traj])
         # ke = np.array([a.get_kinetic_energy() for a in traj])
-        
+
         return {"pos": pos, "force": force}  # , "pe": pe, "force": force, "ke": ke}
 
     def load_simulations(self):
