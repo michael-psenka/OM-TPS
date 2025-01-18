@@ -868,8 +868,8 @@ class GaussianDiffusion(nn.Module):
                     )
 
         all_denoised_paths = []
-        # decode the optimized paths (keeping every 20 for future visualization)
-        for path in all_noised_xs[::20]:
+        # decode the optimized paths (keeping every 50 for future visualization)
+        for path in all_noised_xs[::50]:
             if encode_and_decode:
                 denoised_path = self.p_sample_loop(
                     path.reshape(-1, n_atoms, 3),

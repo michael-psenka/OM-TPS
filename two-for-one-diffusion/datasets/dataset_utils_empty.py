@@ -20,6 +20,7 @@ from ase.data import atomic_numbers
 from utils import DummyClass
 
 from evaluate.msm_utils import discretize_trajectory
+from evaluate.committor_utils import get_gt_committor_probs
 
 # MDGen imports
 from mdgen.mdgen.rigid_utils import Rigid
@@ -90,6 +91,16 @@ norm_stds = {
     "alanine_fold4": 0.9454087018966675,
 }
 
+# default cluster endpoints for testing interpolation
+# (obtained by visual inspection of what are hard transition paths to capture)
+CLUSTER_ENDPOINTS = {
+    "chignolin": [11, 13],
+    "trp_cage": [2, 13],
+    "bba": [9, 17],
+    "villin": [0, 17],
+    "protein_g": [11, 14],
+}
+
 
 def get_dataset(
     mol,
@@ -100,8 +111,8 @@ def get_dataset(
     shuffle_before_splitting=False,
     pdb_folder=None,
     tic_evaluator=None,
-    remove_clusters=[],  # list of clusters to remove,
-    remove_freq=0.0,  # frequency of removing clusters from data
+    committor_remove_range=[],  # range of committor values to remove
+    remove_freq=0,  # frequency of removing clusters from data
 ):
     """
     Get dataset for a specific molecule.
@@ -209,7 +220,7 @@ def get_dataset(
                 transform=to_angstrom,
                 align=False,
                 tic_evaluator=tic_evaluator,
-                remove_clusters=remove_clusters,  # list of clusters to remove,
+                committor_remove_range=committor_remove_range,  # range of committor values to remove
                 remove_freq=remove_freq,  # frequency of removing clusters from data
             )
 
@@ -485,8 +496,8 @@ class DEShawDataset(MDTrajectory):
         return_bond_graph: bool = False,
         align: bool = False,
         tic_evaluator=None,
-        remove_clusters=[],  # list of clusters to remove,
-        remove_freq=0.0,  # frequency of removing clusters from data
+        committor_remove_range=[],  # range of committor values to remove
+        remove_freq=0,  # frequency of removing from data
     ):
         self.data_root = data_root
         self.simulation_id = simulation_id
@@ -529,7 +540,7 @@ class DEShawDataset(MDTrajectory):
             align=align,
         )
 
-        if remove_clusters:
+        if committor_remove_range:
             # remove clusters from the data
 
             cluster_centers_path = Path(
@@ -541,26 +552,35 @@ class DEShawDataset(MDTrajectory):
             )
 
             cluster_coords = np.load(cluster_centers_path)
-            cluster_assignments, _ = discretize_trajectory(
+            cluster_assignments, transformed_samples = discretize_trajectory(
                 10 * torch.tensor(self.traj.xyz), self.tic_evaluator, cluster_coords
             )
-            remove_idxs = []
+            protein_name = PDB_ID_TO_NAME[molecule.value.lower()]
+            start_cluster, end_cluster = CLUSTER_ENDPOINTS[protein_name]
+            committor_probs = get_gt_committor_probs(
+                protein_name,
+                transformed_samples,
+                start_cluster,
+                end_cluster,
+                cluster_assignments,
+                self.tic_evaluator,
+            )
+
             old_len = len(self.traj.xyz)
-            # remove a random fraction of the clustr according to remove_freq
-            if len(remove_clusters) != len(remove_freq):
-                remove_freq = [remove_freq[0]] * len(remove_clusters)
-            for cluster, freq in zip(remove_clusters, remove_freq):
-                cluster_idx = np.where(cluster_assignments == cluster)[0]
-                remove_idxs.append(
-                    np.random.choice(
-                        cluster_idx, int(len(cluster_idx) * freq), replace=False
-                    )
+
+            remove_idxs = np.where(
+                np.logical_and(
+                    committor_probs > committor_remove_range[0],
+                    committor_probs < committor_remove_range[1],
                 )
-            remove_idxs = np.concatenate(remove_idxs)
+            )[0]
+            remove_idxs = np.random.choice(
+                remove_idxs, size=int(len(remove_idxs) * remove_freq), replace=False
+            )
             self.traj.xyz = np.delete(self.traj.xyz, remove_idxs, axis=0)
             new_len = len(self.traj.xyz)
             print(
-                f"Removed {old_len - new_len} out of {old_len} frames from the dataset"
+                f"Removed {old_len - new_len} ({(old_len - new_len) / old_len * 100} %) out of {old_len} frames from the dataset"
             )
 
 

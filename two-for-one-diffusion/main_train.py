@@ -63,17 +63,16 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--remove_clusters",
-    type=int,
+    "--committor_remove_range",
+    type=float,
     nargs="+",
-    help="A list of integers (e.g., 1 2 3) corresponding to TIC clusters to remove from the dataset - only for fast folder proteins.",
+    help="Two floats (e.g., 0.4 0.6) giving the bounds of the committor function to remove from the dataset - only for fast folder proteins.",
 )
 
 parser.add_argument(
-    "--cluster_remove_freq",
+    "--remove_freq",
     type=float,
-    nargs="+",
-    help="A list of frequencies between 0 and 1 corresponding to TIC cluster removal frequencies - only for fast folder proteins.",
+    help="Float corresponding to the frequency of removing transition region from dataset - only for fast folder proteins.",
 )
 
 
@@ -341,8 +340,8 @@ if __name__ == "__main__":
         traindata_subset=args.traindata_subset,
         shuffle_before_splitting=args.shuffle_data_before_splitting,
         tic_evaluator=tic_evaluator,
-        remove_clusters=args.remove_clusters,  # list of clusters to remove,
-        remove_freq=args.cluster_remove_freq,  # frequency of removing clusters from data
+        committor_remove_range=args.committor_remove_range,  # range of committor values to remove
+        remove_freq=args.remove_freq,  # frequency of removing clusters from data
     )
 
     norm_factor = trainset.std if args.scale_data else 1.0

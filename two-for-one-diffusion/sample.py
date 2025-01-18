@@ -22,7 +22,8 @@ from datasets.dataset_utils_empty import (
     to_angstrom,
 )
 from evaluate.evaluate_fastfolders import evaluate_fastfolders, CLUSTER_ENDPOINTS
-from evaluate.evaluate_tetrapeptides import evaluate_tetrapeptide
+
+# from evaluate.evaluate_tetrapeptides import evaluate_tetrapeptide
 from evaluate.evaluators import (
     sample_from_model,
     sample_interpolations_from_model,
@@ -48,9 +49,10 @@ from torch.utils.tensorboard import SummaryWriter
 import time
 import matplotlib.pyplot as plt
 import contextlib
-import mdgen.mdgen.analysis
-from mdgen.mdgen.utils import get_tetrapeptide_sample, atom14_to_pdb
-from mdgen.mdgen.residue_constants import restype_order
+
+# import mdgen.mdgen.analysis
+# from mdgen.mdgen.utils import get_tetrapeptide_sample, atom14_to_pdb
+# from mdgen.mdgen.residue_constants import restype_order
 
 
 @contextlib.contextmanager
@@ -109,6 +111,11 @@ parser.add_argument(
     help="directory root where data is stored, if None (default) work with empty datasets and saved reference from saved_histograms",
 )
 
+parser.add_argument(
+    "--transition_data_removed",
+    action="store_true",
+    help="whether to use the model trained on data with transitions removed",
+)
 
 # i.i.d. generation arguments
 parser.add_argument(
@@ -294,10 +301,17 @@ def main(samp_args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Load args from training
+    if samp_args.flow_matching:
+        arg_name = "args-flow.pickle"
+    else:
+        if samp_args.transition_data_removed:
+            arg_name = "args-transition-data-removed.pickle"
+        else:
+            arg_name = "args.pickle"
     with open(
         join(
             samp_args.model_path,
-            "args-flow.pickle" if samp_args.flow_matching else "args.pickle",
+            arg_name,
         ),
         "rb",
     ) as f:
@@ -311,6 +325,10 @@ def main(samp_args):
     #     samp_args.temp_sim = samp_args.temp_sim
 
     basic_append = f"_{samp_args.gen_mode}"
+    transition_removed_append = (
+        "_transition_data_removed" if samp_args.transition_data_removed else ""
+    )
+    samp_args.append_exp_name += transition_removed_append
     flow_append = "_flowmatching" if samp_args.flow_matching else ""
     samp_args.append_exp_name += flow_append
     samp_args.original_append_exp_name = samp_args.append_exp_name
@@ -392,7 +410,15 @@ def main(samp_args):
             samp_args.model_path + f"/model-{samp_args.model_checkpoint}-flow.pt"
         )
     else:
-        model_path = samp_args.model_path + f"/model-{samp_args.model_checkpoint}.pt"
+        if samp_args.transition_data_removed:
+            model_path = (
+                samp_args.model_path
+                + f"/model-{samp_args.model_checkpoint}-transition-data-removed.pt"
+            )
+        else:
+            model_path = (
+                samp_args.model_path + f"/model-{samp_args.model_checkpoint}.pt"
+            )
     if torch.cuda.is_available():
         data_dict = torch.load(model_path)
     else:
