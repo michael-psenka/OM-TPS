@@ -352,6 +352,30 @@ def evaluate_fastfolders(
             bin_committor_probs[bin_idx] > 0.45, bin_committor_probs[bin_idx] < 0.55
         )
         transition_ensemble = transformed_samples[transition_ensemble_mask]
+        transition_ensemble_mols = center_zero(
+            sampled_mol[transition_ensemble_mask]
+        ).numpy()
+
+        # align the transition ensemble to the first frame
+        for i in range(1, transition_ensemble_mols.shape[0]):
+            transition_ensemble_mols[i] = kabsch_rotate(
+                transition_ensemble_mols[i], transition_ensemble_mols[0]
+            )
+
+        # save transition ensemble as a pdb
+        transition_ensemble_mols = md.Trajectory(
+            transition_ensemble_mols / 10, topology=topology
+        )
+        transition_ensemble_mols.save_pdb(
+            str(str(eval_folder) + f"/transition_ensemble.pdb")
+        )
+
+        # save transition ensemble TICA coordinates
+        np.save(
+            str(str(eval_folder) + f"/transition_ensemble_TICA.npy"),
+            transition_ensemble,
+        )
+
         transition_ensemble, _ = discretize_trajectory(
             transition_ensemble, tic_evaluator, kmeans_cluster_centers, transform=False
         )
