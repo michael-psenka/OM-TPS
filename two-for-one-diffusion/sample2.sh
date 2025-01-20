@@ -26,21 +26,21 @@
 python sample.py \
     --model_path saved_models/trp_cage \
     --gen_mode om_interpolate \
-    --num_samples_eval 2 \
+    --transition_data_removed \
+    --num_samples_eval 8 \
     --batch_size_gen 2 \
-    --latent_time 10 \
-    --initial_guess_level 7 \
+    --latent_time 15 \
+    --initial_guess_level 250 \
     --subsample_points_percent 1.0 \
     --subsample_dimensions_percent 1.0 \
     --no_encode_and_decode \
     --action truncated \
-    --optimizer sgd \
-    --lr 1e-3 \
-    --om_dt 0.05 \
-    --append_exp_name test \
+    --optimizer adam \
+    --lr 2e-1 \
+    --append_exp_name test_initial_latent_time=250 \
     --path_length 200 \
     --om_d 0.1 \
-    --steps 100
+    --steps 2000
 
 
 # python sample.py \
