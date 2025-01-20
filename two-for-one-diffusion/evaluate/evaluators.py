@@ -639,13 +639,21 @@ class TicEvaluator:
         # plot path endpoints used in interpolation
         if endpoints is not None:
             # reshape from [2, P, N, 3] to [2*P, N, 3]
-            endpoints = endpoints.reshape(-1, endpoints.shape[-2], endpoints.shape[-1])
+            if endpoints.shape[-1] == 3:
+                endpoints = endpoints.reshape(
+                    -1, endpoints.shape[-2], endpoints.shape[-1]
+                )
+            elif endpoints.shape[-1] == 2:
+                endpoints = endpoints.reshape(-1, 2)
             for i, point in enumerate(endpoints):
-                endpoint_transform = self.tica.transform(
-                    self.get_tic_features(
-                        torch.from_numpy(point[None, :, :]), self.folded
-                    )
-                )[0]
+                if point.shape[-1] == 3:  # in case the point is in xyz space
+                    endpoint_transform = self.tica.transform(
+                        self.get_tic_features(
+                            torch.from_numpy(point[None, :, :]), self.folded
+                        )
+                    )[0]
+                elif point.shape[-1] == 2:  # in case the point is already in tic space
+                    endpoint_transform = point
 
                 bin_x_endpoint = np.argmin(abs(self.bin_mids_x - endpoint_transform[0]))
                 bin_y_endpoint = np.argmin(abs(self.bin_mids_y - endpoint_transform[1]))
@@ -654,7 +662,7 @@ class TicEvaluator:
                     bin_y_endpoint,
                     marker="X",
                     c="blue" if i % 2 == 0 else "red",
-                    s=50,
+                    s=150,
                     linewidth=0,
                     zorder=3,
                 )
@@ -672,8 +680,8 @@ class TicEvaluator:
                     ax1.plot(
                         [start_x, end_x],
                         [start_y, end_y],
-                        color="blue",
-                        linewidth=1,
+                        color="orange",
+                        linewidth=2,
                         zorder=2,
                     )
 

@@ -442,7 +442,7 @@ def evaluate_fastfolders(
             if ("langevin" in gen_mode or "gt" in gen_mode) and not no_transition
             else None
         ),
-        ref_paths=kmeans_cluster_centers[ref_sampled_traj[:20]],
+        ref_paths=kmeans_cluster_centers[ref_sampled_traj[:8]],
         bin_committor_probs=bin_committor_probs,
         gif=gif,
         window_size=window_size,
@@ -606,7 +606,7 @@ def get_tic_free_energy_plots(
     # Compute and save reference TIC plot
     ref_fig = tic_evaluator._plot_tic(
         tic_evaluator.gt_prob,
-        endpoints=endpoints if "interpolate" in gen_mode else None,
+        endpoints=ref_paths[:, [0, -1]] if "interpolate" in gen_mode else None,
         gen_paths=gen_paths,
         ref_paths=ref_paths,
         file_name=join(tic_evaluator.plots_folder, "TICA_reference.png"),
@@ -637,6 +637,9 @@ def get_tic_free_energy_plots(
     transition_rate_paths = (
         []
     )  # To keep track of the transition rate box plots for creating a GIF
+
+    mean_transition_rates = []
+    nn_committor_probs = []
 
     for i, path in tqdm(enumerate(loop)):
         # Get samples TIC free energy landscape
@@ -758,6 +761,7 @@ def get_tic_free_energy_plots(
         device = torch.device(torch.cuda.current_device())
 
         norm_grads = []
+        pred_probs = []
         for x in path.split(256):
             x = (x - x.mean(1, keepdim=True)) / norm_stds[
                 Molecules[protein_name.upper()]
@@ -774,9 +778,13 @@ def get_tic_free_energy_plots(
                 create_graph=True,  # Create graph for second derivative
                 allow_unused=True,
             )[0].detach()
+            pred_probs.append(pred_prob.detach())
             norm_grads.append(grad_prob.reshape(x.shape[0], -1).norm(dim=1))
 
         transition_rates = torch.cat(norm_grads, dim=0).cpu().numpy().astype(np.float64)
+        mean_transition_rates.append(transition_rates.reshape(num_paths, -1).mean(-1))
+        pred_probs = torch.cat(pred_probs).reshape(num_paths, -1).cpu().numpy()
+        nn_committor_probs.append(pred_probs)
 
         # Box plot of transition rates
         plt.figure()
@@ -814,8 +822,11 @@ def get_tic_free_energy_plots(
 
         plt.figure()
         # plot free energy profile of all paths
-        for profile in torch.tensor(path_committor_probs).chunk(num_paths):
-            plt.plot(profile)
+
+        mean_committor_probs = (
+            torch.tensor(path_committor_probs).reshape(num_paths, -1).mean(0)
+        )
+        plt.plot(mean_committor_probs)
         plt.ylim(-0.1, 1.1)
         plt.xlabel("Path Step")
         plt.ylabel("Committor Probability")
@@ -828,6 +839,22 @@ def get_tic_free_energy_plots(
         plt.savefig(file_name)
         plt.close()
         committor_paths.append(file_name)
+
+    # Save mean transition rates
+    mean_transition_rates = np.stack(mean_transition_rates)
+    nn_committor_probs = np.stack(nn_committor_probs)
+    path_committor_probs = path_committor_probs.reshape(num_paths, -1)
+    np.save(
+        join(tic_evaluator.plots_folder, "path_committor_probs.npy"),
+        path_committor_probs,
+    )
+    np.save(
+        join(tic_evaluator.plots_folder, "mean_transition_rates.npy"),
+        mean_transition_rates,
+    )
+    np.save(
+        join(tic_evaluator.plots_folder, "nn_committor_probs.npy"), nn_committor_probs
+    )
 
     # Create a GIF from the saved TICA images
     tica_gif_path = join(tic_evaluator.plots_folder, "tica_samples.gif")
@@ -1128,21 +1155,25 @@ if __name__ == "__main__":
     parser.add_argument(
         "--disable_logging", action="store_true", help="Don't log to wandb"
     )
+    parser.add_argument(
+        "--no_gif", action="store_true", help="Don't create a GIF of the optimization"
+    )
 
     args = parser.parse_args()
 
+    append = "_" + args.append_exp_name if args.append_exp_name else ""
+    subsample_append = (
+        f"_subsample_{int(args.subsample)}" if args.subsample != 0 else ""
+    )
+    if args.subsample != 0 and args.gen_mode != "iid":
+        subsample_append += f"ns"
+
+    opt_steps_append = (
+        f"_opt_steps={int(args.opt_steps)}" if args.opt_steps != 0 else ""
+    )
+
     if not args.disable_logging:
         # validate_git_status()
-        append = "_" + args.append_exp_name if args.append_exp_name else ""
-        subsample_append = (
-            f"_subsample_{int(args.subsample)}" if args.subsample != 0 else ""
-        )
-        if args.subsample != 0 and args.gen_mode != "iid":
-            subsample_append += f"ns"
-
-        opt_steps_append = (
-            f"_opt_steps={int(args.opt_steps)}" if args.opt_steps != 0 else ""
-        )
         wandb.login()
         # TODO: append DiG if needed
         wandb.init(
@@ -1175,6 +1206,7 @@ if __name__ == "__main__":
         args.subsample,
         args.opt_steps,
         log=not args.disable_logging,
+        gif=not args.no_gif,
     )
 
     print("Evaluation complete.")
