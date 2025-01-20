@@ -317,12 +317,12 @@ def main(samp_args):
     ) as f:
         args = pickle.load(f)
 
-    # if samp_args.temp_data is None:
-    #     samp_args.temp_data = temp_dict[args.mol.upper()]
-    # if samp_args.temp_sim is None:
-    #     samp_args.temp_sim = temp_dict[args.mol.upper()]
-    # else:
-    #     samp_args.temp_sim = samp_args.temp_sim
+    if samp_args.temp_data is None:
+        samp_args.temp_data = temp_dict[args.mol.upper()]
+    if samp_args.temp_sim is None:
+        samp_args.temp_sim = temp_dict[args.mol.upper()]
+    else:
+        samp_args.temp_sim = samp_args.temp_sim
 
     basic_append = f"_{samp_args.gen_mode}"
     transition_removed_append = (
