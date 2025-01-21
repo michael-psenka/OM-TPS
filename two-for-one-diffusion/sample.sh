@@ -15,7 +15,7 @@ python sample.py \
     --append_exp_name test_initial_latent_time=250_hutch_minus_SGD \
     --path_length 200 \
     --om_d 0.01 \
-    --steps 2000
+    --steps 4000
 
 # python sample.py \
 #     --model_path saved_models/chignolin \
