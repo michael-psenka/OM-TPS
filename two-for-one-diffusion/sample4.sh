@@ -1,5 +1,5 @@
 #!/bin/bash
-# HP search for protein G
+# HP search for villin
 # Define parameter arrays
 latent_time=(5 10 15)
 action=("truncated" "hessian")
@@ -8,7 +8,7 @@ dt=(0.1 1)
 
 # Base command
 base_command="python sample.py \
-    --model_path saved_models/protein_g \
+    --model_path saved_models/villin \
     --gen_mode om_interpolate \
     --num_samples_eval 4 \
     --batch_size_gen 1 \
@@ -18,7 +18,7 @@ base_command="python sample.py \
     --no_encode_and_decode \
     --path_length 200 \
     --om_d 0.01 \
-    --steps 1000"
+    --steps 2000"
 
 # Loop through all combinations
 for lt in "${latent_time[@]}"; do

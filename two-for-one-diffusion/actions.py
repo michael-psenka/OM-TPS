@@ -81,7 +81,6 @@ class TruncatedAction(torch.nn.Module):
         else:
             f_n = self.force_func(path[:-1])
         second_term = torch.square(f_n) * (self.dt / 4 / self.gamma)
-
         return first_term.sum(), second_term.sum(), torch.tensor(0).to(torch.float32)
 
 
