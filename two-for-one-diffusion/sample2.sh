@@ -1,21 +1,37 @@
 
-python sample.py \
-    --model_path saved_models/bba \
-    --gen_mode om_interpolate \
-    --num_samples_eval 32 \
-    --batch_size_gen 2 \
-    --latent_time 20 \
-    --initial_guess_level 250 \
-    --subsample_points_percent 1.0 \
-    --subsample_dimensions_percent 1.0 \
-    --no_encode_and_decode \
-    --action hutch \
-    --optimizer sgd \
-    --lr 1e-3 \
-    --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_32paths \
-    --path_length 200 \
-    --om_d 0.01 \
-    --steps 2000
+# List of proteins
+proteins=('chignolin' 'trp_cage' 'bba' 'villin' 'protein_g')
+
+# List of subsample times
+subsamples=(1 2 3 4 5 6 7 8 9 10 11 12)
+
+# Loop over each protein
+for protein in "${proteins[@]}"; do
+  # Loop over each subsample time
+  for subsample in "${subsamples[@]}"; do
+    # Run the command with the current protein and subsample time
+    echo "Running for protein: $protein, subsample: $subsample"
+    python evaluate/evaluate_fastfolders.py --protein_name "$protein" --gen_mode langevin --subsample "$subsample"
+  done
+done
+
+# python sample.py \
+#     --model_path saved_models/bba \
+#     --gen_mode om_interpolate \
+#     --num_samples_eval 32 \
+#     --batch_size_gen 2 \
+#     --latent_time 20 \
+#     --initial_guess_level 250 \
+#     --subsample_points_percent 1.0 \
+#     --subsample_dimensions_percent 1.0 \
+#     --no_encode_and_decode \
+#     --action hutch \
+#     --optimizer sgd \
+#     --lr 1e-3 \
+#     --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_32paths \
+#     --path_length 200 \
+#     --om_d 0.01 \
+#     --steps 2000
 
 
 # python sample.py \
