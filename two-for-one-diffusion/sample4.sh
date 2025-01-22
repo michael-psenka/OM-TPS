@@ -2,7 +2,7 @@
 # HP search for villin
 # Define parameter arrays
 latent_time=(5 10 15)
-action=("truncated" "hessian")
+action=("hutch")
 optimizer=("sgd" "adam")
 dt=(0.1 1)
 

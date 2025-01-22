@@ -22,9 +22,9 @@ python sample.py \
     --gen_mode langevin \
     --noise_level 5 \
     --parallel_sim 8 \
-    --n_timesteps 5000000 \
+    --n_timesteps 25000000 \
     --save_interval 500 \
-    --append_exp_name 8_sims \
+    --append_exp_name 8_sims_50ns \
     --kb consistent \
     --dt 2e-3 
 

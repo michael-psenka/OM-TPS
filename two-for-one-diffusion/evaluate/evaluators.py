@@ -26,6 +26,20 @@ import math
 from datasets.dataset_utils_empty import get_dataset, Molecules, AtlasProteins
 import pickle
 
+# OM Paper plotting stuff
+import scienceplots
+import matplotlib.pylab as pylab
+params = {'figure.dpi': 600,
+            'axes.labelsize': 'small',
+          'legend.fontsize': 'x-small',
+         'axes.titlesize':'medium',
+         'xtick.labelsize':'x-large',
+         'ytick.labelsize':'x-large',
+         'font.family': 'DejaVu Sans'}
+from matplotlib import rc
+pylab.rcParams.update(params)
+
+
 CLUSTER_CENTERS = {
     "chignolin": np.array(
         [[0.69400153, -0.34598462], [-0.48732213, 0.00642035], [1.87483537, 0.06285344]]
@@ -582,6 +596,9 @@ class TicEvaluator:
             range(len(self.bin_mids_y))[5::15],
             [f"{num:.02f}" for num in self.bin_mids_y[5::15]],
         )
+        ax = plt.gca()  # Get the current axis
+        ax.set_facecolor('gray')  # Set the background color to gray
+
         if path is not None:
             edges_x = self.bin_edges_x[0], self.bin_edges_x[-1]
             edges_y = self.bin_edges_y[0], self.bin_edges_y[-1]
@@ -624,6 +641,7 @@ class TicEvaluator:
                 lc.set_linewidth(linewidth)
                 ax1.get_lines()[0].remove()
                 ax1.add_collection(lc)
+                
 
         # plot folded structure
         # ax1.scatter(
@@ -722,7 +740,7 @@ class TicEvaluator:
             spacing="uniform",
             orientation="vertical",
         )
-        cb1.set_label("Free energy / $k_BT$", labelpad=-1)
+        cb1.set_label("Free energy / $k_BT$", labelpad=-1, fontsize=16)
         plt.tight_layout()
         if save_plot:
             plt.savefig(file_name)
