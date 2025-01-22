@@ -7,13 +7,31 @@ subsamples=(1 2 3 4 5 6 7 8 9 10 11 12)
 
 # Loop over each protein
 for protein in "${proteins[@]}"; do
+  # Set the n_sims value based on the protein
+  case "$protein" in
+    "chignolin"|"trp_cage")
+      n_sims=8
+      ;;
+    "bba")
+      n_sims=32
+      ;;
+    "villin"|"protein_g")
+      n_sims=4
+      ;;
+    *)
+      echo "Unknown protein: $protein"
+      continue
+      ;;
+  esac
+  
   # Loop over each subsample time
   for subsample in "${subsamples[@]}"; do
-    # Run the command with the current protein and subsample time
-    echo "Running for protein: $protein, subsample: $subsample"
-    python evaluate/evaluate_fastfolders.py --protein_name "$protein" --gen_mode langevin --subsample "$subsample"
+    # Run the command with the current protein, subsample time, and n_sims
+    echo "Running for protein: $protein, subsample: $subsample, n_sims: $n_sims"
+    python evaluate/evaluate_fastfolders.py --protein_name "$protein" --gen_mode langevin --subsample "$subsample" --n_sims "$n_sims"
   done
 done
+
 
 # python sample.py \
 #     --model_path saved_models/bba \

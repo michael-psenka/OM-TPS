@@ -101,6 +101,7 @@ def evaluate_fastfolders(
     reference_folder,
     pdb_folder,
     subsample=0,
+    n_sims=-1,
     opt_steps=0,
     window_size=3,
     gif=True,
@@ -244,11 +245,11 @@ def evaluate_fastfolders(
     if subsample != 0:
         if gen_mode == "langevin":
             # 100 parallel langevin sims were generated
-            # take the first subsample frames from each sim
+            # take the first subsample frames from the first n_sims sims
             sampled_mol = sampled_mol.reshape(
                 100, -1, sampled_mol.shape[1], sampled_mol.shape[2]
             )
-            sampled_mol = sampled_mol[:, :subsample].reshape(
+            sampled_mol = sampled_mol[:n_sims, :subsample].reshape(
                 -1, sampled_mol.shape[2], sampled_mol.shape[3]
             )
         else:
@@ -272,7 +273,7 @@ def evaluate_fastfolders(
     gt_transition_ensemble = np.load(gt_transition_ensemble_file)
 
     n_ref_samples = 1000
-    traj_len = 100  # corresponds to horizon of 20 ns (since lagtime is 200 ps)
+    traj_len = 10  # corresponds to horizon of 2 ns (since lagtime is 200 ps)
 
     # Discretize the interpolation trajectory based on the reference cluster centers
     cluster_assignments, transformed_samples = discretize_trajectory(
@@ -1183,6 +1184,13 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--n_sims",
+        type=int,
+        default=-1,
+        help="First n simulations to evaluate (-1 means all simulations). Only used for langevin mode",
+    )
+
+    parser.add_argument(
         "--opt_steps",
         type=int,
         default=0,
@@ -1241,6 +1249,7 @@ if __name__ == "__main__":
         args.reference_folder,
         args.pdb_folder,
         args.subsample,
+        args.n_sims,
         args.opt_steps,
         log=not args.disable_logging,
         gif=not args.no_gif,
