@@ -791,13 +791,13 @@ def generate_samples(
             parallel_batches = torch.cuda.device_count()
         else:
             parallel_batches = 1
-        # init_mol = sample_from_model(
-        #     sampler,
-        #     samp_args.parallel_sim // parallel_batches,
-        #     samp_args.batch_size_gen // parallel_batches,
-        #     verbose=True,
-        # )
-        init_mol = torch.load("endpoint_1_samples_bba.pt")
+        init_mol = sample_from_model(
+            sampler,
+            samp_args.parallel_sim // parallel_batches,
+            samp_args.batch_size_gen // parallel_batches,
+            verbose=True,
+        )
+        # init_mol = torch.load("endpoint_1_samples_bba.pt")
 
         masses = samp_args.masses
         if masses is None:
