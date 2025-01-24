@@ -29,14 +29,18 @@ import pickle
 # OM Paper plotting stuff
 import scienceplots
 import matplotlib.pylab as pylab
-params = {'figure.dpi': 600,
-            'axes.labelsize': 'small',
-          'legend.fontsize': 'x-small',
-         'axes.titlesize':'medium',
-         'xtick.labelsize':'x-large',
-         'ytick.labelsize':'x-large',
-         'font.family': 'DejaVu Sans'}
+
+params = {
+    "figure.dpi": 600,
+    "axes.labelsize": "small",
+    "legend.fontsize": "x-small",
+    "axes.titlesize": "medium",
+    "xtick.labelsize": "x-large",
+    "ytick.labelsize": "x-large",
+    "font.family": "DejaVu Sans",
+}
 from matplotlib import rc
+
 pylab.rcParams.update(params)
 
 
@@ -597,7 +601,7 @@ class TicEvaluator:
             [f"{num:.02f}" for num in self.bin_mids_y[5::15]],
         )
         ax = plt.gca()  # Get the current axis
-        ax.set_facecolor('gray')  # Set the background color to gray
+        ax.set_facecolor("gray")  # Set the background color to gray
 
         if path is not None:
             edges_x = self.bin_edges_x[0], self.bin_edges_x[-1]
@@ -641,7 +645,6 @@ class TicEvaluator:
                 lc.set_linewidth(linewidth)
                 ax1.get_lines()[0].remove()
                 ax1.add_collection(lc)
-                
 
         # plot folded structure
         # ax1.scatter(
