@@ -696,12 +696,15 @@ class MDGenDataset(torch.utils.data.Dataset):
                 rc.restype_name_to_atom14_names[rc.aa_one_to_three_letter[c]]
                 for c in seqres
             ]
+            # find num atoms per residue that are not ''
+
+            num_atoms_per_residue = [len([a for a in atom if a != ""]) for atom in atom_names]
             import pdb; pdb.set_trace()
             atom_names = list(chain.from_iterable(atom_names))
 
             # remove '' elements from list
-            atom_names = [x[0] for x in atom_names if x]
-            atom_types = torch.tensor([atomic_numbers[a] for a in atom_names]).long()
+            atom_names = [x[0] for x in atom_names if x else ['']]
+            atom_types = torch.tensor([atomic_numbers[a] for a in atom_names if a else 0]).long()
             
             frame = frame[frame != 0]
         
