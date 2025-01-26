@@ -58,6 +58,7 @@ class TruncatedAction(torch.nn.Module):
         forces: torch.Tensor = None,
         chunks_of_two=False,
         subsample_dimensions_percent=None,
+        mask=None,
     ):
         """
         Args: path of shape [P, *], forces of shape [P, *]
@@ -81,7 +82,17 @@ class TruncatedAction(torch.nn.Module):
         else:
             f_n = self.force_func(path[:-1])
         second_term = torch.square(f_n) * (self.dt / 4 / self.gamma)
-        return first_term.sum(), second_term.sum(), torch.tensor(0).to(torch.float32)
+
+        # mask out padded indices
+        if mask is not None:
+            mask = mask.unsqueeze(0).repeat(first_term.shape[0], 1)
+        else:
+            mask = torch.ones_like(first_term).bool()
+        return (
+            first_term[mask].sum(),
+            second_term[mask].sum(),
+            torch.tensor(0).to(torch.float32),
+        )
 
 
 class SimpleAction(torch.nn.Module):
@@ -132,7 +143,10 @@ class HutchinsonAction(torch.nn.Module):
         self.force_func = force_func
 
         def force_and_laplace(
-            x: torch.tensor, forces: torch.tensor = None, subsample_dimensions=None
+            x: torch.tensor,
+            forces: torch.tensor = None,
+            subsample_dimensions=None,
+            mask=None,
         ):
             result = 0
 
@@ -219,4 +233,8 @@ class HutchinsonAction(torch.nn.Module):
         third_term = laplace * self.dt * self.D / torch.tensor(2.0)
 
         # Result is the action and is expected to have shape [batch, 1]
-        return first_term.sum(), second_term.sum(), third_term.sum()
+        if mask is not None:
+            mask = mask.unsqueeze(0).repeat(first_term.shape[0], 1)
+        else:
+            mask = torch.ones_like(first_term).bool()
+        return first_term[mask].sum(), second_term[mask].sum(), third_term[mask].sum()

@@ -691,7 +691,7 @@ class MDGenDataset(torch.utils.data.Dataset):
             )  # Amino acid types
             atom_types[::3] += 1  # distinguish between N and C backbone atoms
 
-        else:  # all-atom - this doesn't yet work because of variable number of atoms per protein - need to add padding
+        else:  # all-atom
             atom_names = [
                 rc.restype_name_to_atom14_names[rc.aa_one_to_three_letter[c]]
                 for c in seqres

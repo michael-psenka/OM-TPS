@@ -23,7 +23,7 @@ from datasets.dataset_utils_empty import (
 )
 from evaluate.evaluate_fastfolders import evaluate_fastfolders, CLUSTER_ENDPOINTS
 
-# from evaluate.evaluate_tetrapeptides import evaluate_tetrapeptide
+from evaluate.evaluate_tetrapeptides import evaluate_tetrapeptide
 from evaluate.evaluators import (
     sample_from_model,
     sample_interpolations_from_model,
@@ -89,6 +89,13 @@ parser.add_argument(
     help="Which amino acid sequence to use for tetrapeptide",
     default="",
 )
+
+parser.add_argument(
+    "--sidechains",
+    action="store_true",
+    help="whether to use the all-atom model with sidechains for tetrapeptides",
+)
+
 parser.add_argument(
     "--model_checkpoint", type=str, default="best", help="best, last, 1, 2, 3, ..."
 )
@@ -307,6 +314,7 @@ def main(samp_args):
         if samp_args.transition_data_removed:
             arg_name = "args-transition-data-removed.pickle"
         else:
+
             arg_name = "args.pickle"
     with open(
         join(
@@ -444,6 +452,7 @@ def main(samp_args):
                 eval_folder,
                 testset,
                 name,
+                samp_args.sidechains,
             )
         except:
             print(f"Failed to generate samples for {name}")
@@ -455,7 +464,15 @@ def main(samp_args):
 
 
 def generate_samples(
-    model, trainset, noise_level, args, device, eval_folder, testset, name=None
+    model,
+    trainset,
+    noise_level,
+    args,
+    device,
+    eval_folder,
+    testset,
+    name=None,
+    sidechains=False,
 ):
     # Generate samples from diffusion model
     if name is None or name == "":
@@ -507,9 +524,7 @@ def generate_samples(
                         shutil.copy(f"{root}/{name}_metadata.pkl", eval_folder)
                         break
 
-            if os.path.exists(
-                f"{eval_folder}/{name}_metadata.pkl"
-            ):  # TODO: fix this so it looks at the top level tetrapeptide folder
+            if os.path.exists(f"{eval_folder}/{name}_metadata.pkl"):
                 # load the existing data
                 pkl_metadata = pickle.load(
                     open(f"{eval_folder}/{name}_metadata.pkl", "rb")
@@ -520,7 +535,7 @@ def generate_samples(
             else:
                 with temp_seed(137):
                     feats, ref = mdgen.mdgen.analysis.get_featurized_traj(
-                        f"{args.data_folder}/{name}/{name}", sidechains=False
+                        f"{args.data_folder}/{name}/{name}", sidechains=sidechains
                     )
                     tica, _ = mdgen.mdgen.analysis.get_tica(ref)
                     kmeans, ref_kmeans = mdgen.mdgen.analysis.get_kmeans(
@@ -830,9 +845,12 @@ def generate_samples(
     # Save subset as pdb - convert from angstrom to nm
     if "tetrapeptide" in protein_name:
         path = os.path.join(eval_folder, f"{name}_0.pdb")
-        mol = sampled_mol.reshape(sampled_mol.shape[0], 4, 3, 3)
-        new_mol = torch.zeros(mol.shape[0], 4, 14, 3)
-        new_mol[:, :, 0:3, :] = mol
+        if sidechains:
+            new_mol = sampled_mol.reshape(sampled_mol.shape[0], 4, 14, 3)
+        else:
+            mol = sampled_mol.reshape(sampled_mol.shape[0], 4, 3, 3)
+            new_mol = torch.zeros(mol.shape[0], 4, 14, 3)
+            new_mol[:, :, 0:3, :] = mol
         metadata = []
         # save pdb files of each sample separately
         for i, batch in enumerate(new_mol.chunk(samp_args.num_samples_eval)):
@@ -882,7 +900,7 @@ def generate_samples(
             eval_folder,
             eval_folder,
             args.data_folder,
-            sidechains=False,
+            sidechains=sidechains,
             save=True,
             plot=True,
         )
