@@ -63,14 +63,18 @@ from logging_utils import get_interpolation_viz, visualize_gif, save_ovito_traj
 # OM Paper plotting stuff
 import scienceplots
 import matplotlib.pylab as pylab
-params = {'figure.dpi': 600,
-            'axes.labelsize': 'small',
-          'legend.fontsize': 'x-small',
-         'axes.titlesize':'medium',
-         'xtick.labelsize':'x-large',
-         'ytick.labelsize':'x-large',
-         'font.family': 'DejaVu Sans'}
+
+params = {
+    "figure.dpi": 600,
+    "axes.labelsize": "small",
+    "legend.fontsize": "x-small",
+    "axes.titlesize": "medium",
+    "xtick.labelsize": "x-large",
+    "ytick.labelsize": "x-large",
+    "font.family": "DejaVu Sans",
+}
 from matplotlib import rc
+
 pylab.rcParams.update(params)
 
 
@@ -644,7 +648,7 @@ def get_tic_free_energy_plots(
     # Compute and save reference TIC plot
     ref_fig = tic_evaluator._plot_tic(
         tic_evaluator.gt_prob,
-        endpoints=None ,#ref_paths[:, [0, -1]] if "interpolate" in gen_mode else None,
+        endpoints=None,  # ref_paths[:, [0, -1]] if "interpolate" in gen_mode else None,
         gen_paths=gen_paths,
         ref_paths=None,
         file_name=join(tic_evaluator.plots_folder, "TICA_reference.png"),
