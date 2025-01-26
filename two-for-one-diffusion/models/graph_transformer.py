@@ -113,8 +113,8 @@ class GraphTransformer(nn.Module):
 
             if z is not None:
                 z = z.to(self.device)
-                # find the index at which the first zero is in z
-                padding_idx = (z == 0).int().argmax(dim=1)
+                # find padding indices
+                padding_idx = z == 0
 
                 if len(z.shape) == 1:
                     z = z.unsqueeze(0).repeat(bs, 1)
@@ -129,8 +129,7 @@ class GraphTransformer(nn.Module):
             nodes = self.node_embedding(nodes)
             mask = torch.ones(x.size(0), x.size(1)).bool().to(x.device)
             # mask out the nodes that are for padding
-            cols = torch.arange(mask.size(1)).unsqueeze(0).to(x.device)
-            mask = (mask * (cols < padding_idx.unsqueeze(1)).int()).bool()
+            mask[padding_idx] = False
 
             nodes, _ = self.graphtransformer(nodes, edge_attr, mask=mask)
             output = self.node_decoder(nodes)
@@ -259,14 +258,11 @@ class Attention(nn.Module):
 
     def forward(self, nodes, edges, mask=None):
         h = self.heads
-        
 
         q = self.to_q(nodes)
         k, v = self.to_kv(nodes).chunk(2, dim=-1)
 
         e_kv = self.edges_to_kv(edges)
-
-        
 
         # group heads into batch dimension
         q, k, v, e_kv = map(
@@ -275,7 +271,7 @@ class Attention(nn.Module):
 
         ek, ev = e_kv, e_kv
 
-        k, v = map(lambda t: rearrange(t, "b j d -> b () j d "), (k, v)) # unsqueeze
+        k, v = map(lambda t: rearrange(t, "b j d -> b () j d "), (k, v))  # unsqueeze
         # aggregate edge and node information
         k = k + ek
         v = v + ev

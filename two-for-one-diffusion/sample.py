@@ -50,9 +50,9 @@ import time
 import matplotlib.pyplot as plt
 import contextlib
 
-# import mdgen.mdgen.analysis
-# from mdgen.mdgen.utils import get_tetrapeptide_sample, atom14_to_pdb
-# from mdgen.mdgen.residue_constants import restype_order
+import mdgen.mdgen.analysis
+from mdgen.mdgen.utils import get_tetrapeptide_sample, atom14_to_pdb
+from mdgen.mdgen.residue_constants import restype_order
 
 
 @contextlib.contextmanager

@@ -22,6 +22,7 @@ from utils import (
 )
 
 from logging_utils import save_ovito_traj
+from mdgen.mdgen.residue_constants import restype_order
 
 
 class Trainer(object):
@@ -325,7 +326,6 @@ class Trainer(object):
                         self.batch_size // self.parallel_batches,
                         z=z,
                     )
-                    import pdb; pdb.set_trace()
 
                     # Save as gsd
                     save_ovito_traj(
@@ -334,6 +334,7 @@ class Trainer(object):
                         align=True,
                         all_backbone="tetrapeptides" in self.mol_name
                         and self.train_data.atom_selection == "backbone",
+                        create_bonds="tetrapeptides" not in self.mol_name,
                     )
 
                     if "tetrapeptides" not in self.mol_name:

@@ -936,7 +936,7 @@ class GaussianDiffusion(nn.Module):
         """
         noise = default(noise, lambda: torch.randn_like(x_start))
         noise = center_zero(noise)
-        
+
         x = self.q_sample(x_start=x_start, t=t, noise=noise)
         x = center_zero(x)
         model_out = self.model(
@@ -954,19 +954,16 @@ class GaussianDiffusion(nn.Module):
             target = x_start
         else:
             raise ValueError(f"unknown objective {self.objective}")
-        
+
         loss = self.loss_fn(model_out, target, reduction="none")
 
         if z is not None:
             # mask out padded losses
-            padding_idx = (z == 0).int().argmax(dim=1)
-            cols = torch.arange(x_start.size(1)).unsqueeze(0).to(x_start.device)
-            mask = (cols < padding_idx.unsqueeze(1)).bool()
-            loss = loss[mask]
+            padding_idx = z == 0
+            loss = loss[~padding_idx]
 
         # loss = reduce(loss, "b ... -> b (...)", "mean")
 
-        
         return loss.mean()
 
     def forward(self, mol, *args, t_diff_range=None, **kwargs):

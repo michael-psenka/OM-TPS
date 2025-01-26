@@ -630,7 +630,7 @@ class MDGenDataset(torch.utils.data.Dataset):
         elif atom_selection == "backbone":
             self.num_beads = 12
         else:
-            self.num_beads = 56 # maximum number of atoms in tetrapeptide with 14-atom representation ( 14 *4 = 56)
+            self.num_beads = 56  # maximum number of atoms in tetrapeptide with 14-atom representation ( 14 *4 = 56)
         self.bead_onehot = torch.eye(self.num_beads)
         self.data_dir = data_dir
         self.suffix = suffix
@@ -698,23 +698,17 @@ class MDGenDataset(torch.utils.data.Dataset):
             ]
             # find num atoms per residue that are not ''
 
-            num_atoms_per_residue = [len([a for a in atom if a != ""]) for atom in atom_names]
-            import pdb; pdb.set_trace()
+            num_atoms_per_residue = [
+                len([a for a in atom if a != ""]) for atom in atom_names
+            ]
             atom_names = list(chain.from_iterable(atom_names))
 
             # remove '' elements from list
-            atom_names = [x[0] for x in atom_names if x else ['']]
-            atom_types = torch.tensor([atomic_numbers[a] for a in atom_names if a else 0]).long()
-            
-            frame = frame[frame != 0]
-        
+            atom_names = [x[0] if x else "" for x in atom_names]
+            atom_types = torch.tensor(
+                [atomic_numbers[a] if a else 0 for a in atom_names]
+            ).long()
+
         frame = frame.reshape(-1, 3)
-        # pad to 56 atoms
-        if len(frame) < 56:
-            pad = torch.zeros(56 - len(frame), 3)
-            frame = torch.cat([frame, pad], dim=0)
-            pad = torch.zeros(56 - len(atom_types), dtype=torch.long)
-            atom_types = torch.cat([atom_types, pad], dim=0)
-        else:
-            assert len(frame) == 56, f"Frame has {len(frame)} atoms"
+
         return frame, atom_types
