@@ -325,6 +325,7 @@ class Trainer(object):
                         self.batch_size // self.parallel_batches,
                         z=z,
                     )
+                    import pdb; pdb.set_trace()
 
                     # Save as gsd
                     save_ovito_traj(

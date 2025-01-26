@@ -620,7 +620,7 @@ class MDGenDataset(torch.utils.data.Dataset):
         overfit_peptide=None,
         atlas=False,
         repeat=1,
-        atom_selection="backbone",
+        atom_selection="all-atom",
     ):
         super().__init__()
         self.df = pd.read_csv(split, index_col="name")
@@ -630,7 +630,7 @@ class MDGenDataset(torch.utils.data.Dataset):
         elif atom_selection == "backbone":
             self.num_beads = 12
         else:
-            self.num_beads = None
+            self.num_beads = 56 # maximum number of atoms in tetrapeptide with 14-atom representation ( 14 *4 = 56)
         self.bead_onehot = torch.eye(self.num_beads)
         self.data_dir = data_dir
         self.suffix = suffix
@@ -696,12 +696,22 @@ class MDGenDataset(torch.utils.data.Dataset):
                 rc.restype_name_to_atom14_names[rc.aa_one_to_three_letter[c]]
                 for c in seqres
             ]
+            import pdb; pdb.set_trace()
             atom_names = list(chain.from_iterable(atom_names))
 
             # remove '' elements from list
             atom_names = [x[0] for x in atom_names if x]
             atom_types = torch.tensor([atomic_numbers[a] for a in atom_names]).long()
+            
             frame = frame[frame != 0]
+        
         frame = frame.reshape(-1, 3)
-
+        # pad to 56 atoms
+        if len(frame) < 56:
+            pad = torch.zeros(56 - len(frame), 3)
+            frame = torch.cat([frame, pad], dim=0)
+            pad = torch.zeros(56 - len(atom_types), dtype=torch.long)
+            atom_types = torch.cat([atom_types, pad], dim=0)
+        else:
+            assert len(frame) == 56, f"Frame has {len(frame)} atoms"
         return frame, atom_types

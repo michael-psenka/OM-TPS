@@ -943,7 +943,7 @@ class FlowMatching(nn.Module):
         noise = default(noise, lambda: torch.randn_like(x_start))
         noise = center_zero(noise)
         # sample probability path
-
+        
         t = 1.0 * t / self.num_timesteps
         path_sample = self.path.sample(t=t, x_0=noise, x_1=x_start)
         path_sample.x_t = center_zero(path_sample.x_t)
@@ -961,7 +961,14 @@ class FlowMatching(nn.Module):
             raise ValueError(f"unknown objective {self.objective}")
 
         loss = self.loss_fn(model_out, target, reduction="none")
-        loss = reduce(loss, "b ... -> b (...)", "mean")
+        if z is not None:
+            # mask out padded losses
+            padding_idx = (z == 0).int().argmax(dim=1)
+            cols = torch.arange(x_start.size(1)).unsqueeze(0).to(x_start.device)
+            mask = (cols < padding_idx.unsqueeze(1)).bool()
+            loss = loss[mask]
+
+        # loss = reduce(loss, "b ... -> b (...)", "mean")
 
         return loss.mean()
 
