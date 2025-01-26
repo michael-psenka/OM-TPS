@@ -790,12 +790,14 @@ class FlowMatching(nn.Module):
 
                 # TODO: vmap over batch dimension
                 # (currently not possible because of calling requires_grad on x in GraphTransformer)
+                mask = (z != 0) if z is not None else None
                 terms = [
                     action_func(
                         x,
                         force,
                         chunks_of_two=subsample_points_percent is not None,
                         subsample_dimensions_percent=subsample_dimensions_percent,
+                        mask=mask,
                     )
                     for x, force in zip(noised_xs_input, forces)
                 ]
