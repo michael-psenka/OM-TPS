@@ -3,6 +3,7 @@
 import argparse
 import json
 import pickle
+import pandas as pd
 from multiprocessing import Pool
 
 from scipy.spatial.distance import jensenshannon
@@ -14,7 +15,7 @@ import matplotlib.pyplot as plt
 
 
 def evaluate_tetrapeptide(
-    name, mddir, out_dir, pdbdir, repdir, sidechains=False, save=False, plot=False
+    name, mddir, out_dir, pdbdir, repdir, sidechains=False, save=False, plot=False, traj_len=11
 ):
     """Function to evaluate the transition path for a single tetrapeptide with pdb_id `name`."""
 
@@ -31,7 +32,11 @@ def evaluate_tetrapeptide(
     msm = out["msm"]
     cmsm = out["cmsm"]
     kmeans = out["kmeans"]
-    metadata = json.load(open(os.path.join(pdbdir, f"{name}_metadata.json"), "rb"))
+    try:
+        metadata = json.load(open(os.path.join(pdbdir, f"{name}_metadata.json"), "rb"))
+    except:
+        print(f"Could not load metadata for {name}")
+        return name, out
     start_idx = metadata[0]["start_idx"]
     end_idx = metadata[0]["end_idx"]
     start_state = metadata[0]["start_state"]
@@ -88,7 +93,7 @@ def evaluate_tetrapeptide(
         trans=cmsm.transition_matrix,
         start_state=start_state,
         end_state=end_state,
-        traj_len=11,
+        traj_len=traj_len,
         n_samples=1000,
     )
     ref_stateprobs = mdgen.mdgen.analysis.get_state_probs(ref_tp)
@@ -154,7 +159,7 @@ def evaluate_tetrapeptide(
             trans=rep_msm.transition_matrix,
             start_state=repidx_start_state,
             end_state=repidx_end_state,
-            traj_len=11,
+            traj_len=traj_len,
             n_samples=1000,
         )
         rep_tp = np.vectorize(repidx_to_idx.get)(repidx_tp)
@@ -249,35 +254,45 @@ def evaluate_tetrapeptide(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mddir", type=str, default="/data/sanjeevr/4AA_sim")
-    parser.add_argument("--repdir", type=str, default="/data/sanjeevr/4AA_sim")
-    parser.add_argument("--pdbdir", type=str, default="/data/sanjeevr/4AA_sim")
-    parser.add_argument("--outdir", type=str, required=True)
+    parser.add_argument("--data_folder", type=str, default="/data/sanjeevr/4AA_sim")
+    parser.add_argument("--gen_mode", type=str, default="om_interpolate")
+    parser.add_argument("--append_exp_name", type=str, default=None)
+    parser.add_argument("--split", type=str, default="/home/sanjeevr/om-diffusion/two-for-one-diffusion/mdgen/splits/4AA_test_small.csv")
     parser.add_argument("--save", action="store_true")
     parser.add_argument("--plot", action="store_true")
+    parser.add_argument("--traj_len", type=int, default=11)
     parser.add_argument("--save_name", type=str, default="out.pkl")
     parser.add_argument("--pdb_id", nargs="*", default=[])
     parser.add_argument("--no_overwrite", nargs="*", default=[])
     parser.add_argument("--num_workers", type=int, default=1)
     args = parser.parse_args()
 
-    if pdb_id:
-        pdb_id = pdb_id
+    if args.pdb_id:
+        pdb_id = args.pdb_id
     else:
-        pdb_id = list(
-            set([nam.split("_")[0] for nam in os.listdir(pdbdir) if ".pdb" in nam])
-        )
+        
+        pdb_id = pd.read_csv(args.split, index_col="name").index
+        # pdb_id = list(
+        #     set([nam.split("_")[0] for nam in os.listdir(pdbdir) if ".pdb" in nam])
+        # )
 
-    if num_workers > 1:
-        p = Pool(num_workers)
+    if args.num_workers > 1:
+        p = Pool(args.num_workers)
         p.__enter__()
         __map__ = p.imap
     else:
         __map__ = map
-    out = dict(tqdm.tqdm(__map__(evaluate_tetrapeptides, pdb_id), total=len(pdb_id)))
+    eval_folder = f"/home/sanjeevr/om-diffusion/two-for-one-diffusion/saved_models/tetrapeptides/main_eval_output_{args.gen_mode}"
+    if args.append_exp_name:
+        eval_folder += f"_{args.append_exp_name}"
+    eval_func = lambda name: evaluate_tetrapeptide(
+        name, args.data_folder, eval_folder, eval_folder, args.data_folder, save=args.save, plot=args.plot, traj_len=args.traj_len
+    )
+
+    out = dict(tqdm.tqdm(__map__(eval_func, pdb_id), total=len(pdb_id)))
     if num_workers > 1:
         p.__exit__(None, None, None)
 
-    if save:
-        with open(f"{outdir}/{save_name}", "wb") as f:
-            f.write(pickle.dumps(out))
+    # if save:
+    #     with open(f"{outdir}/{save_name}", "wb") as f:
+    #         f.write(pickle.dumps(out))

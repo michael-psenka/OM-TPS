@@ -7,7 +7,7 @@ python sample.py \
     --batch_size_gen 16 \
     --sidechains \
     --latent_time 0 \
-    --initial_guess_level 100 \
+    --initial_guess_level 10 \
     --subsample_points_percent 1.0 \
     --subsample_dimensions_percent 1.0 \
     --no_encode_and_decode \
@@ -18,7 +18,7 @@ python sample.py \
     --path_length 25 \
     --om_dt 1 \
     --om_d 0.01 \
-    --steps 250 \
+    --steps 25 \
 
 # python sample.py \
 #     --model_path saved_models/chignolin \

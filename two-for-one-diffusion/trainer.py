@@ -290,6 +290,7 @@ class Trainer(object):
                 )
 
                 if grad_norm <= self.args.gradient_norm_threshold:
+                    clip_grad_norm_(self.model_dp.parameters(), max_norm=100)
                     self.scaler.step(self.opt)
                     self.scaler.update()
 
