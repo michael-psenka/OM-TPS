@@ -49,6 +49,45 @@ def get_tp_likelihood(tp, trans):
     return probs
 
 
+def get_tp_log_likelihood(tp, trans):
+    """
+    Compute the log-likelihood of a discrete trajectory given a reference
+    MSM transition matrix. Adapted from MDGen
+    (https://github.com/bjing2016/mdgen/blob/master/mdgen/analysis.py).
+    Now returns log probabilities to avoid underflow.
+    """
+    N = tp.shape[1]
+    n_samples = tp.shape[0]
+
+    s_N = tp[0, -1]  # final state (this assumes all trajectories end in the same state)
+    log_trans_probs = []
+
+    for i in range(N - 1):
+        t = i + 1
+        s_t = tp[:, i]
+
+        # The original code's 'numerator' and 'probs' steps stay the same,
+        # but we move to log-space before appending to 'log_trans_probs'.
+        numerator = np.linalg.matrix_power(trans, N - t - 1)[:, s_N] * trans[s_t, :]
+        denom = np.linalg.matrix_power(trans, N - t)[s_t, s_N][:, None]
+        probs = numerator / denom
+
+        # Avoid log of zero or negative by clipping
+        probs = np.clip(probs, a_min=1e-15, a_max=None)
+
+        s_tp1 = tp[:, i + 1]
+        trans_prob = probs[np.arange(n_samples), s_tp1]
+
+        # Convert to log
+        log_trans_prob = np.log(trans_prob)
+        log_trans_probs.append(log_trans_prob)
+
+    # Stack along the time dimension and sum
+    log_probs = np.stack(log_trans_probs, axis=1)
+
+    return log_probs
+
+
 def discretize_trajectory(xyz, tic_evaluator, cluster_centers, transform=True):
     """
     Trajectory discretization based on nearest cluster centers.
