@@ -15,7 +15,15 @@ import matplotlib.pyplot as plt
 
 
 def evaluate_tetrapeptide(
-    name, mddir, out_dir, pdbdir, repdir, sidechains=False, save=False, plot=False, traj_len=11
+    name,
+    mddir,
+    out_dir,
+    pdbdir,
+    repdir,
+    sidechains=False,
+    save=False,
+    plot=False,
+    traj_len=11,
 ):
     """Function to evaluate the transition path for a single tetrapeptide with pdb_id `name`."""
 
@@ -257,7 +265,11 @@ if __name__ == "__main__":
     parser.add_argument("--data_folder", type=str, default="/data/sanjeevr/4AA_sim")
     parser.add_argument("--gen_mode", type=str, default="om_interpolate")
     parser.add_argument("--append_exp_name", type=str, default=None)
-    parser.add_argument("--split", type=str, default="/home/sanjeevr/om-diffusion/two-for-one-diffusion/mdgen/splits/4AA_test_small.csv")
+    parser.add_argument(
+        "--split",
+        type=str,
+        default="/home/sanjeevr/om-diffusion/two-for-one-diffusion/mdgen/splits/4AA_test_small.csv",
+    )
     parser.add_argument("--save", action="store_true")
     parser.add_argument("--plot", action="store_true")
     parser.add_argument("--traj_len", type=int, default=11)
@@ -270,7 +282,7 @@ if __name__ == "__main__":
     if args.pdb_id:
         pdb_id = args.pdb_id
     else:
-        
+
         pdb_id = pd.read_csv(args.split, index_col="name").index
         # pdb_id = list(
         #     set([nam.split("_")[0] for nam in os.listdir(pdbdir) if ".pdb" in nam])
@@ -286,7 +298,14 @@ if __name__ == "__main__":
     if args.append_exp_name:
         eval_folder += f"_{args.append_exp_name}"
     eval_func = lambda name: evaluate_tetrapeptide(
-        name, args.data_folder, eval_folder, eval_folder, args.data_folder, save=args.save, plot=args.plot, traj_len=args.traj_len
+        name,
+        args.data_folder,
+        eval_folder,
+        eval_folder,
+        args.data_folder,
+        save=args.save,
+        plot=args.plot,
+        traj_len=args.traj_len,
     )
 
     out = dict(tqdm.tqdm(__map__(eval_func, pdb_id), total=len(pdb_id)))

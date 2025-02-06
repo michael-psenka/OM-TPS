@@ -111,6 +111,7 @@ class GraphTransformer(nn.Module):
             edge_attr = self.get_edge_attr(x)
             edge_attr = self.edge_embedding(edge_attr)
 
+            padding_idx = None
             if z is not None:
                 z = z.to(self.device)
                 # find padding indices
@@ -129,7 +130,8 @@ class GraphTransformer(nn.Module):
             nodes = self.node_embedding(nodes)
             mask = torch.ones(x.size(0), x.size(1)).bool().to(x.device)
             # mask out the nodes that are for padding
-            mask[padding_idx] = False
+            if padding_idx is not None:
+                mask[padding_idx] = False
 
             nodes, _ = self.graphtransformer(nodes, edge_attr, mask=mask)
             output = self.node_decoder(nodes)
