@@ -56,7 +56,7 @@ def evaluate_tetrapeptide(
     )
     gen_traj_cat = np.concatenate(gen_traj_list, axis=0)
 
-    fig, axs = plt.subplots(6, 4, figsize=(20, 20))
+    fig, axs = plt.subplots(3, 4, figsize=(20, 20))
 
     pyemma.plots.plot_free_energy(
         *tica.transform(gen_traj_cat)[:, :2].T, ax=axs[0, 1], cbar=False
@@ -211,16 +211,16 @@ def evaluate_tetrapeptide(
 
     gen_stack_all = np.stack(gen_traj_list, axis=0)
 
-    # Plot 16 example generated transition paths superimposed on the TICA free energy landscape
-    for i in range(4):
-        for j in range(4):
-            idx = i * 4 + j
+    # Plot 4 example generated transition paths superimposed on the TICA free energy landscape
+    for i in range(2):
+        for j in range(2):
+            idx = i * 2 + j
             pyemma.plots.plot_free_energy(
-                *tica.transform(ref)[::100, :2].T, ax=axs[2 + i, j], cbar=False
+                *tica.transform(ref)[::100, :2].T, ax=axs[2, idx], cbar=False
             )
             plot_traj = tica.transform(gen_stack_all[idx])[:, :2]
-            axs[2 + i, j].plot(plot_traj[:, 0], plot_traj[:, 1], c="black", marker="o")
-            axs[2 + i, j].set_title(f"Trajectory {idx}")
+            axs[2, idx].plot(plot_traj[:, 0], plot_traj[:, 1], c="black", marker="o")
+            axs[2, idx].set_title(f"Trajectory {idx}")
 
     mapping = {value: idx for idx, value in enumerate(cmsm.active_set)}
     ref_tpt = pyemma.msm.tpt(cmsm, [mapping[start_state]], [mapping[end_state]])

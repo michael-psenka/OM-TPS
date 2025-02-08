@@ -674,7 +674,6 @@ class MDGenDataset(torch.utils.data.Dataset):
         )
 
         # arr should be in ANGSTROMS
-
         t_idx = np.random.randint(0, arr.shape[0])
         frame = torch.tensor(arr[t_idx], dtype=torch.float32)
 

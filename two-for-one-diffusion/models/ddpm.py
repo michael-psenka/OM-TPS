@@ -985,7 +985,6 @@ class GaussianDiffusion(nn.Module):
         ), f"Molecule shape must be {(num_atoms, dims)}"
 
         self.num_atoms = n
-
         t = torch.multinomial(self.p2_loss_weight, b, replacement=True).long()
         self.assert_normal_kl(
             x_start=mol, t=torch.full((b,), T, device=device, dtype=torch.long)

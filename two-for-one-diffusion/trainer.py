@@ -12,6 +12,7 @@ from torch.optim import AdamW
 from ema_pytorch import EMA
 import pickle
 from evaluate.evaluators import Evaluator, sample_from_model
+from models.ddpm import GaussianDiffusion
 from dynamics.langevin import temp_dict, temp_dict_pt, LangevinDiffusion
 import utils
 import time
@@ -156,6 +157,35 @@ class Trainer(object):
             experiment_name += "_"
         experiment_name = experiment_name  # + now.strftime("%Y-%m-%d_%X_%Z")
         self.writer = SummaryWriter(tb_folder + "/" + experiment_name + "_trn")
+        # log hyperparameters
+        hparam_dict = {
+            "lr": train_lr,
+            "batch_size": train_batch_size,
+            "num_steps": train_num_steps,
+            "gradient_accumulate_every": gradient_accumulate_every,
+            "ema_decay": ema_decay,
+            "weight_decay": weight_decay,
+            "num_atoms": self.num_atoms,
+            "data_aug": data_aug,
+            "amp": amp,
+            "step_start_ema": step_start_ema,
+            "ema_update_every": ema_update_every,
+            "save_and_sample_every": save_and_sample_every,
+            "num_saved_samples": num_saved_samples,
+            "log_tensorboard_interval": log_tensorboard_interval,
+            "num_samples_final_eval": num_samples_final_eval,
+            "min_lr_cosine_anneal": min_lr_cosine_anneal,
+            "eval_langevin": eval_langevin,
+            "langevin_timesteps": langevin_timesteps,
+            "langevin_stepsize": langevin_stepsize,
+            "pick_checkpoint": pick_checkpoint,
+            "start_from_last_saved": start_from_last_saved,
+            "iterations_on_val": iterations_on_val,
+            "t_diff_interval": t_diff_interval,
+            "save_all_checkpoints": save_all_checkpoints,
+        }
+        self.writer.add_hparams(hparam_dict, {})
+
         # self.writer_val = SummaryWriter(tb_folder + "/" + experiment_name + "_val")
 
         # Results folder from the new folder name
@@ -275,8 +305,19 @@ class Trainer(object):
                         ).mean()
                         scaled_loss = loss / self.gradient_accumulate_every
                         self.scaler.scale(scaled_loss).backward()
+                        # check for blowup
+                        if self.step > 500 and isinstance(
+                            self.model_dp, GaussianDiffusion
+                        ):
+                            if loss.item() - old_loss > 0.3:
+                                print(f"Loss blowup at step {self.step}")
+                                torch.save(old_mol, f"blowup_mol_step={self.step}.pt")
+                                torch.save(old_z, f"blowup_z_step={self.step}.pt")
 
                     pbar.set_description(f"loss: {loss.item():.4f}")
+                    old_loss = loss.item()
+                    old_mol = mol
+                    old_z = z
 
                     if self.step % self.log_tensorboard_interval == 0:
                         self.writer.add_scalar("Loss", loss.item(), self.step)

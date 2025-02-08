@@ -114,11 +114,10 @@ class GraphTransformer(nn.Module):
             padding_idx = None
             if z is not None:
                 z = z.to(self.device)
-                # find padding indices
-                padding_idx = z == 0
-
                 if len(z.shape) == 1:
                     z = z.unsqueeze(0).repeat(bs, 1)
+                # find padding indices
+                padding_idx = z == 0
                 z = self.bead_embedding(z)
                 h = torch.cat((h, z), dim=2)
 

@@ -442,21 +442,21 @@ def main(samp_args):
         else pd.read_csv(samp_args.split, index_col="name").index
     )
     for name in names:
-        try:
-            generate_samples(
-                model,
-                trainset,
-                samp_args.noise_level,
-                args,
-                device,
-                eval_folder,
-                testset,
-                name,
-                samp_args.sidechains,
-            )
-        except:
-            print(f"Failed to generate samples for {name}")
-            continue
+        # try:
+        generate_samples(
+            model,
+            trainset,
+            samp_args.noise_level,
+            args,
+            device,
+            eval_folder,
+            testset,
+            name,
+            samp_args.sidechains,
+        )
+        # except:
+        #     print(f"Failed to generate samples for {name}")
+        #     continue
 
     # writer.flush()
     # writer.close()
@@ -588,6 +588,7 @@ def generate_samples(
                 start_state,
                 end_state,
                 samp_args.num_samples_eval,
+                atom_selection="all-atom" if sidechains else "backbone",
             )
 
         else:
