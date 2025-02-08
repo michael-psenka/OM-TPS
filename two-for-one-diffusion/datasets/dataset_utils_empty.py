@@ -113,6 +113,7 @@ def get_dataset(
     tic_evaluator=None,
     committor_remove_range=[],  # range of committor values to remove
     remove_freq=0,  # frequency of removing clusters from data
+    tetra_atom_selection="backbone",
 ):
     """
     Get dataset for a specific molecule.
@@ -183,13 +184,22 @@ def get_dataset(
 
     elif mol == "tetrapeptides":
         trainset = MDGenDataset(
-            data_folder, suffix="_i100", split="./mdgen/splits/4AA_train_small.csv"
+            data_folder,
+            suffix="_i100",
+            split="./mdgen/splits/4AA_train_small.csv",
+            atom_selection=tetra_atom_selection,
         )
         valset = MDGenDataset(
-            data_folder, suffix="_i100", split="./mdgen/splits/4AA_val_small.csv"
+            data_folder,
+            suffix="_i100",
+            split="./mdgen/splits/4AA_val_small.csv",
+            atom_selection=tetra_atom_selection,
         )
         testset = MDGenDataset(
-            data_folder, suffix="_i100", split="./mdgen/splits/4AA_test_small.csv"
+            data_folder,
+            suffix="_i100",
+            split="./mdgen/splits/4AA_test_small.csv",
+            atom_selection=tetra_atom_selection,
         )
 
     elif "alanine_dipeptide" not in mol.lower():

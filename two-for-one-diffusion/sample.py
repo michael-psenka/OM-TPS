@@ -383,12 +383,16 @@ def main(samp_args):
     # writer = SummaryWriter(str(eval_folder))
 
     # Load dataset from args
+    atom_selection = None
+    if "tetrapeptide" in samp_args.model_path:
+        atom_selection = "all-atom" if samp_args.sidechains else "backbone"
     trainset, valset, testset = get_dataset(
         args.mol,
         args.mean0,
         args.data_folder,
         args.fold,
         shuffle_before_splitting=args.shuffle_data_before_splitting,
+        tetra_atom_selection=atom_selection,
     )
 
     norm_factor = trainset.std if args.scale_data else 1.0
@@ -442,21 +446,21 @@ def main(samp_args):
         else pd.read_csv(samp_args.split, index_col="name").index
     )
     for name in names:
-        # try:
-        generate_samples(
-            model,
-            trainset,
-            samp_args.noise_level,
-            args,
-            device,
-            eval_folder,
-            testset,
-            name,
-            samp_args.sidechains,
-        )
-        # except:
-        #     print(f"Failed to generate samples for {name}")
-        #     continue
+        try:
+            generate_samples(
+                model,
+                trainset,
+                samp_args.noise_level,
+                args,
+                device,
+                eval_folder,
+                testset,
+                name,
+                samp_args.sidechains,
+            )
+        except:
+            print(f"Failed to generate samples for {name}")
+            continue
 
     # writer.flush()
     # writer.close()

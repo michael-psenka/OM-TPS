@@ -7,7 +7,7 @@ python sample.py \
     --num_samples_eval 4  \
     --batch_size_gen 2 \
     --sidechains \
-    --latent_time 0 \
+    --latent_time 0.5 \
     --initial_guess_level 7 \
     --subsample_points_percent 1.0 \
     --subsample_dimensions_percent 1.0 \
@@ -15,11 +15,11 @@ python sample.py \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
-    --append_exp_name initial_guess_level=7 \
+    --append_exp_name initial_guess_level=7_latent_time=0.5 \
     --path_length 100 \
     --om_dt 1 \
     --om_d 0.01 \
-    --steps 10 \
+    --steps 250 \
 
 # python sample.py \
 #     --model_path saved_models/chignolin \
