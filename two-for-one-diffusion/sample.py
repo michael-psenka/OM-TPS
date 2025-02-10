@@ -51,7 +51,7 @@ import matplotlib.pyplot as plt
 import contextlib
 
 import mdgen.mdgen.analysis
-from mdgen.mdgen.utils import get_tetrapeptide_sample, atom14_to_pdb
+from mdgen.mdgen.utils import get_tetrapeptide_sample, atom14_to_pdb, get_bead_types
 from mdgen.mdgen.residue_constants import restype_order
 
 
@@ -504,15 +504,19 @@ def generate_samples(
             parallel_batches = torch.cuda.device_count()
         else:
             parallel_batches = 1
-
+        z = (
+            get_bead_types(
+                name, atom_selection="all-atom" if sidechains else "backbone"
+            )
+            if "tetrapeptide" in protein_name
+            else None
+        )
         sampled_mol = sample_from_model(
             sampler,
             samp_args.num_samples_eval // parallel_batches,
             samp_args.batch_size_gen // parallel_batches,
             verbose=True,
-            dataloader=(
-                cycle(dl) if "tetrapeptide" in protein_name else None
-            ),  # TODO: change this to just a single pdb_id
+            z=z,
         )
 
     # Generate interpolated samples
@@ -844,71 +848,81 @@ def generate_samples(
     else:
         raise Exception("Wrong argument 'gen_mode'")
 
+    if "tetrapeptide" in protein_name:
+        sampled_mol = sampled_mol[:, z != 0]  # remove padding atoms
+
     # Save generated samples
-    torch.save(sampled_mol, str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pt"))
+    name = "_" + name if name is not None else ""
+    torch.save(
+        sampled_mol, str(str(eval_folder) + f"/sample-{samp_args.gen_mode}{name}.pt")
+    )
+
+    # Also save as gsd
+    save_ovito_traj(
+        sampled_mol,
+        str(eval_folder) + f"/sample-{samp_args.gen_mode}{name}.gsd",
+        align=samp_args.gen_mode == "iid",
+        all_backbone="tetrapeptide" in protein_name and not sidechains,
+        create_bonds=not ("tetrapeptide" in protein_name and sidechains),
+    )
 
     # Save subset as pdb - convert from angstrom to nm
     if "tetrapeptide" in protein_name:
-        path = os.path.join(eval_folder, f"{name}_0.pdb")
-        if sidechains:
-            new_mol = sampled_mol.reshape(sampled_mol.shape[0], 4, 14, 3)
-        else:
-            mol = sampled_mol.reshape(sampled_mol.shape[0], 4, 3, 3)
-            new_mol = torch.zeros(mol.shape[0], 4, 14, 3)
-            new_mol[:, :, 0:3, :] = mol
-        metadata = []
-        # save pdb files of each sample separately
-        for i, batch in enumerate(new_mol.chunk(samp_args.num_samples_eval)):
-            atom14_to_pdb(
-                batch.cpu().numpy(), np.array([restype_order[c] for c in name]), path
-            )
+        if "interpolate" in samp_args.gen_mode:
+            path = os.path.join(eval_folder, f"{name}_0.pdb")
+            if sidechains:
+                new_mol = sampled_mol.reshape(sampled_mol.shape[0], 4, 14, 3)
+            else:
+                mol = sampled_mol.reshape(sampled_mol.shape[0], 4, 3, 3)
+                new_mol = torch.zeros(mol.shape[0], 4, 14, 3)
+                new_mol[:, :, 0:3, :] = mol
+            metadata = []
+            # save pdb files of each sample separately
+            for i, batch in enumerate(new_mol.chunk(samp_args.num_samples_eval)):
+                atom14_to_pdb(
+                    batch.cpu().numpy(),
+                    np.array([restype_order[c] for c in name]),
+                    path,
+                )
 
-            traj = mdtraj.load(path)
-            traj.superpose(traj)
-            traj.save(os.path.join(eval_folder, f"{name}_{i}.xtc"))
-            traj[0].save(os.path.join(eval_folder, f"{name}_{i}.pdb"))
+                traj = mdtraj.load(path)
+                traj.superpose(traj)
+                traj.save(os.path.join(eval_folder, f"{name}_{i}.xtc"))
+                traj[0].save(os.path.join(eval_folder, f"{name}_{i}.pdb"))
 
-            metadata.append(
-                {
-                    "name": name,
-                    "start_idx": chosen_start_idxs[i].item(),
-                    "end_idx": chosen_end_idxs[i].item(),
-                    "start_state": start_state.item(),
-                    "end_state": end_state.item(),
-                    "path": path,
-                }
-            )
-        json.dump(metadata, open(f"{eval_folder}/{name}_metadata.json", "w"))
+                metadata.append(
+                    {
+                        "name": name,
+                        "start_idx": chosen_start_idxs[i].item(),
+                        "end_idx": chosen_end_idxs[i].item(),
+                        "start_state": start_state.item(),
+                        "end_state": end_state.item(),
+                        "path": path,
+                    }
+                )
+            json.dump(metadata, open(f"{eval_folder}/{name}_metadata.json", "w"))
 
     else:
         all_mol_traj = md.Trajectory(
             sampled_mol[0:1000].numpy() / 10, topology=trainset.topology
         )
         all_mol_traj.save_pdb(
-            str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb")
+            str(str(eval_folder) + f"/sample-{samp_args.gen_mode}{name}.pdb")
         )
-
-    # Also save as gsd
-    save_ovito_traj(
-        sampled_mol,
-        str(eval_folder) + f"/sample-{samp_args.gen_mode}.gsd",
-        align=samp_args.gen_mode == "iid",
-        all_backbone="tetrapeptide" in protein_name
-        and trainset.atom_selection == "backbone",
-    )
 
     # Perform final evaluations (producing plots, GIFs, etc.)
     if "tetrapeptide" in protein_name:
-        evaluate_tetrapeptide(
-            name,
-            args.data_folder,
-            eval_folder,
-            eval_folder,
-            args.data_folder,
-            sidechains=sidechains,
-            save=True,
-            plot=True,
-        )
+        if "interpolate" in samp_args.gen_mode:
+            evaluate_tetrapeptide(
+                name,
+                args.data_folder,
+                eval_folder,
+                eval_folder,
+                args.data_folder,
+                sidechains=sidechains,
+                save=True,
+                plot=True,
+            )
 
     else:
         evaluate_fastfolders(

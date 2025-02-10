@@ -8,7 +8,7 @@ from torch.nn.utils import clip_grad_norm_
 from torch.utils.tensorboard import SummaryWriter
 from multiprocessing import cpu_count
 from torch.cuda.amp import autocast, GradScaler
-from torch.optim import AdamW
+from torch.optim import AdamW, SGD
 from ema_pytorch import EMA
 import pickle
 from evaluate.evaluators import Evaluator, sample_from_model
@@ -133,8 +133,13 @@ class Trainer(object):
         self.val_iters = iterations_on_val * len(self.dl_val)
         self.dl_val = cycle(self.dl_val)
 
-        self.opt = AdamW(
-            self.model.parameters(), lr=train_lr, weight_decay=weight_decay
+        # self.opt = AdamW(
+        #     self.model.parameters(), lr=train_lr, weight_decay=weight_decay
+        # )
+        self.opt = SGD(
+            self.model.parameters(),
+            lr=train_lr,
+            weight_decay=weight_decay,
         )
 
         if min_lr_cosine_anneal is not None:

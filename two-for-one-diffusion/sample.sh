@@ -1,11 +1,34 @@
+# python sample.py \
+#     --model_path saved_models/tetrapeptides_all_atom \
+#     --gen_mode om_interpolate \
+#     --flow_matching \
+#     --data_folder /data/sanjeevr/4AA_sim \
+#     --split mdgen/splits/4AA_test_small.csv \
+#     --num_samples_eval 4  \
+#     --batch_size_gen 2 \
+#     --sidechains \
+#     --latent_time 0.5 \
+#     --initial_guess_level 7 \
+#     --subsample_points_percent 1.0 \
+#     --subsample_dimensions_percent 1.0 \
+#     --no_encode_and_decode \
+#     --action truncated \
+#     --optimizer adam \
+#     --lr 2e-1 \
+#     --append_exp_name initial_guess_level=7_latent_time=0.5 \
+#     --path_length 100 \
+#     --om_dt 1 \
+#     --om_d 0.01 \
+#     --steps 250 \
+
 python sample.py \
     --model_path saved_models/tetrapeptides_all_atom \
-    --gen_mode om_interpolate \
+    --gen_mode iid \
     --flow_matching \
     --data_folder /data/sanjeevr/4AA_sim \
     --split mdgen/splits/4AA_test_small.csv \
-    --num_samples_eval 4  \
-    --batch_size_gen 2 \
+    --num_samples_eval 10  \
+    --batch_size_gen 10 \
     --sidechains \
     --latent_time 0.5 \
     --initial_guess_level 7 \
@@ -15,7 +38,7 @@ python sample.py \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
-    --append_exp_name initial_guess_level=7_latent_time=0.5 \
+    --append_exp_name test \
     --path_length 100 \
     --om_dt 1 \
     --om_d 0.01 \
@@ -35,11 +58,11 @@ python sample.py \
 #     --action truncated \
 #     --optimizer sgd \
 #     --lr 1e-3 \
-#     --append_exp_name test_sgd_initial_guess_level=7_dt=0.05 \
+#     --append_exp_name test \
 #     --om_dt 0.05 \
 #     --path_length 200 \
 #     --om_d 0.1 \
-#     --steps 5000
+#     --steps 100
 
 # python sample.py \
 #     --model_path saved_models/chignolin \

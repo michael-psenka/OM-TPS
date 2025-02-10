@@ -30,11 +30,10 @@ def evaluate_tetrapeptide(
     print(f"Evaluating {name}")
     np.random.seed(137)
     name = name.split("_")[0]
-
+    # TODO: Add a check for the existence of the TICA stuff and load from disk if they exist
     feats, ref = mdgen.mdgen.analysis.get_featurized_traj(
         f"{mddir}/{name}/{name}", sidechains=sidechains
     )
-
     tica, _ = mdgen.mdgen.analysis.get_tica(ref)
     out = pickle.load(open(os.path.join(pdbdir, f"{name}_metadata.pkl"), "rb"))
     msm = out["msm"]

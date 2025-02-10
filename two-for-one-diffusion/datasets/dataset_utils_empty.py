@@ -113,7 +113,7 @@ def get_dataset(
     tic_evaluator=None,
     committor_remove_range=[],  # range of committor values to remove
     remove_freq=0,  # frequency of removing clusters from data
-    tetra_atom_selection="backbone",
+    tetra_atom_selection="all-atom",
 ):
     """
     Get dataset for a specific molecule.
