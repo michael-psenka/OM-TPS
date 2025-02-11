@@ -21,24 +21,46 @@
 #     --om_d 0.01 \
 #     --steps 250 \
 
+# rerun with backbone only model
 python sample.py \
-    --model_path saved_models/tetrapeptides_all_atom \
-    --gen_mode iid \
-    --flow_matching \
+    --model_path saved_models/tetrapeptides \
+    --gen_mode om_interpolate \
     --data_folder /data/sanjeevr/4AA_sim \
-    --split mdgen/splits/4AA_test_small.csv \
-    --num_samples_eval 10  \
-    --batch_size_gen 10 \
-    --sidechains \
-    --latent_time 0.5 \
-    --initial_guess_level 7 \
+    --split mdgen/splits/4AA_val_small.csv \
+    --num_samples_eval 100  \
+    --batch_size_gen 100 \
+    --latent_time 0 \
+    --initial_guess_level 100 \
     --subsample_points_percent 1.0 \
     --subsample_dimensions_percent 1.0 \
     --no_encode_and_decode \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
-    --append_exp_name test \
+    --append_exp_name initial_guess_level=100_valset \
+    --path_length 25 \
+    --om_dt 1 \
+    --om_d 0.01 \
+    --steps 250 \
+
+# try with all-atom model
+python sample.py \
+    --model_path saved_models/tetrapeptides_all_atom \
+    --sidechains \
+    --gen_mode om_interpolate \
+    --data_folder /data/sanjeevr/4AA_sim \
+    --split mdgen/splits/4AA_val_small.csv \
+    --num_samples_eval 4  \
+    --batch_size_gen 2 \
+    --latent_time 0 \
+    --initial_guess_level 100 \
+    --subsample_points_percent 1.0 \
+    --subsample_dimensions_percent 1.0 \
+    --no_encode_and_decode \
+    --action truncated \
+    --optimizer adam \
+    --lr 2e-1 \
+    --append_exp_name initial_guess_level=100_valset \
     --path_length 100 \
     --om_dt 1 \
     --om_d 0.01 \

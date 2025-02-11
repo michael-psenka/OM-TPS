@@ -488,15 +488,6 @@ def generate_samples(
     else:
         protein_name = "tetrapeptide"
 
-    dl = torch.utils.data.DataLoader(
-        testset,
-        batch_size=min(len(testset), samp_args.batch_size_gen),
-        shuffle=True,
-        pin_memory=True,
-        num_workers=0,
-        drop_last=True,
-    )
-
     if samp_args.gen_mode == "iid":
         sampler = SamplerWrapper(model.ema_model).to(device).eval()
         if torch.cuda.device_count() > 1 and device == "cuda":
@@ -848,19 +839,20 @@ def generate_samples(
     else:
         raise Exception("Wrong argument 'gen_mode'")
 
-    if "tetrapeptide" in protein_name:
-        sampled_mol = sampled_mol[:, z != 0]  # remove padding atoms
+    # if "tetrapeptide" in protein_name and sidechains and :
+    #     sampled_mol = sampled_mol[:, z != 0]  # remove padding atoms
 
     # Save generated samples
-    name = "_" + name if name is not None else ""
+    append_name = "_" + name if name is not None else ""
     torch.save(
-        sampled_mol, str(str(eval_folder) + f"/sample-{samp_args.gen_mode}{name}.pt")
+        sampled_mol,
+        str(str(eval_folder) + f"/sample-{samp_args.gen_mode}{append_name}.pt"),
     )
 
     # Also save as gsd
     save_ovito_traj(
         sampled_mol,
-        str(eval_folder) + f"/sample-{samp_args.gen_mode}{name}.gsd",
+        str(eval_folder) + f"/sample-{samp_args.gen_mode}{append_name}.gsd",
         align=samp_args.gen_mode == "iid",
         all_backbone="tetrapeptide" in protein_name and not sidechains,
         create_bonds=not ("tetrapeptide" in protein_name and sidechains),
@@ -907,7 +899,7 @@ def generate_samples(
             sampled_mol[0:1000].numpy() / 10, topology=trainset.topology
         )
         all_mol_traj.save_pdb(
-            str(str(eval_folder) + f"/sample-{samp_args.gen_mode}{name}.pdb")
+            str(str(eval_folder) + f"/sample-{samp_args.gen_mode}{append_name}.pdb")
         )
 
     # Perform final evaluations (producing plots, GIFs, etc.)

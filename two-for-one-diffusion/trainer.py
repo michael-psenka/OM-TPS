@@ -37,6 +37,7 @@ class Trainer(object):
         diffusion_model,
         dataset,  # tuple: (train_data, val_data, test_data)
         mol_name,
+        atom_selection,
         args,
         ema_decay=0.995,
         train_batch_size=32,
@@ -133,14 +134,14 @@ class Trainer(object):
         self.val_iters = iterations_on_val * len(self.dl_val)
         self.dl_val = cycle(self.dl_val)
 
-        # self.opt = AdamW(
-        #     self.model.parameters(), lr=train_lr, weight_decay=weight_decay
-        # )
-        self.opt = SGD(
-            self.model.parameters(),
-            lr=train_lr,
-            weight_decay=weight_decay,
+        self.opt = AdamW(
+            self.model.parameters(), lr=train_lr, weight_decay=weight_decay
         )
+        # self.opt = SGD(
+        #     self.model.parameters(),
+        #     lr=train_lr,
+        #     weight_decay=weight_decay,
+        # )
 
         if min_lr_cosine_anneal is not None:
             self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -228,7 +229,7 @@ class Trainer(object):
                 self.load()
                 print("Settings loaded from last checkpoint")
             except:
-                print("Not last checkpoint available to load.")
+                print("No last checkpoint available to load.")
 
     def save(self, milestone: dict, save_best: bool = False):
         """
@@ -311,13 +312,13 @@ class Trainer(object):
                         scaled_loss = loss / self.gradient_accumulate_every
                         self.scaler.scale(scaled_loss).backward()
                         # check for blowup
-                        if self.step > 500 and isinstance(
-                            self.model_dp, GaussianDiffusion
-                        ):
-                            if loss.item() - old_loss > 0.3:
-                                print(f"Loss blowup at step {self.step}")
-                                torch.save(old_mol, f"blowup_mol_step={self.step}.pt")
-                                torch.save(old_z, f"blowup_z_step={self.step}.pt")
+                        # if self.step > 500 and isinstance(
+                        #     self.model_dp, GaussianDiffusion
+                        # ):
+                        #     if loss.item() - old_loss > 0.3:
+                        #         print(f"Loss blowup at step {self.step}")
+                        #         torch.save(old_mol, f"blowup_mol_step={self.step}.pt")
+                        #         torch.save(old_z, f"blowup_z_step={self.step}.pt")
 
                     pbar.set_description(f"loss: {loss.item():.4f}")
                     old_loss = loss.item()
@@ -367,6 +368,9 @@ class Trainer(object):
                         else None
                     )
                     # Evaluate i.i.d.
+                    import pdb
+
+                    pdb.set_trace()
                     sampled_mol = sample_from_model(
                         self.sampler_ema_dp,
                         self.num_saved_samples // self.parallel_batches,

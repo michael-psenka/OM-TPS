@@ -26,6 +26,12 @@ parser.add_argument(
     help=f"Select molecule, choose from (case insensitive): {all_molecules}",
 )
 parser.add_argument(
+    "--atom_selection",
+    type=str,
+    default="all-atom",
+    help=f"Choose from: all-atom, c-alpha, backbone",
+)
+parser.add_argument(
     "--fold",
     type=int,
     default=1,
@@ -341,7 +347,8 @@ if __name__ == "__main__":
         shuffle_before_splitting=args.shuffle_data_before_splitting,
         tic_evaluator=tic_evaluator,
         committor_remove_range=args.committor_remove_range,  # range of committor values to remove
-        remove_freq=args.remove_freq,  # frequency of removing clusters from data
+        remove_freq=args.remove_freq,  # frequency of removing clusters from data,
+        tetra_atom_selection=args.atom_selection,
     )
 
     norm_factor = trainset.std if args.scale_data else 1.0
@@ -381,6 +388,7 @@ if __name__ == "__main__":
         DDPM_model.to(device),
         (trainset, valset, testset),
         args.mol,
+        args.atom_selection,
         args,
         train_batch_size=args.batch_size,
         train_lr=args.learning_rate,

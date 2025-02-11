@@ -1175,7 +1175,8 @@ def sample_from_model(sampler, num_saved_samples, batch_size, verbose=False, z=N
     all_mol_list = []
     for i, batch_size in enumerate(batches):
         if z is not None:
-            z = z.unsqueeze(0)
+            if len(z.shape) == 1:
+                z = z.unsqueeze(0)
             z = z.repeat(math.ceil(batch_size / z.shape[0]), 1)[:batch_size]
         all_mol_list.append(sampler(batch_size=batch_size, z=z))
         if verbose:
