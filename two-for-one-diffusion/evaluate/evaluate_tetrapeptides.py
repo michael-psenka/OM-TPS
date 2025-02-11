@@ -13,6 +13,8 @@ import pyemma, tqdm, os
 import numpy as np
 import matplotlib.pyplot as plt
 
+# TODO: add rate evaluations and checks for unphysical collisions
+
 
 def evaluate_tetrapeptide(
     name,
