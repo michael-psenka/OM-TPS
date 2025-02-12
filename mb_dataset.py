@@ -35,7 +35,6 @@ class MBDataset(Dataset):
 
     def __init__(
         self,
-        calculator: MullerBrownPotential,
         seed: int = 0,
         temperature: float = 450.0,
         n_sims: int = 100,
@@ -51,6 +50,7 @@ class MBDataset(Dataset):
         save_path: Optional[str] = None,
         use_langevin: bool = True,
         initial_positions: np.array = None,
+        calculator = None,
     ):
 
         np.random.seed(seed)
