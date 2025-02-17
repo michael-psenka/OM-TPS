@@ -509,6 +509,9 @@ def generate_samples(
             verbose=True,
             z=z,
         )
+        if sampled_mol[:, z != 0].max() > 20:
+            print("Warning: sampled_mol.max() > 20, clipping to 20")
+            sampled_mol = torch.clamp(sampled_mol, -20, 20)
 
     # Generate interpolated samples
     elif "interpolate" in samp_args.gen_mode:
