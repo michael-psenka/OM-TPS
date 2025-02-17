@@ -225,11 +225,8 @@ class Trainer(object):
         self.eval_langevin = eval_langevin
         self.best_val_loss = inf
         if start_from_last_saved:
-            try:
-                self.load()
-                print("Settings loaded from last checkpoint")
-            except:
-                print("No last checkpoint available to load.")
+            self.load()
+            print("Settings loaded from last checkpoint")
 
     def save(self, milestone: dict, save_best: bool = False):
         """
@@ -368,14 +365,13 @@ class Trainer(object):
                         else None
                     )
                     # Evaluate i.i.d.
-                    import pdb; pdb.set_trace()
+                    # import pdb; pdb.set_trace()
                     sampled_mol = sample_from_model(
                         self.sampler_ema_dp,
                         self.num_saved_samples // self.parallel_batches,
                         self.batch_size // self.parallel_batches,
                         z=z,
                     )
-                    
 
                     # Save as gsd
                     save_ovito_traj(
