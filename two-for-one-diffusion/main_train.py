@@ -28,7 +28,7 @@ parser.add_argument(
 parser.add_argument(
     "--atom_selection",
     type=str,
-    default="all-atom",
+    default="backbone",
     help=f"Choose from: all-atom, c-alpha, backbone",
 )
 parser.add_argument(
@@ -360,7 +360,6 @@ if __name__ == "__main__":
     # GNN model
     # For in_node_nf, the features are:
     model = get_model(args, trainset, device)
-    print(model)
 
     # Diffusion model
     if args.flow_matching:
