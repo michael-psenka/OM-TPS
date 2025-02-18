@@ -2,6 +2,7 @@
 *.traj
 *.bck
 log
+*.pt
 mnist_data/
 data
 *.png
@@ -16,9 +17,6 @@ two-for-one-diffusion/
 dig/
 alphaflow/
 .bashrc
-
-*.pt
-!mb_flowmatching_model.pt
 
 # ignore test notebook
 michael_testbed.ipynb
