@@ -4,6 +4,7 @@
 import abc
 import torch
 import numpy as np
+import math
 
 
 class SDE(abc.ABC):
@@ -114,29 +115,42 @@ class SDE(abc.ABC):
 
         return RSDE()
 
-
 class VPSDE(SDE):
-    def __init__(self, beta_min=0.1, beta_max=20, N=1000):
+    def __init__(self, beta_min=0.1, beta_max=20, N=1000, cosine_schedule = True):
         """Construct a Variance Preserving SDE.
 
         Args:
           beta_min: value of beta(0)
           beta_max: value of beta(1)
           N: number of discretization steps
+          cosine_schedule: whether to use a cosine noise schedule
         """
         super().__init__(N)
         self.beta_0 = beta_min
         self.beta_1 = beta_max
         self.N = N
-        self.discrete_betas = torch.linspace(beta_min / N, beta_max / N, N)
+        if cosine_schedule:
+            self.discrete_betas = self._cosine_variance_schedule()
+        else:
+            self.discrete_betas = torch.linspace(beta_min / N, beta_max / N, N)
         self.alphas = 1.0 - self.discrete_betas
         self.alphas_cumprod = torch.cumprod(self.alphas, dim=0)
         self.sqrt_alphas_cumprod = torch.sqrt(self.alphas_cumprod)
         self.sqrt_1m_alphas_cumprod = torch.sqrt(1.0 - self.alphas_cumprod)
 
+    def _cosine_variance_schedule(self, epsilon=0.008):
+        steps = torch.linspace(0, self.N, steps=self.N + 1, dtype=torch.float32)
+        f_t = (
+            torch.cos(((steps / self.N + epsilon) / (1.0 + epsilon)) * math.pi * 0.5)
+            ** 2
+        )
+        betas = torch.clip(1.0 - f_t[1:] / f_t[:self.N], 0.0, 0.999)
+        return betas
+
+
     @property
     def T(self):
-        return 1
+        return self.N
 
     def sde(self, x, t):
         beta_t = self.beta_0 + t * (self.beta_1 - self.beta_0)
