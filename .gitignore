@@ -17,6 +17,10 @@ two-for-one-diffusion/
 dig/
 alphaflow/
 .bashrc
+*txt
+*pdf
+*vtu
+*pvd
 
 # ignore test notebook
 michael_testbed.ipynb
