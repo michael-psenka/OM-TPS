@@ -50,7 +50,7 @@ class MBDataset(Dataset):
         save_path: Optional[str] = None,
         use_langevin: bool = True,
         initial_positions: np.array = None,
-        calculator = None,
+        calculator=None,
     ):
 
         np.random.seed(seed)
