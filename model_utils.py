@@ -159,15 +159,15 @@ def get_score_fn(sde, model, train=False, continuous=False):
             # Scale neural network output by standard deviation and flip sign
             if continuous:
                 # For VP-trained models, t=0 corresponds to the lowest noise level
-                # The maximum value of time embedding is assumed to 999 for
-                # continuously-trained models.
-                labels = t * 999
-                score = model_fn(x, labels)
-                std = sde.marginal_prob(torch.zeros_like(x), t)[1]
-            else:
-                # For VP-trained models, t=0 corresponds to the lowest noise level
                 labels = t * (sde.N - 1)
                 score = model_fn(x, labels)
+                std = sde.marginal_prob(torch.zeros_like(x), labels)[1]
+            else:
+                # For VP-trained models, t=0 corresponds to the lowest noise level
+
+                labels = t * (sde.N - 1)
+                score = model_fn(x, labels)
+                # rounding is happening here
                 std = sde.sqrt_1m_alphas_cumprod.to(labels.device)[labels.long()]
 
             # unsqueeze std to match the shape of score

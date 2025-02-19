@@ -37,6 +37,23 @@ def get_div_fn(fn):
         x.requires_grad_(False)
         return torch.sum(grad_fn_eps * eps, dim=tuple(range(1, len(x.shape))))
 
+    # def div_fn(x, t, eps):
+    #     with torch.enable_grad():
+    #         x.requires_grad_(True)
+    #         fn_eps = torch.sum(fn(x, t).unsqueeze(0) * eps, dim=tuple(range(2, 1+len(x.shape))))
+
+    #         def vjp_func(v):
+    #             return torch.autograd.grad(fn_eps.sum(dim=tuple(range(1, len(fn_eps.shape)))), x, grad_outputs=v, create_graph=True)[0]
+    #         vectorized_vjp_func = torch.vmap(vjp_func)
+    #         I_N = torch.eye(eps.shape[0], device=eps.device)
+    #         grad_fn_eps = vectorized_vjp_func(I_N)
+
+    #     x.requires_grad_(False)
+    #     # Compute the dot product for each sample of eps
+    #     divergence_estimates = torch.sum(grad_fn_eps * eps, dim=tuple(range(1, len(eps.shape))))  # [N, Batch size]
+    #     # Average over N samples
+    #     return divergence_estimates.mean(dim=0)  # [Batch size]
+
     return div_fn
 
 
@@ -44,6 +61,7 @@ def get_likelihood_fn(
     sde,
     inverse_scaler,
     hutchinson_type="Rademacher",
+    hutchinson_n_samples=1,
     rtol=1e-5,
     atol=1e-5,
     method="RK45",
@@ -55,6 +73,7 @@ def get_likelihood_fn(
       sde: A `sde_lib.SDE` object that represents the forward SDE.
       inverse_scaler: The inverse data normalizer.
       hutchinson_type: "Rademacher" or "Gaussian". The type of noise for Hutchinson-Skilling trace estimator.
+      hutchinson_n_samples: An integer. The number of samples to estimate the trace.
       rtol: A `float` number. The relative tolerance level of the black-box ODE solver.
       atol: A `float` number. The absolute tolerance level of the black-box ODE solver.
       method: A `str`. The algorithm for the black-box ODE solver.
@@ -91,10 +110,12 @@ def get_likelihood_fn(
         """
         with torch.no_grad():
             shape = data.shape
+            dummy = data
+            # dummy = torch.zeros_like(data).unsqueeze(0).expand((hutchinson_n_samples, *data.shape))
             if hutchinson_type == "Gaussian":
-                epsilon = torch.randn_like(data)
+                epsilon = torch.randn_like(dummy)
             elif hutchinson_type == "Rademacher":
-                epsilon = torch.randint_like(data, low=0, high=2).float() * 2 - 1.0
+                epsilon = torch.randint_like(dummy, low=0, high=2).float() * 2 - 1.0
             else:
                 raise NotImplementedError(f"Hutchinson type {hutchinson_type} unknown.")
 
