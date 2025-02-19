@@ -103,8 +103,10 @@ def get_likelihood_fn(
                     mutils.from_flattened_numpy(x[: -shape[0]], shape)
                     .to(data.device)
                     .type(torch.float32)
-                )
-                vec_t = torch.ones(sample.shape[0], device=sample.device) * t
+                )  # [batch_size, dim]
+                vec_t = (
+                    torch.ones(sample.shape[0], device=sample.device) * t
+                )  # [batch_size,]
                 drift = mutils.to_flattened_numpy(drift_fn(model, sample, vec_t))
                 logp_grad = mutils.to_flattened_numpy(
                     div_fn(model, sample, vec_t, epsilon)
@@ -130,12 +132,15 @@ def get_likelihood_fn(
                 .type(torch.float32)
             )
             prior_logp = sde.prior_logp(z)
-            bpd = -(prior_logp + delta_logp) / np.log(2)
+            log_likelihood = prior_logp + delta_logp
+            bpd = -(log_likelihood) / np.log(2)
             N = np.prod(shape[1:])
             bpd = bpd / N
             # A hack to convert log-likelihoods to bits/dim
             offset = 7.0 - inverse_scaler(-1.0)
+            while bpd.dim() < offset.dim():
+                bpd = bpd.unsqueeze(-1)
             bpd = bpd + offset
-            return bpd, z, nfe
+            return log_likelihood, bpd, nfe
 
     return likelihood_fn

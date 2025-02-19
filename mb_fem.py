@@ -10,10 +10,10 @@ if __name__ == "__main__":
     # react_min = np.genfromtxt('react_min.txt')
     # prod_min = np.genfromtxt('prod_min.txt')
 
-    beta = Constant('16.58') # inverse kB*T
+    beta = Constant("16.58")  # inverse kB*T
     react_radii = 5
     prod_radii = 5
-    calculator = MullerBrownPotential(device='cpu')
+    calculator = MullerBrownPotential(device="cpu")
 
     react_min = np.array(calculator.initial_point)
     prod_min = np.array(calculator.final_point)
@@ -25,9 +25,11 @@ if __name__ == "__main__":
     x_ref = np.array(calculator.a)
     y_ref = np.array(calculator.b)
 
-    rectangle = Rectangle(Point(calculator.Lx, calculator.Ly), Point(calculator.Hx, calculator.Hy))
-    react_domain = Circle(Point(react_min[0],react_min[1]), react_radii) 
-    prod_domain = Circle(Point(prod_min[0],prod_min[1]), prod_radii) 
+    rectangle = Rectangle(
+        Point(calculator.Lx, calculator.Ly), Point(calculator.Hx, calculator.Hy)
+    )
+    react_domain = Circle(Point(react_min[0], react_min[1]), react_radii)
+    prod_domain = Circle(Point(prod_min[0], prod_min[1]), prod_radii)
     domain = rectangle
 
     # Make subdomains
@@ -48,7 +50,7 @@ if __name__ == "__main__":
         for c in cells(f):
             domains.append(boundary_markers[c])
         domains = list(set(domains))
-        #if len(domains) > 1:
+        # if len(domains) > 1:
         for i in domains:
             if i == 1:
                 boundaries_react[f] = 2
@@ -56,7 +58,7 @@ if __name__ == "__main__":
                 boundaries_prod[f] = 2
 
     # Make function space
-    V = FunctionSpace(mesh, 'P', 1)
+    V = FunctionSpace(mesh, "P", 1)
 
     # Define boundary conditions
     bc_react = DirichletBC(V, Constant(0), boundaries_react, 2)
@@ -66,63 +68,192 @@ if __name__ == "__main__":
     # Define variational problem
     u = TrialFunction(V)
     v = TestFunction(V)
-    
 
-    f_0 = Expression('A_*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))', 
-                 degree=2, A_=A[0], a_=alpha[0], b_=beta_[0], c_=gamma[0], x_=x_ref[0], y_=y_ref[0])
-    f_0_exp = Expression('exp(-beta*A_*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_)))', 
-                        degree=2, A_=A[0], a_=alpha[0], b_=beta_[0], c_=gamma[0], x_=x_ref[0], y_=y_ref[0], beta=beta.values().item())
-    f_0_x = Expression('A_*(2*a_*(x[0]-x_)+b_*(x[1]-y_))*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))', 
-                    degree=2, A_=A[0], a_=alpha[0], b_=beta_[0], c_=gamma[0], x_=x_ref[0], y_=y_ref[0])
-    f_0_y = Expression('A_*(b_*(x[0]-x_)+2*c_*(x[1]-y_))*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))', 
-                    degree=2, A_=A[0], a_=alpha[0], b_=beta_[0], c_=gamma[0], x_=x_ref[0], y_=y_ref[0])
+    f_0 = Expression(
+        "A_*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))",
+        degree=2,
+        A_=A[0],
+        a_=alpha[0],
+        b_=beta_[0],
+        c_=gamma[0],
+        x_=x_ref[0],
+        y_=y_ref[0],
+    )
+    f_0_exp = Expression(
+        "exp(-beta*A_*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_)))",
+        degree=2,
+        A_=A[0],
+        a_=alpha[0],
+        b_=beta_[0],
+        c_=gamma[0],
+        x_=x_ref[0],
+        y_=y_ref[0],
+        beta=beta.values().item(),
+    )
+    f_0_x = Expression(
+        "A_*(2*a_*(x[0]-x_)+b_*(x[1]-y_))*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))",
+        degree=2,
+        A_=A[0],
+        a_=alpha[0],
+        b_=beta_[0],
+        c_=gamma[0],
+        x_=x_ref[0],
+        y_=y_ref[0],
+    )
+    f_0_y = Expression(
+        "A_*(b_*(x[0]-x_)+2*c_*(x[1]-y_))*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))",
+        degree=2,
+        A_=A[0],
+        a_=alpha[0],
+        b_=beta_[0],
+        c_=gamma[0],
+        x_=x_ref[0],
+        y_=y_ref[0],
+    )
     f_0_grad = as_vector((f_0_x, f_0_y))
 
     # Repeat for f_1
-    f_1 = Expression('A_*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))', 
-                    degree=2, A_=A[1], a_=alpha[1], b_=beta_[1], c_=gamma[1], x_=x_ref[1], y_=y_ref[1])
-    f_1_exp = Expression('exp(-beta*A_*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_)))', 
-                        degree=2, A_=A[1], a_=alpha[1], b_=beta_[1], c_=gamma[1], x_=x_ref[1], y_=y_ref[1], beta=beta.values().item())
-    f_1_x = Expression('A_*(2*a_*(x[0]-x_)+b_*(x[1]-y_))*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))', 
-                    degree=2, A_=A[1], a_=alpha[1], b_=beta_[1], c_=gamma[1], x_=x_ref[1], y_=y_ref[1])
-    f_1_y = Expression('A_*(b_*(x[0]-x_)+2*c_*(x[1]-y_))*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))', 
-                    degree=2, A_=A[1], a_=alpha[1], b_=beta_[1], c_=gamma[1], x_=x_ref[1], y_=y_ref[1])
+    f_1 = Expression(
+        "A_*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))",
+        degree=2,
+        A_=A[1],
+        a_=alpha[1],
+        b_=beta_[1],
+        c_=gamma[1],
+        x_=x_ref[1],
+        y_=y_ref[1],
+    )
+    f_1_exp = Expression(
+        "exp(-beta*A_*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_)))",
+        degree=2,
+        A_=A[1],
+        a_=alpha[1],
+        b_=beta_[1],
+        c_=gamma[1],
+        x_=x_ref[1],
+        y_=y_ref[1],
+        beta=beta.values().item(),
+    )
+    f_1_x = Expression(
+        "A_*(2*a_*(x[0]-x_)+b_*(x[1]-y_))*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))",
+        degree=2,
+        A_=A[1],
+        a_=alpha[1],
+        b_=beta_[1],
+        c_=gamma[1],
+        x_=x_ref[1],
+        y_=y_ref[1],
+    )
+    f_1_y = Expression(
+        "A_*(b_*(x[0]-x_)+2*c_*(x[1]-y_))*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))",
+        degree=2,
+        A_=A[1],
+        a_=alpha[1],
+        b_=beta_[1],
+        c_=gamma[1],
+        x_=x_ref[1],
+        y_=y_ref[1],
+    )
     f_1_grad = as_vector((f_1_x, f_1_y))
 
     # Repeat for f_2
-    f_2 = Expression('A_*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))', 
-                    degree=2, A_=A[2], a_=alpha[2], b_=beta_[2], c_=gamma[2], x_=x_ref[2], y_=y_ref[2])
-    f_2_exp = Expression('exp(-beta*A_*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_)))', 
-                        degree=2, A_=A[2], a_=alpha[2], b_=beta_[2], c_=gamma[2], x_=x_ref[2], y_=y_ref[2], beta=beta.values().item())
-    f_2_x = Expression('A_*(2*a_*(x[0]-x_)+b_*(x[1]-y_))*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))', 
-                    degree=2, A_=A[2], a_=alpha[2], b_=beta_[2], c_=gamma[2], x_=x_ref[2], y_=y_ref[2])
-    f_2_y = Expression('A_*(b_*(x[0]-x_)+2*c_*(x[1]-y_))*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))', 
-                    degree=2, A_=A[2], a_=alpha[2], b_=beta_[2], c_=gamma[2], x_=x_ref[2], y_=y_ref[2])
+    f_2 = Expression(
+        "A_*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))",
+        degree=2,
+        A_=A[2],
+        a_=alpha[2],
+        b_=beta_[2],
+        c_=gamma[2],
+        x_=x_ref[2],
+        y_=y_ref[2],
+    )
+    f_2_exp = Expression(
+        "exp(-beta*A_*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_)))",
+        degree=2,
+        A_=A[2],
+        a_=alpha[2],
+        b_=beta_[2],
+        c_=gamma[2],
+        x_=x_ref[2],
+        y_=y_ref[2],
+        beta=beta.values().item(),
+    )
+    f_2_x = Expression(
+        "A_*(2*a_*(x[0]-x_)+b_*(x[1]-y_))*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))",
+        degree=2,
+        A_=A[2],
+        a_=alpha[2],
+        b_=beta_[2],
+        c_=gamma[2],
+        x_=x_ref[2],
+        y_=y_ref[2],
+    )
+    f_2_y = Expression(
+        "A_*(b_*(x[0]-x_)+2*c_*(x[1]-y_))*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))",
+        degree=2,
+        A_=A[2],
+        a_=alpha[2],
+        b_=beta_[2],
+        c_=gamma[2],
+        x_=x_ref[2],
+        y_=y_ref[2],
+    )
     f_2_grad = as_vector((f_2_x, f_2_y))
 
     # Repeat for f_3
-    f_3 = Expression('A_*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))', 
-                    degree=2, A_=A[3], a_=alpha[3], b_=beta_[3], c_=gamma[3], x_=x_ref[3], y_=y_ref[3])
-    f_3_exp = Expression('exp(-beta*A_*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_)))', 
-                        degree=2, A_=A[3], a_=alpha[3], b_=beta_[3], c_=gamma[3], x_=x_ref[3], y_=y_ref[3], beta=beta.values().item())
-    f_3_x = Expression('A_*(2*a_*(x[0]-x_)+b_*(x[1]-y_))*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))', 
-                    degree=2, A_=A[3], a_=alpha[3], b_=beta_[3], c_=gamma[3], x_=x_ref[3], y_=y_ref[3])
-    f_3_y = Expression('A_*(b_*(x[0]-x_)+2*c_*(x[1]-y_))*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))', 
-                    degree=2, A_=A[3], a_=alpha[3], b_=beta_[3], c_=gamma[3], x_=x_ref[3], y_=y_ref[3])
+    f_3 = Expression(
+        "A_*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))",
+        degree=2,
+        A_=A[3],
+        a_=alpha[3],
+        b_=beta_[3],
+        c_=gamma[3],
+        x_=x_ref[3],
+        y_=y_ref[3],
+    )
+    f_3_exp = Expression(
+        "exp(-beta*A_*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_)))",
+        degree=2,
+        A_=A[3],
+        a_=alpha[3],
+        b_=beta_[3],
+        c_=gamma[3],
+        x_=x_ref[3],
+        y_=y_ref[3],
+        beta=beta.values().item(),
+    )
+    f_3_x = Expression(
+        "A_*(2*a_*(x[0]-x_)+b_*(x[1]-y_))*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))",
+        degree=2,
+        A_=A[3],
+        a_=alpha[3],
+        b_=beta_[3],
+        c_=gamma[3],
+        x_=x_ref[3],
+        y_=y_ref[3],
+    )
+    f_3_y = Expression(
+        "A_*(b_*(x[0]-x_)+2*c_*(x[1]-y_))*exp(a_*(x[0]-x_)*(x[0]-x_)+b_*(x[0]-x_)*(x[1]-y_)+c_*(x[1]-y_)*(x[1]-y_))",
+        degree=2,
+        A_=A[3],
+        a_=alpha[3],
+        b_=beta_[3],
+        c_=gamma[3],
+        x_=x_ref[3],
+        y_=y_ref[3],
+    )
     f_3_grad = as_vector((f_3_x, f_3_y))
 
-
-    
-    f_total = f_0+f_1+f_2+f_3
-    f_total_exp = f_0_exp*f_1_exp*f_2_exp*f_3_exp
-    f_grad_total = f_0_grad+f_1_grad+f_2_grad+f_3_grad
-    #f_total = Expression('10*exp(-(pow(x[0] - 0.5, 2) + pow(x[1] - 0.5, 2)) / 0.02)', degree=2)
-    a = (dot(grad(u), grad(v))+beta*dot(f_grad_total,grad(u))*v)*dx
-    L = Constant('0')*v*dx
+    f_total = f_0 + f_1 + f_2 + f_3
+    f_total_exp = f_0_exp * f_1_exp * f_2_exp * f_3_exp
+    f_grad_total = f_0_grad + f_1_grad + f_2_grad + f_3_grad
+    # f_total = Expression('10*exp(-(pow(x[0] - 0.5, 2) + pow(x[1] - 0.5, 2)) / 0.02)', degree=2)
+    a = (dot(grad(u), grad(v)) + beta * dot(f_grad_total, grad(u)) * v) * dx
+    L = Constant("0") * v * dx
 
     # Compute solution
     u = Function(V)
-    solve(a == L, u, bcs, solver_parameters={'linear_solver' : 'mumps'})
+    solve(a == L, u, bcs, solver_parameters={"linear_solver": "mumps"})
 
     vertex_values = u.compute_vertex_values(mesh)
     coordinates = mesh.coordinates()
@@ -131,55 +262,64 @@ if __name__ == "__main__":
 
     # Evaluate u at points
     # p = Point(-0.6,0.5)
-    
+
     gu = grad(u)
     Gu = project(gu, solver_type="cg")
-    #Gu = dot(Gu,Gu)
-    cost = assemble(dot(grad(u), grad(u))*f_total_exp*dx)
+    # Gu = dot(Gu,Gu)
+    cost = assemble(dot(grad(u), grad(u)) * f_total_exp * dx)
     # print(cost)
 
     # Save solution to file in VTK format
-    vtkfile = File('poisson/solution.pvd')
+    vtkfile = File("poisson/solution.pvd")
     vtkfile << u
 
     # Evaluate points on structured grid
     n_struct = 100
-    points_x = np.linspace(calculator.Lx,calculator.Hx,n_struct)
-    points_y = np.linspace(calculator.Ly,calculator.Hy,n_struct)
-    xx, yy = np.meshgrid(points_x,points_y)
+    points_x = np.linspace(calculator.Lx, calculator.Hx, n_struct)
+    points_y = np.linspace(calculator.Ly, calculator.Hy, n_struct)
+    xx, yy = np.meshgrid(points_x, points_y)
     zz = np.zeros_like(xx)
     grad_2_zz = np.zeros_like(xx)
     for i in range(n_struct):
         for j in range(n_struct):
-            p = Point(xx[i][j],yy[i][j])
+            p = Point(xx[i][j], yy[i][j])
             zz[i][j] = u(p)
             test = Gu(p)
-            grad_2_zz[i][j] = test[0]*test[0]+test[1]*test[1]
+            grad_2_zz[i][j] = test[0] * test[0] + test[1] * test[1]
 
     np.savetxt("vertex_values_struct.txt", vertex_values)
     np.savetxt("vertex_coords_struct.txt", coordinates)
     np.savetxt("xx_structured.txt", xx)
     np.savetxt("yy_structured.txt", yy)
     np.savetxt("zz_structured.txt", zz)
-    with open('vertex_values_struct.txt', 'w') as outf:
+    with open("vertex_values_struct.txt", "w") as outf:
         for i in range(n_struct):
             for j in range(n_struct):
                 outf.write("{:.6g}\n".format(zz[i][j]))
 
-    with open('vertex_coords_struct.txt', 'w') as outf:
+    with open("vertex_coords_struct.txt", "w") as outf:
         for i in range(n_struct):
             for j in range(n_struct):
-                outf.write("{:.6g} {:.6g}\n".format(xx[i][j],yy[i][j]))
+                outf.write("{:.6g} {:.6g}\n".format(xx[i][j], yy[i][j]))
 
     # Evaluate energies over grid
-    grid_points = np.stack([xx, yy], axis = -1).reshape(-1, 2)
-    energies = calculator.get_energy(grid_points).reshape(n_struct, n_struct).detach().numpy()
+    grid_points = np.stack([xx, yy], axis=-1).reshape(-1, 2)
+    energies = (
+        calculator.get_energy(grid_points).reshape(n_struct, n_struct).detach().numpy()
+    )
     min_energy = np.min(energies)
     np.savetxt("energies_structured.txt", grad_2_zz)
-    np.savetxt("energies_factor_structured.txt", grad_2_zz*np.exp(-beta.values().item()*energies))
+    np.savetxt(
+        "energies_factor_structured.txt",
+        grad_2_zz * np.exp(-beta.values().item() * energies),
+    )
 
     from scipy.integrate import simpson
-    integral_y = simpson(0.5*grad_2_zz * np.exp(-beta.values().item() * (energies - min_energy)), x=points_y)  # Integrate over y
+
+    integral_y = simpson(
+        0.5 * grad_2_zz * np.exp(-beta.values().item() * (energies - min_energy)),
+        x=points_y,
+    )  # Integrate over y
     integral_xy = simpson(integral_y, x=points_x)  # Integrate over y
     print("BKE Loss (Computed via Numerical Integration): ", integral_xy)
 
@@ -198,28 +338,34 @@ if __name__ == "__main__":
     #     print(points[i,:])
     #     print(grad_2_*np.exp(-1.0*energy_))
 
-    #Pick out values of quantity to minimize that are of high interest
-    values = grad_2_zz*np.exp(-beta.values().item()*energies) > 20
+    # Pick out values of quantity to minimize that are of high interest
+    values = grad_2_zz * np.exp(-beta.values().item() * energies) > 20
     values = values.astype(int)
-    np.savetxt("values_of_interest.txt", values, fmt='%d')
+    np.savetxt("values_of_interest.txt", values, fmt="%d")
 
-    #fig, ax = plt.subplots(1,1, figsize = (7.0,2.0), dpi=600)
-    h = plt.contourf(xx,yy,energies,levels=[-15+i for i in range(16)])
+    # fig, ax = plt.subplots(1,1, figsize = (7.0,2.0), dpi=600)
+    h = plt.contourf(xx, yy, energies, levels=[-15 + i for i in range(16)])
     plt.colorbar()
-    CS = plt.contour(points_x, points_y, zz,levels=[0.01,0.05,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,0.95,0.99], cmap='Greys')
+    CS = plt.contour(
+        points_x,
+        points_y,
+        zz,
+        levels=[0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99],
+        cmap="Greys",
+    )
     plt.colorbar()
     plt.clabel(CS, fontsize=10, inline=1)
-    plt.tick_params(axis='both', which='major', labelsize=9)
-    plt.tick_params(axis='both', which='minor', labelsize=9)
-    plt.savefig('committor_fem.pdf', bbox_inches='tight')
+    plt.tick_params(axis="both", which="major", labelsize=9)
+    plt.tick_params(axis="both", which="minor", labelsize=9)
+    plt.savefig("committor_fem.pdf", bbox_inches="tight")
     plt.close()
 
     # plot energies
-    h = plt.contourf(xx,yy,energies,levels=[-15+i for i in range(16)])
+    h = plt.contourf(xx, yy, energies, levels=[-15 + i for i in range(16)])
     plt.colorbar()
-    CS = plt.contour(xx,yy,grad_2_zz*np.exp(-1.0*energies), cmap='Greys')
+    CS = plt.contour(xx, yy, grad_2_zz * np.exp(-1.0 * energies), cmap="Greys")
     plt.colorbar()
-    plt.tick_params(axis='both', which='major', labelsize=9)
-    plt.tick_params(axis='both', which='minor', labelsize=9)
-    plt.savefig('energies.pdf', bbox_inches='tight')
+    plt.tick_params(axis="both", which="major", labelsize=9)
+    plt.tick_params(axis="both", which="minor", labelsize=9)
+    plt.savefig("energies.pdf", bbox_inches="tight")
     plt.close()

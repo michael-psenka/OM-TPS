@@ -97,7 +97,9 @@ class SDE(abc.ABC):
                 """Create the drift and diffusion functions for the reverse SDE/ODE."""
                 drift, diffusion = sde_fn(x, t)
                 score = score_fn(x, t)
-                drift = drift - diffusion[:, None, None, None] ** 2 * score * (
+                while diffusion.dim() < score.dim():
+                    diffusion = diffusion.unsqueeze(-1)
+                drift = drift - diffusion**2 * score * (
                     0.5 if self.probability_flow else 1.0
                 )
                 # Set the diffusion function to zero for ODEs.
@@ -107,7 +109,9 @@ class SDE(abc.ABC):
             def discretize(self, x, t):
                 """Create discretized iteration rules for the reverse diffusion sampler."""
                 f, G = discretize_fn(x, t)
-                rev_f = f - G[:, None, None, None] ** 2 * score_fn(x, t) * (
+                while G.dim() < f.dim():
+                    G = G.unsqueeze(-1)
+                rev_f = f - G**2 * score_fn(x, t) * (
                     0.5 if self.probability_flow else 1.0
                 )
                 rev_G = torch.zeros_like(G) if self.probability_flow else G
@@ -115,8 +119,9 @@ class SDE(abc.ABC):
 
         return RSDE()
 
+
 class VPSDE(SDE):
-    def __init__(self, beta_min=0.1, beta_max=20, N=1000, cosine_schedule = True):
+    def __init__(self, beta_min=0.1, beta_max=20, N=1000, cosine_schedule=True):
         """Construct a Variance Preserving SDE.
 
         Args:
@@ -144,17 +149,18 @@ class VPSDE(SDE):
             torch.cos(((steps / self.N + epsilon) / (1.0 + epsilon)) * math.pi * 0.5)
             ** 2
         )
-        betas = torch.clip(1.0 - f_t[1:] / f_t[:self.N], 0.0, 0.999)
+        betas = torch.clip(1.0 - f_t[1:] / f_t[: self.N], 0.0, 0.999)
         return betas
-
 
     @property
     def T(self):
-        return self.N
+        return 1
 
     def sde(self, x, t):
         beta_t = self.beta_0 + t * (self.beta_1 - self.beta_0)
-        drift = -0.5 * beta_t[:, None, None, None] * x
+        while beta_t.dim() < x.dim():
+            beta_t = beta_t.unsqueeze(-1)
+        drift = -0.5 * beta_t * x
         diffusion = torch.sqrt(beta_t)
         return drift, diffusion
 
@@ -162,7 +168,9 @@ class VPSDE(SDE):
         log_mean_coeff = (
             -0.25 * t**2 * (self.beta_1 - self.beta_0) - 0.5 * t * self.beta_0
         )
-        mean = torch.exp(log_mean_coeff[:, None, None, None]) * x
+        while log_mean_coeff.dim() < x.dim():
+            log_mean_coeff = log_mean_coeff.unsqueeze(-1)
+        mean = torch.exp(log_mean_coeff) * x
         std = torch.sqrt(1.0 - torch.exp(2.0 * log_mean_coeff))
         return mean, std
 
@@ -172,7 +180,10 @@ class VPSDE(SDE):
     def prior_logp(self, z):
         shape = z.shape
         N = np.prod(shape[1:])
-        logps = -N / 2.0 * np.log(2 * np.pi) - torch.sum(z**2, dim=(1, 2, 3)) / 2.0
+        logps = (
+            -N / 2.0 * np.log(2 * np.pi)
+            - torch.sum(z**2, dim=tuple(range(1, z.ndim))) / 2.0
+        )
         return logps
 
     def discretize(self, x, t):
@@ -181,7 +192,9 @@ class VPSDE(SDE):
         beta = self.discrete_betas.to(x.device)[timestep]
         alpha = self.alphas.to(x.device)[timestep]
         sqrt_beta = torch.sqrt(beta)
-        f = torch.sqrt(alpha)[:, None, None, None] * x - x
+        while alpha.dim() < x.dim():
+            alpha = alpha.unsqueeze(-1)
+        f = torch.sqrt(alpha) * x - x
         G = sqrt_beta
         return f, G
 
@@ -229,7 +242,7 @@ class VESDE(SDE):
         shape = z.shape
         N = np.prod(shape[1:])
         return -N / 2.0 * np.log(2 * np.pi * self.sigma_max**2) - torch.sum(
-            z**2, dim=(1, 2, 3)
+            z**2, dim=tuple(range(1, z.ndim))
         ) / (2 * self.sigma_max**2)
 
     def discretize(self, x, t):

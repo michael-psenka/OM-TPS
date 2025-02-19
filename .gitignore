@@ -21,6 +21,7 @@ alphaflow/
 *pdf
 *vtu
 *pvd
+train_diffusion_mb.py
 
 # ignore test notebook
 michael_testbed.ipynb

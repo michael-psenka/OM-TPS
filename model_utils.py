@@ -170,7 +170,10 @@ def get_score_fn(sde, model, train=False, continuous=False):
                 score = model_fn(x, labels)
                 std = sde.sqrt_1m_alphas_cumprod.to(labels.device)[labels.long()]
 
-            score = -score / std[:, None, None, None]
+            # unsqueeze std to match the shape of score
+            while std.dim() < score.dim():
+                std = std.unsqueeze(-1)
+            score = -score / (std + 1e-9)
             return score
 
     elif isinstance(sde, sde_lib.VESDE):
