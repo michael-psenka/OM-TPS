@@ -68,7 +68,7 @@ def get_likelihood_fn(
 
     def drift_fn(model, x, t):
         """The drift function of the reverse-time SDE."""
-        score_fn = mutils.get_score_fn(sde, model, train=False, continuous=True)
+        score_fn = mutils.get_score_fn(sde, model, train=False, continuous=False)
         # Probability flow ODE is a special case of Reverse SDE
         rsde = sde.reverse(score_fn, probability_flow=True)
         return rsde.sde(x, t)[0]
