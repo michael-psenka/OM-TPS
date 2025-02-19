@@ -27,17 +27,10 @@ import model_utils as mutils
 
 
 def get_div_fn(fn):
-    """Create the divergence function of `fn` using the Hutchinson-Skilling trace estimator."""
-
-    # def div_fn(x, t, eps):
-    #     with torch.enable_grad():
-    #         x.requires_grad_(True)
-    #         fn_eps = torch.sum(fn(x, t) * eps)
-    #         grad_fn_eps = torch.autograd.grad(fn_eps, x)[0]
-    #     x.requires_grad_(False)
-    #     return torch.sum(grad_fn_eps * eps, dim=tuple(range(1, len(x.shape))))
+    """Create the divergence function of `fn` using the Hutchinson-Skilling trace estimator with N samples."""
 
     def div_fn(x, t, eps):
+        N = eps.shape[0]
         with torch.enable_grad():
             x.requires_grad_(True)
             fn_eps = torch.sum(
@@ -53,7 +46,7 @@ def get_div_fn(fn):
                 )[0]
 
             vectorized_vjp_func = torch.vmap(vjp_func)
-            I_N = torch.eye(eps.shape[0], device=eps.device)
+            I_N = torch.eye(N, device=eps.device)
             grad_fn_eps = vectorized_vjp_func(I_N)
 
         x.requires_grad_(False)
@@ -82,7 +75,7 @@ def get_likelihood_fn(
       sde: A `sde_lib.SDE` object that represents the forward SDE.
       inverse_scaler: The inverse data normalizer.
       hutchinson_type: "Rademacher" or "Gaussian". The type of noise for Hutchinson-Skilling trace estimator.
-      hutchinson_n_samples: An integer. The number of samples to estimate the trace.
+      hutchinson_n_samples: An integer. The number of random samples used to estimate the trace.
       rtol: A `float` number. The relative tolerance level of the black-box ODE solver.
       atol: A `float` number. The absolute tolerance level of the black-box ODE solver.
       method: A `str`. The algorithm for the black-box ODE solver.
@@ -90,8 +83,8 @@ def get_likelihood_fn(
       eps: A `float` number. The probability flow ODE is integrated to `eps` for numerical stability.
 
     Returns:
-      A function that a batch of data points and returns the log-likelihoods in bits/dim,
-        the latent code, and the number of function evaluations cost by computation.
+      A function that a batch of data points and returns the log-likelihoods
+      and the number of function evaluations cost by computation.
     """
 
     def drift_fn(model, x, t):
@@ -105,21 +98,19 @@ def get_likelihood_fn(
         return get_div_fn(lambda xx, tt: drift_fn(model, xx, tt))(x, t, noise)
 
     def likelihood_fn(model, data):
-        """Compute an unbiased estimate to the log-likelihood in bits/dim.
+        """Compute an unbiased estimate of the log-likelihood.
 
         Args:
           model: A score model.
           data: A PyTorch tensor.
 
         Returns:
+          log_likelihood: A PyTorch tensor of shape [batch size]. The raw log-likelihoods on `data`.
           bpd: A PyTorch tensor of shape [batch size]. The log-likelihoods on `data` in bits/dim.
-          z: A PyTorch tensor of the same shape as `data`. The latent representation of `data` under the
-            probability flow ODE.
           nfe: An integer. The number of function evaluations used for running the black-box ODE solver.
         """
         with torch.no_grad():
             shape = data.shape
-            # dummy = data
             dummy = (
                 torch.zeros_like(data)
                 .unsqueeze(0)

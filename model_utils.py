@@ -157,18 +157,15 @@ def get_score_fn(sde, model, train=False, continuous=False):
 
         def score_fn(x, t):
             # Scale neural network output by standard deviation and flip sign
+            labels = t * (sde.N - 1)
+            score = model_fn(x, labels)
             if continuous:
-                # For VP-trained models, t=0 corresponds to the lowest noise level
-                labels = t * (sde.N - 1)
-                score = model_fn(x, labels)
                 std = sde.marginal_prob(torch.zeros_like(x), labels)[1]
             else:
-                # For VP-trained models, t=0 corresponds to the lowest noise level
-
-                labels = t * (sde.N - 1)
-                score = model_fn(x, labels)
-                # rounding is happening here
-                std = sde.sqrt_1m_alphas_cumprod.to(labels.device)[labels.long()]
+                std = torch.sin(np.pi / 2 * t).to(
+                    labels.device
+                )  # get rid of rounding issues
+                # std = sde.sqrt_1m_alphas_cumprod.to(labels.device)[labels.long()]
 
             # unsqueeze std to match the shape of score
             while std.dim() < score.dim():
