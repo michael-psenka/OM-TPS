@@ -29,30 +29,39 @@ import model_utils as mutils
 def get_div_fn(fn):
     """Create the divergence function of `fn` using the Hutchinson-Skilling trace estimator."""
 
-    def div_fn(x, t, eps):
-        with torch.enable_grad():
-            x.requires_grad_(True)
-            fn_eps = torch.sum(fn(x, t) * eps)
-            grad_fn_eps = torch.autograd.grad(fn_eps, x)[0]
-        x.requires_grad_(False)
-        return torch.sum(grad_fn_eps * eps, dim=tuple(range(1, len(x.shape))))
-
     # def div_fn(x, t, eps):
     #     with torch.enable_grad():
     #         x.requires_grad_(True)
-    #         fn_eps = torch.sum(fn(x, t).unsqueeze(0) * eps, dim=tuple(range(2, 1+len(x.shape))))
-
-    #         def vjp_func(v):
-    #             return torch.autograd.grad(fn_eps.sum(dim=tuple(range(1, len(fn_eps.shape)))), x, grad_outputs=v, create_graph=True)[0]
-    #         vectorized_vjp_func = torch.vmap(vjp_func)
-    #         I_N = torch.eye(eps.shape[0], device=eps.device)
-    #         grad_fn_eps = vectorized_vjp_func(I_N)
-
+    #         fn_eps = torch.sum(fn(x, t) * eps)
+    #         grad_fn_eps = torch.autograd.grad(fn_eps, x)[0]
     #     x.requires_grad_(False)
-    #     # Compute the dot product for each sample of eps
-    #     divergence_estimates = torch.sum(grad_fn_eps * eps, dim=tuple(range(1, len(eps.shape))))  # [N, Batch size]
-    #     # Average over N samples
-    #     return divergence_estimates.mean(dim=0)  # [Batch size]
+    #     return torch.sum(grad_fn_eps * eps, dim=tuple(range(1, len(x.shape))))
+
+    def div_fn(x, t, eps):
+        with torch.enable_grad():
+            x.requires_grad_(True)
+            fn_eps = torch.sum(
+                fn(x, t).unsqueeze(0) * eps, dim=tuple(range(2, 1 + len(x.shape)))
+            )
+
+            def vjp_func(v):
+                return torch.autograd.grad(
+                    fn_eps.sum(dim=tuple(range(1, len(fn_eps.shape)))),
+                    x,
+                    grad_outputs=v,
+                    create_graph=True,
+                )[0]
+
+            vectorized_vjp_func = torch.vmap(vjp_func)
+            I_N = torch.eye(eps.shape[0], device=eps.device)
+            grad_fn_eps = vectorized_vjp_func(I_N)
+
+        x.requires_grad_(False)
+        divergence_estimates = torch.sum(
+            grad_fn_eps * eps, dim=tuple(range(2, len(eps.shape)))
+        )  # [N, Batch size]
+        # Average over N samples
+        return divergence_estimates.mean(dim=0)
 
     return div_fn
 
@@ -110,8 +119,12 @@ def get_likelihood_fn(
         """
         with torch.no_grad():
             shape = data.shape
-            dummy = data
-            # dummy = torch.zeros_like(data).unsqueeze(0).expand((hutchinson_n_samples, *data.shape))
+            # dummy = data
+            dummy = (
+                torch.zeros_like(data)
+                .unsqueeze(0)
+                .expand((hutchinson_n_samples, *data.shape))
+            )
             if hutchinson_type == "Gaussian":
                 epsilon = torch.randn_like(dummy)
             elif hutchinson_type == "Rademacher":
