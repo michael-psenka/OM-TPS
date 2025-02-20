@@ -6,13 +6,10 @@ import numpy as np
 from mb_calculator import MullerBrownPotential
 
 if __name__ == "__main__":
-    # Make domain specific to problem
-    # react_min = np.genfromtxt('react_min.txt')
-    # prod_min = np.genfromtxt('prod_min.txt')
 
-    beta = Constant("16.58")  # inverse kB*T
-    react_radii = 5
-    prod_radii = 5
+    beta = Constant("1")  # inverse kB*T
+    react_radii = 0.5
+    prod_radii = 0.5
     calculator = MullerBrownPotential(device="cpu")
 
     react_min = np.array(calculator.initial_point)
