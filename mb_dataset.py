@@ -125,6 +125,9 @@ class MBDataset(Dataset):
         # set initial positions
         for i in tqdm(range(self.n_sims)):
             if self.initial_positions is not None:
+                # save the initial positions
+                if i == 0:
+                    np.save(self.save_path / "initial_positions.npy", self.initial_positions)
                 # sample uniformly from the initial positions
                 idx = np.random.randint(0, len(self.initial_positions))
                 positions = self.initial_positions[idx].reshape(1, 2)
@@ -193,6 +196,7 @@ class MBDataset(Dataset):
         traj_files = glob.glob(self.preload_sim_dir.as_posix() + "/*.traj")
         for i, traj_file in tqdm(enumerate(traj_files), total=len(traj_files)):
             self.data[i] = self.load_trajectory(traj_file)
+        self.initial_positions = np.load(self.preload_sim_dir / "initial_positions.npy")
 
     def __len__(self):
         return len(self.all_pos)
