@@ -269,7 +269,7 @@ class MBDiffusionModel(torch.nn.Module):
                 actions.append(action.item())
 
                 pred_force = force_func(noised_xs.reshape(-1, 2))
-                true_force = potential.sample_force_func(noised_xs.reshape(-1, 2))
+                # true_force = calculator.sample_force_func(noised_xs.reshape(-1, 2))
                 # if diff_time == 0:
                 #     print("Cosine similarity", F.cosine_similarity(pred_force, true_force).mean().item())
 
