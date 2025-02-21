@@ -2,8 +2,8 @@ python sample.py \
     --model_path saved_models/trp_cage \
     --gen_mode om_interpolate \
     --post_om_md_simulate \
-    --n_timesteps 1000 \
-    --save_interval 10 \
+    --n_timesteps 100000 \
+    --save_interval 1000 \
     --num_samples_eval 2 \
     --batch_size_gen 2 \
     --latent_time 15 \
