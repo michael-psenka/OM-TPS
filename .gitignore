@@ -12,8 +12,12 @@ data
 *.gsd
 *.pickle
 *.pkl
+*.txt
+*.pdf
+train_diffusion_mb.py
 *ipynb_checkpoints/
 wandb/
+poisson/
 guided_diffusion/
 mnist/
 ffp-output/

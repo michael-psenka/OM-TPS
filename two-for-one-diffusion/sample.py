@@ -98,6 +98,7 @@ parser.add_argument(
     default="iid",
     help="generative mode, either iid, interpolate, or langevin",
 )
+
 parser.add_argument(
     "--append_exp_name",
     type=str,
@@ -128,6 +129,11 @@ parser.add_argument(
     "--batch_size_gen", type=int, default=256, help="batch size for evaluation"
 )
 
+parser.add_argument(
+    "--post_om_md_simulate",
+    action="store_true",
+    help="whether to perform MD simulations after OM optimization",
+)
 
 # Langevin simulation arguments
 parser.add_argument("--masses", type=eval, default=None, help="Units in g/mol")
@@ -720,33 +726,35 @@ def generate_samples(
         )
         sampled_mol = output["sampled_mol"]
 
-        # initiate MD simulations from the interpolated path
-        # print(
-        #     f"Initiating Langevin MD simulations from transition paths. Total steps: {int(samp_args.n_timesteps)}"
-        # )
+        if (
+            samp_args.post_om_md_simulate
+        ):  # initiate MD simulations from the interpolated path
+            print(
+                f"Initiating Langevin MD simulations from transition paths. Total steps: {int(samp_args.n_timesteps)}"
+            )
 
-        # masses = samp_args.masses
-        # if masses is None:
-        #     if "alanine" in args.mol:
-        #         masses = [12.8] * trainset.num_beads
-        #     else:
-        #         masses = [12.0] * trainset.num_beads
+            masses = samp_args.masses
+            if masses is None:
+                if "alanine" in args.mol:
+                    masses = [12.8] * trainset.num_beads
+                else:
+                    masses = [12.0] * trainset.num_beads
 
-        # langevin_sampler = LangevinDiffusion(
-        #     model.ema_model,
-        #     sampled_mol,
-        #     samp_args.n_timesteps,
-        #     save_interval=samp_args.save_interval,
-        #     t=noise_level,
-        #     diffusion_steps=args.diffusion_steps,
-        #     temp_data=samp_args.temp_data,
-        #     temp_sim=samp_args.temp_sim,
-        #     dt=samp_args.dt,
-        #     masses=masses,
-        #     friction=samp_args.friction,
-        #     kb=samp_args.kb,
-        # )
-        # sampled_mol = langevin_sampler.sample()
+            langevin_sampler = LangevinDiffusion(
+                model.ema_model,
+                sampled_mol,
+                samp_args.n_timesteps,
+                save_interval=samp_args.save_interval,
+                t=noise_level,
+                diffusion_steps=args.diffusion_steps,
+                temp_data=samp_args.temp_data,
+                temp_sim=samp_args.temp_sim,
+                dt=samp_args.dt,
+                masses=masses,
+                friction=samp_args.friction,
+                kb=samp_args.kb,
+            )
+            md_sampled_mol = langevin_sampler.sample()
 
         if "actions" in output.keys():
             actions = output["actions"]
@@ -826,6 +834,11 @@ def generate_samples(
 
     # Save generated samples
     torch.save(sampled_mol, str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pt"))
+    if samp_args.post_om_md_simulate:  # Save MD samples
+        torch.save(
+            md_sampled_mol,
+            str(str(eval_folder) + f"/sample-{samp_args.gen_mode}-md.pt"),
+        )
 
     # Save subset as pdb - convert from angstrom to nm
     if "tetrapeptide" in protein_name:
@@ -898,6 +911,7 @@ def generate_samples(
             model=model.ema_model,
             num_paths=samp_args.num_samples_eval,
             endpoints=clusters if "interpolate" in samp_args.gen_mode else None,
+            compute_rates=samp_args.post_om_md_simulate,
             log=not samp_args.disable_logging,
             gif=True,
         )

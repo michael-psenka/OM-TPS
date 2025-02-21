@@ -49,6 +49,8 @@ from evaluate.msm_utils import (
     compute_shannon_entropy,
 )
 
+from evaluate.compute_transition_rates import compute_transition_rates
+
 from datasets.dataset_utils_empty import (
     Molecules,
     AtomSelection,
@@ -109,6 +111,7 @@ def evaluate_fastfolders(
     n_sims=-1,
     opt_steps=0,
     window_size=3,
+    compute_rates=False,
     gif=True,
     model=None,
     num_paths=8,
@@ -506,8 +509,19 @@ def evaluate_fastfolders(
         [np.max(free_energy_profile) for free_energy_profile in free_energies]
     )
 
+    # Compute rates
+    # if compute_rates:
+    #     true_rate, predicted_rate = compute_transition_rates(
+    #         protein_name,
+    #         gen_mode,
+    #         append_exp_name,
+    #         time_horizon=-1
+    #     )
+
     # Save final metrics to a JSON file
     metrics = {
+        # "True Transition Rate (ns^-1)": true_rate,
+        # "Predicted Transition Rate (ns^-1)": predicted_rate,
         "Max Free Energy (kBT) Mean: ": max_free_energies.mean(),
         "Max Free Energy (kBT) Std: ": max_free_energies.std(),
         "Fraction of Physical Paths: ": (
