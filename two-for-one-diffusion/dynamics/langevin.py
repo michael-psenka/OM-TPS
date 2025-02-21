@@ -6,7 +6,7 @@ from dynamics.langevin_cgnet import Langevin
 KBOLTZMANN = 1.38064852e-23
 AVOGADRO = 6.022140857e23
 JPERKCAL = 4184
-KB = 0.83144626181  # This is the Boltzmann constant conversed from J/K (Kg, m^2 / s^2 / K) to -> g/mol, angstroms, ps and K.
+KB = 0.83144626181  # This is the Boltzmann constant converted from J/K (Kg, m^2 / s^2 / K) to -> g/mol, angstroms, ps and K.
 
 temp_dict = {
     "alanine_dipeptide_fuberlin".upper(): 300,
