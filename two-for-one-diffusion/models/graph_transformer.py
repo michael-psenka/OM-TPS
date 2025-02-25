@@ -46,7 +46,7 @@ class GraphTransformer(nn.Module):
             conservative (bool, optional): _description_. Defaults to True.
             use_bead_identities (bool, optional): _description_. Defaults to False.
         """
-        super(GraphTransformer, self).__init__()
+        super().__init__()
         self.device = device
         self.use_intrinsic_coords = use_intrinsic_coords
         self.use_distances = use_distances

@@ -11,7 +11,7 @@ from models.ddpm import GaussianDiffusion
 from models.flow_matching import FlowMatching
 from trainer import Trainer
 from models import get_model
-from datasets.dataset_utils_empty import get_dataset, Molecules
+from datasets.dataset_utils_empty import get_dataset, Molecules, AtomSelection
 from evaluate.evaluators import TicEvaluator
 
 
@@ -30,6 +30,12 @@ parser.add_argument(
     type=int,
     default=1,
     help="Fold from [1,2,3,4] for four-fold cross validation. Only for alanine_dipeptide",
+)
+parser.add_argument(
+    "--atom_selection",
+    type=str,
+    default="c-alpha",
+    help="atom selection for fast folding proteins (c-alpha, protein, all)",
 )
 parser.add_argument(
     "--data_folder",
@@ -138,7 +144,7 @@ parser.add_argument(
 parser.add_argument(
     "--gradient_norm_threshold",
     type=int,
-    default=100,
+    default=1000,
     help="maximum allowed gradient norm before skipping the update",
 )
 parser.add_argument(
@@ -330,13 +336,23 @@ if __name__ == "__main__":
             folded_pdb_folder="./datasets/folded_pdbs",
             bins=101,
             evalset="testset",
-        )
+        ) # TODO: take into account atom selection here
+
+    if args.atom_selection == "c-alpha":
+        atom_selection = AtomSelection.C_ALPHA
+    elif args.atom_selection == "protein":
+        atom_selection = AtomSelection.PROTEIN
+    elif args.atom_selection == "all":
+        atom_selection = AtomSelection.ALL
+    else:
+        raise ValueError("Unknown atom selection")
 
     trainset, valset, testset = get_dataset(
         args.mol,
         args.mean0,
         args.data_folder,
         args.fold,
+        atom_selection=atom_selection,
         traindata_subset=args.traindata_subset,
         shuffle_before_splitting=args.shuffle_data_before_splitting,
         tic_evaluator=tic_evaluator,

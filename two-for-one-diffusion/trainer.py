@@ -8,7 +8,7 @@ from torch.nn.utils import clip_grad_norm_
 from torch.utils.tensorboard import SummaryWriter
 from multiprocessing import cpu_count
 from torch.cuda.amp import autocast, GradScaler
-from torch.optim import AdamW
+from torch.optim import AdamW, SGD
 from ema_pytorch import EMA
 import pickle
 from evaluate.evaluators import Evaluator, sample_from_model
@@ -129,11 +129,14 @@ class Trainer(object):
         )
 
         self.val_iters = iterations_on_val * len(self.dl_val)
+        # self.val_iters = 1000
         self.dl_val = cycle(self.dl_val)
 
-        self.opt = AdamW(
-            self.model.parameters(), lr=train_lr, weight_decay=weight_decay
-        )
+        # self.opt = AdamW(
+        #     self.model.parameters(), lr=train_lr, weight_decay=weight_decay
+        # )
+        self.opt = SGD(self.model.parameters(), lr=train_lr, weight_decay=weight_decay)
+
 
         if min_lr_cosine_anneal is not None:
             self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -179,11 +182,11 @@ class Trainer(object):
 
             # Plot the TIC of training data as a reference
             self.results_folder.mkdir(exist_ok=True, parents=True)
-            self.evaluator_val.tic.eval(
-                self.train_data.tensors[0],
-                title=f"Reference_TIC_training_data",
-                plot_tic=True,
-            )
+            # self.evaluator_val.tic.eval(
+            #     self.train_data.tensors[0],
+            #     title=f"Reference_TIC_training_data",
+            #     plot_tic=True,
+            # )
 
         self.eval_langevin = eval_langevin
         self.best_val_loss = inf
@@ -239,14 +242,13 @@ class Trainer(object):
         print(f"val iters {val_iters}")
         self.model_ema_dp.eval()
         with torch.no_grad():
-            iter_num = 0
             loss = 0
-            while iter_num < val_iters:
+            val_iters = int(val_iters)
+            for iter_num in tqdm(range(val_iters)):
                 val_data = next(dl)
                 mol = val_data[0].to(self.device)
                 z = val_data[1].to(self.device) if len(val_data) == 2 else None
                 loss += self.model_ema_dp(mol, z=z, t_diff_range=t_diff_range).mean()
-                iter_num += 1
             loss /= val_iters
             self.writer.add_scalar(f"Loss {partition_name}", loss.item(), self.step)
             print(f"Loss {partition_name} \t {loss.item()}")
@@ -305,6 +307,7 @@ class Trainer(object):
                     val_loss_ff = self.eval_loss(
                         self.dl_val, self.val_iters, partition_name="val"
                     )
+                    print(f"Val loss {val_loss_ff.item()}")
 
                     bool_new_best = val_loss_ff.item() < self.best_val_loss
                     self.best_val_loss = (
@@ -336,14 +339,15 @@ class Trainer(object):
                     )
 
                     if "tetrapeptides" not in self.mol_name:
-                        results_dict = self.evaluator_val.eval(
-                            sampled_mol,
-                            milestone=str(milestone) + "_iid",
-                            save_plots=True,
-                        )
-                        # Write metrics to Tensorboard
-                        for key in results_dict:
-                            self.writer.add_scalar(key, results_dict[key], self.step)
+                        pass
+                        # results_dict = self.evaluator_val.eval(
+                        #     sampled_mol,
+                        #     milestone=str(milestone) + "_iid",
+                        #     save_plots=True,
+                        # )
+                        # # Write metrics to Tensorboard
+                        # for key in results_dict:
+                        #     self.writer.add_scalar(key, results_dict[key], self.step)
 
                     self.model.train()
                     self.model_dp.train()
@@ -379,12 +383,13 @@ class Trainer(object):
             )
 
         if self.mol_name != "tetrapeptides":
-            results_val_dict = self.evaluator_val.eval(
-                sampled_mol, milestone="final_iid_val", save_plots=True
-            )
-            results_test_dict = self.evaluator_test.eval(
-                sampled_mol, milestone="final_iid_test", save_plots=False
-            )
+            # results_val_dict = self.evaluator_val.eval(
+            #     sampled_mol, milestone="final_iid_val", save_plots=True
+            # )
+            # results_test_dict = self.evaluator_test.eval(
+            #     sampled_mol, milestone="final_iid_test", save_plots=False
+            # )
+            pass
 
         # Write metrics to Tensorboard
         for key in results_val_dict:
