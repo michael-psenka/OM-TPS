@@ -175,6 +175,7 @@ class DiffusionModel_MullerBrownPotential(MullerBrownPotential):
         self.t = t
         self.device = device
         self.model.to(device)
+        self.force_func = lambda x: self.model.force_func(x[:, :2].to(device), t)
 
     def get_energy(self, X):
         # Dummy function to satisfy the Calculator interface
@@ -185,5 +186,5 @@ class DiffusionModel_MullerBrownPotential(MullerBrownPotential):
             if len(X.shape) == 1:
                 X = X.unsqueeze(0).to(torch.float32)
             result = torch.zeros_like(X)
-            result[:, :2] = self.model.force_func(X[:, :2].to(self.device), self.t)
+            result[:, :2] = self.force_func(X[:, :2].to(self.device), self.t)
         return result
