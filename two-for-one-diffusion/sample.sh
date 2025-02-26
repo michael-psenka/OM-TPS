@@ -1,11 +1,11 @@
 python sample.py \
-    --model_path saved_models/chignolin \
+    --model_path saved_models/bba \
     --gen_mode om_interpolate \
     --post_om_md_simulate \
     --n_timesteps 1000 \
     --save_interval 10 \
     --num_samples_eval 8 \
-    --batch_size_gen 8 \
+    --batch_size_gen 2 \
     --latent_time 20 \
     --initial_guess_level 250\
     --subsample_points_percent 1.0 \
