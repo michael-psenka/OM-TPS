@@ -8,11 +8,12 @@
 
 conda activate om-diffusion
 python main_train.py \
-    --mol trp_cage \
+    --mol bba \
     --data_folder /data/sanjeevr/Reference_MD_Sims \
     --eval_interval 10000 \
-    --experiment_name trp_cage_all_atom_weightdecay=1e-4_sgd \
-    --batch_size 8 \
+    --experiment_name bba_all_atom_weightdecay=1e-4_sgd_gradaccumulate32 \
+    --batch_size 4 \
+    --gradient_accumulate_every 32 \
     --atom_selection protein \
     --weight_decay 1e-4 \
     --num_samples 100 \

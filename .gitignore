@@ -8,6 +8,7 @@ log
 mnist_data/
 data
 *.png
+*.out
 *.pyc
 *.gsd
 *.pickle

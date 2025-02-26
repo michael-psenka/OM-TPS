@@ -136,6 +136,13 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--gradient_accumulate_every",
+    type=int,
+    default=1,
+    help="gradient accumulation frequency (effective batch size = batch_size * gradient_accumulate_every)",
+)
+
+parser.add_argument(
     "--learning_rate", type=float, default=4e-4, help="learning rate for Adam"
 )
 parser.add_argument(
@@ -401,7 +408,7 @@ if __name__ == "__main__":
         train_batch_size=args.batch_size,
         train_lr=args.learning_rate,
         train_num_steps=args.train_iter,
-        gradient_accumulate_every=1,
+        gradient_accumulate_every=args.gradient_accumulate_every,
         ema_decay=args.ema_decay,
         save_and_sample_every=args.eval_interval,
         num_saved_samples=args.num_samples,
