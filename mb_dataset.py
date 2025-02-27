@@ -53,6 +53,7 @@ class MBDataset(Dataset):
         initial_positions: np.array = None,
         constrained_sims: bool = False,
         calculator=None,
+        sample_with_replacement: bool = False,
     ):
 
         np.random.seed(seed)
@@ -73,6 +74,7 @@ class MBDataset(Dataset):
         self.use_langevin = use_langevin
         self.initial_positions = initial_positions
         self.constrained_sims = constrained_sims
+        self.sample_with_replacement = sample_with_replacement
         if self.constrained_sims:
             assert self.initial_positions is not None, "Need initial positions for constrained simulations"
             self.n_sims = len(self.initial_positions)
@@ -136,9 +138,9 @@ class MBDataset(Dataset):
         if self.initial_positions is not None:
             np.save(os.path.join(self.save_path, "initial_positions.npy"), self.initial_positions)
 
-        ic_idxs = np.arange(self.n_sims) if self.constrained_sims else np.random.choice(self.n_sims, self.n_sims, replace=True)
+        ic_idxs = np.arange(len(self.initial_positions)) if self.constrained_sims else np.random.choice(len(self.initial_positions), self.n_sims, replace=True)
 
-        for i, ic_idx in enumerate(ic_idxs):
+        for i, ic_idx in tqdm(enumerate(ic_idxs)):
             if self.initial_positions is not None:
                 
                 positions = self.initial_positions[ic_idx].reshape(1, 2)
@@ -211,7 +213,7 @@ class MBDataset(Dataset):
         """
         self.attempted_transitions = torch.zeros((self.n_sims, self.n_sims)).to(self.device)
 
-        integrator = Langevin(
+        integrator = CustomLangevin(
             self.calculator.force_func,
             masses=self.mass,
             dt=self.timestep,
@@ -276,7 +278,9 @@ class MBDataset(Dataset):
         traj_files = glob.glob(self.preload_sim_dir.as_posix() + "/*.traj")
         for i, traj_file in tqdm(enumerate(traj_files), total=len(traj_files)):
             self.data[i] = self.load_trajectory(traj_file)
-        self.initial_positions = np.load(self.preload_sim_dir / "initial_positions.npy")
+
+        if os.path.exists(self.preload_sim_dir / "initial_positions.npy"):
+            self.initial_positions = np.load(self.preload_sim_dir / "initial_positions.npy")
 
     def __len__(self):
         return len(self.all_pos)
@@ -288,7 +292,7 @@ class MBDataset(Dataset):
 
 
 
-class Langevin:
+class CustomLangevin:
     """
     Langevin thermostat operating on a batch of MD trajectories in parallel.
     """

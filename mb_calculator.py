@@ -186,5 +186,5 @@ class DiffusionModel_MullerBrownPotential(MullerBrownPotential):
             if len(X.shape) == 1:
                 X = X.unsqueeze(0).to(torch.float32)
             result = torch.zeros_like(X)
-            result[:, :2] = self.force_func(X[:, :2].to(self.device), self.t)
+            result[:, :2] = self.force_func(X)
         return result
