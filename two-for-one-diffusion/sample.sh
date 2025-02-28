@@ -1,11 +1,9 @@
 python sample.py \
     --model_path saved_models/trp_cage \
-    --gen_mode om_interpolate \
-    --post_om_md_simulate \
-    --n_timesteps 10000 \
+    --gen_mode iid \
     --save_interval 50 \
-    --num_samples_eval 8 \
-    --batch_size_gen 8 \
+    --num_samples_eval 100 \
+    --batch_size_gen 100 \
     --latent_time 20 \
     --initial_guess_level 250\
     --subsample_points_percent 1.0 \
@@ -14,53 +12,53 @@ python sample.py \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
-    --append_exp_name test_md_10000 \
+    --append_exp_name iid_test \
     --om_dt 0.1 \
     --path_length 200 \
     --steps 2000
 
-python sample.py \
-    --model_path saved_models/chignolin \
-    --gen_mode om_interpolate \
-    --post_om_md_simulate \
-    --n_timesteps 10000 \
-    --save_interval 50 \
-    --num_samples_eval 8 \
-    --batch_size_gen 8 \
-    --latent_time 20 \
-    --initial_guess_level 250\
-    --subsample_points_percent 1.0 \
-    --subsample_dimensions_percent 1.0 \
-    --no_encode_and_decode \
-    --action truncated \
-    --optimizer adam \
-    --lr 2e-1 \
-    --append_exp_name test_md_10000 \
-    --om_dt 0.1 \
-    --path_length 200 \
-    --steps 2000
+# python sample.py \
+#     --model_path saved_models/chignolin \
+#     --gen_mode om_interpolate \
+#     --post_om_md_simulate \
+#     --n_timesteps 10000 \
+#     --save_interval 50 \
+#     --num_samples_eval 8 \
+#     --batch_size_gen 8 \
+#     --latent_time 20 \
+#     --initial_guess_level 250\
+#     --subsample_points_percent 1.0 \
+#     --subsample_dimensions_percent 1.0 \
+#     --no_encode_and_decode \
+#     --action truncated \
+#     --optimizer adam \
+#     --lr 2e-1 \
+#     --append_exp_name test_md_10000 \
+#     --om_dt 0.1 \
+#     --path_length 200 \
+#     --steps 2000
 
 
-python sample.py \
-    --model_path saved_models/bba \
-    --gen_mode om_interpolate \
-    --post_om_md_simulate \
-    --n_timesteps 10000 \
-    --save_interval 50 \
-    --num_samples_eval 8 \
-    --batch_size_gen 2 \
-    --latent_time 20 \
-    --initial_guess_level 250\
-    --subsample_points_percent 1.0 \
-    --subsample_dimensions_percent 1.0 \
-    --no_encode_and_decode \
-    --action truncated \
-    --optimizer adam \
-    --lr 2e-1 \
-    --append_exp_name test_md_10000 \
-    --om_dt 0.1 \
-    --path_length 200 \
-    --steps 2000
+# python sample.py \
+#     --model_path saved_models/bba \
+#     --gen_mode om_interpolate \
+#     --post_om_md_simulate \
+#     --n_timesteps 10000 \
+#     --save_interval 50 \
+#     --num_samples_eval 8 \
+#     --batch_size_gen 2 \
+#     --latent_time 20 \
+#     --initial_guess_level 250\
+#     --subsample_points_percent 1.0 \
+#     --subsample_dimensions_percent 1.0 \
+#     --no_encode_and_decode \
+#     --action truncated \
+#     --optimizer adam \
+#     --lr 2e-1 \
+#     --append_exp_name test_md_10000 \
+#     --om_dt 0.1 \
+#     --path_length 200 \
+#     --steps 2000
     
 # python sample.py \
 #     --model_path saved_models/trp_cage \

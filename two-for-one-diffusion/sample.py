@@ -495,9 +495,6 @@ def generate_samples(
             samp_args.num_samples_eval // parallel_batches,
             samp_args.batch_size_gen // parallel_batches,
             verbose=True,
-            dataloader=(
-                cycle(dl) if "tetrapeptide" in protein_name else None
-            ),  # TODO: change this to just a single pdb_id
         )
 
     # Generate interpolated samples
