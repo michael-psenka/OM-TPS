@@ -50,7 +50,7 @@ class TruncatedAction(torch.nn.Module):
         super(TruncatedAction, self).__init__()
         self.force_func = force_func
         self.dt = dt
-        self.gamma = gamma
+        self.gamma = gamma * 12  # take into account mass in g/mol
 
     def forward(
         self,
@@ -69,18 +69,14 @@ class TruncatedAction(torch.nn.Module):
                 path = path.reshape(-1, 2, path.shape[-1])
             else:
                 path = path.reshape(-1, 2, path.shape[-2], path.shape[-1])
-            first_term = torch.square((path[:, 1] - path[:, 0])) * (
-                self.gamma / 4 / self.dt
-            )
+            first_term = torch.square((path[:, 1] - path[:, 0])) / (2 * self.dt)
         else:
-            first_term = torch.square((path[1:] - path[:-1])) * (
-                self.gamma / 4 / self.dt
-            )
+            first_term = torch.square((path[1:] - path[:-1])) / (2 * self.dt)
         if forces is not None:
             f_n = forces[:-1]
         else:
             f_n = self.force_func(path[:-1])
-        second_term = torch.square(f_n) * (self.dt / 4 / self.gamma)
+        second_term = torch.square(f_n) * (self.dt / (2 * self.gamma**2))
         return first_term.sum(), second_term.sum(), torch.tensor(0).to(torch.float32)
 
 

@@ -343,7 +343,7 @@ if __name__ == "__main__":
             folded_pdb_folder="./datasets/folded_pdbs",
             bins=101,
             evalset="testset",
-        ) # TODO: take into account atom selection here
+        )  # TODO: take into account atom selection here
 
     if args.atom_selection == "c-alpha":
         atom_selection = AtomSelection.C_ALPHA

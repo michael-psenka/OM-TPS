@@ -5,6 +5,7 @@ from torch_geometric.nn import GCNConv
 from torch_geometric.nn import global_mean_pool
 from torch_geometric.nn import radius_graph
 
+
 class GCN(torch.nn.Module):
     def __init__(self, hidden_channels):
         super().__init__()
@@ -20,10 +21,14 @@ class GCN(torch.nn.Module):
         B, N, D = x.shape
         batch = torch.arange(B).repeat_interleave(N).to(x.device)
         x = x.view(-1, D)
-        edge_index = torch.stack([torch.arange(N-1), torch.arange(1, N)], dim=0).to(x.device)
-        edge_index = edge_index.repeat(1, B) + N*torch.arange(B).repeat_interleave(N-1).to(x.device)
-        
-        # 1. Obtain node embeddings 
+        edge_index = torch.stack([torch.arange(N - 1), torch.arange(1, N)], dim=0).to(
+            x.device
+        )
+        edge_index = edge_index.repeat(1, B) + N * torch.arange(B).repeat_interleave(
+            N - 1
+        ).to(x.device)
+
+        # 1. Obtain node embeddings
         x = self.conv1(x, edge_index)
         x = x.relu()
         x = self.conv2(x, edge_index)
@@ -32,6 +37,5 @@ class GCN(torch.nn.Module):
 
         # 2. Readout layer
         x = global_mean_pool(self.lin(x), batch)  # [batch_size, hidden_channels]
-        
-        
+
         return x

@@ -185,8 +185,8 @@ class GaussianDiffusion(nn.Module):
             z=z,
             alphas=self.sqrt_alphas_cumprod[t].pow(2),
         )
-        # force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * noise_pred
-        return -noise_pred
+        force = self.scaling_factor(t).unsqueeze(-1).unsqueeze(-1) * noise_pred
+        return force
 
     def predict_start_from_noise(self, x_t, t, noise):
         """

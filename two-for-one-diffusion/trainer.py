@@ -137,7 +137,6 @@ class Trainer(object):
         # )
         self.opt = SGD(self.model.parameters(), lr=train_lr, weight_decay=weight_decay)
 
-
         if min_lr_cosine_anneal is not None:
             self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.opt, train_num_steps, eta_min=min_lr_cosine_anneal

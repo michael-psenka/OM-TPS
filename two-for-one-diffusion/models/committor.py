@@ -16,7 +16,7 @@ class CommittorNN(torch.nn.Module):
             committor_prob = self.sigmoid(per_atom_contrib.sum(dim=(-2, -1)))
         else:
             committor_prob = self.sigmoid(self.model(x, return_energy=True))
-        
+
         return committor_prob
 
 

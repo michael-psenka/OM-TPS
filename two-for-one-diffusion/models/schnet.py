@@ -12,7 +12,6 @@ from torch_scatter import scatter
 from torch_geometric.nn import radius_graph
 
 
-
 class SchNet(torch.nn.Module):
     r"""The continuous-filter convolutional neural network SchNet from the
     `"SchNet: A Continuous-filter Convolutional Neural Network for Modeling
@@ -55,15 +54,21 @@ class SchNet(torch.nn.Module):
             Expects a vector of shape :obj:`(max_atomic_number, )`.
     """
 
-    def __init__(self, hidden_channels: int = 64, num_filters: int = 64,
-                 num_interactions: int = 3, num_gaussians: int = 50,
-                 cutoff: float = 1.0, max_num_neighbors: int = 32,
-                 readout: str = 'add', dipole: bool = False,
-                 mean: Optional[float] = None, std: Optional[float] = None,
-                 atomref: Optional[torch.Tensor] = None):
+    def __init__(
+        self,
+        hidden_channels: int = 64,
+        num_filters: int = 64,
+        num_interactions: int = 3,
+        num_gaussians: int = 50,
+        cutoff: float = 1.0,
+        max_num_neighbors: int = 32,
+        readout: str = "add",
+        dipole: bool = False,
+        mean: Optional[float] = None,
+        std: Optional[float] = None,
+        atomref: Optional[torch.Tensor] = None,
+    ):
         super().__init__()
-
-        
 
         self.hidden_channels = hidden_channels
         self.num_filters = num_filters
@@ -73,7 +78,7 @@ class SchNet(torch.nn.Module):
         self.max_num_neighbors = max_num_neighbors
         self.readout = readout
         self.dipole = dipole
-        self.readout = 'add' if self.dipole else self.readout
+        self.readout = "add" if self.dipole else self.readout
         self.mean = mean
         self.std = std
         self.scale = None
@@ -83,15 +88,15 @@ class SchNet(torch.nn.Module):
 
         self.interactions = ModuleList()
         for _ in range(num_interactions):
-            block = InteractionBlock(hidden_channels, num_gaussians,
-                                     num_filters, cutoff)
+            block = InteractionBlock(
+                hidden_channels, num_gaussians, num_filters, cutoff
+            )
             self.interactions.append(block)
 
         self.lin1 = Linear(hidden_channels, hidden_channels // 2)
         self.act = ShiftedSoftplus()
         self.lin2 = Linear(hidden_channels // 2, 1)
         self.reset_parameters()
-
 
     def reset_parameters(self):
         self.embedding.reset_parameters()
@@ -103,18 +108,20 @@ class SchNet(torch.nn.Module):
         self.lin2.bias.data.fill_(0)
 
     def forward(self, pos, return_energy=False):
-        """"
+        """ "
         pos: torch.Tensor of shape [Batch, N, 3] with the positions of the atoms.
         """
         B, N, D = pos.shape
         z = torch.arange(N).repeat(B).to(pos.device)
         batch = torch.arange(B).repeat_interleave(N).to(z.device)
         pos = pos.view(-1, D)
-            
+
         assert z.dim() == 1 and z.dtype == torch.long
 
         h = self.embedding(z)
-        edge_index = radius_graph(pos, r=self.cutoff, batch=batch, max_num_neighbors=self.max_num_neighbors)
+        edge_index = radius_graph(
+            pos, r=self.cutoff, batch=batch, max_num_neighbors=self.max_num_neighbors
+        )
         row, col = edge_index
         edge_weight = (pos[row] - pos[col]).norm(dim=-1)
         edge_attr = self.distance_expansion(edge_weight)
@@ -131,13 +138,13 @@ class SchNet(torch.nn.Module):
             return energy
 
         forces = -1 * (
-                torch.autograd.grad(
-                    energy,
-                    pos,
-                    grad_outputs=torch.ones_like(energy),
-                    create_graph=True,
-                )[0]
-            )
+            torch.autograd.grad(
+                energy,
+                pos,
+                grad_outputs=torch.ones_like(energy),
+                create_graph=True,
+            )[0]
+        )
 
         return energy, forces
 
@@ -150,8 +157,9 @@ class InteractionBlock(torch.nn.Module):
             ShiftedSoftplus(),
             Linear(num_filters, num_filters),
         )
-        self.conv = CFConv(hidden_channels, hidden_channels, num_filters,
-                           self.mlp, cutoff)
+        self.conv = CFConv(
+            hidden_channels, hidden_channels, num_filters, self.mlp, cutoff
+        )
         self.act = ShiftedSoftplus()
         self.lin = Linear(hidden_channels, hidden_channels)
 
@@ -188,12 +196,14 @@ class CFConv(torch.nn.Module):
         self.lin2.bias.data.fill_(0)
 
     def forward(self, h, edge_index, edge_weight, edge_attr):
-        C = 0.5 * (torch.cos(edge_weight * PI / self.cutoff) + 1.0) #weights from [0 to 1]
+        C = 0.5 * (
+            torch.cos(edge_weight * PI / self.cutoff) + 1.0
+        )  # weights from [0 to 1]
         W = self.nn(edge_attr) * C.view(-1, 1)
         h = self.lin1(h)
-        #propagate messages along edges
-        #With torch_scatter
-        h = scatter(h[edge_index[1]] * W, edge_index[0], dim = 0)
+        # propagate messages along edges
+        # With torch_scatter
+        h = scatter(h[edge_index[1]] * W, edge_index[0], dim=0)
         h = self.lin2(h)
         return h
 
@@ -202,8 +212,8 @@ class GaussianSmearing(torch.nn.Module):
     def __init__(self, start=0.0, stop=5.0, num_gaussians=50):
         super().__init__()
         offset = torch.linspace(start, stop, num_gaussians)
-        self.gamma = -0.5 / (offset[1] - offset[0]).item()**2
-        self.register_buffer('offset', offset)
+        self.gamma = -0.5 / (offset[1] - offset[0]).item() ** 2
+        self.register_buffer("offset", offset)
 
     def forward(self, dist):
         dist = dist.view(-1, 1) - self.offset.view(1, -1)
