@@ -250,7 +250,7 @@ parser.add_argument(
 parser.add_argument("--om_dt", type=float, help="dt for OM optimization", default=0.1)
 
 parser.add_argument(
-    "--om_gamma", type=float, help="gamma for OM optimization", default=10
+    "--om_gamma", type=float, help="gamma for OM optimization", default=1
 )
 
 parser.add_argument(
