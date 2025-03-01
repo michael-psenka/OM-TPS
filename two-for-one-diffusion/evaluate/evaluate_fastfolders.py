@@ -282,7 +282,6 @@ def evaluate_fastfolders(
     gt_transition_ensemble = np.load(gt_transition_ensemble_file)
 
     n_ref_samples = 1000
-    # traj_len = traj_len  # corresponds to horizon of 2 ns (since lagtime is 200 ps)
 
     # Discretize the interpolation trajectory based on the reference cluster centers
     cluster_assignments, transformed_samples = discretize_trajectory(

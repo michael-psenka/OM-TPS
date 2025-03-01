@@ -211,7 +211,6 @@ def get_dataset(
         if data_folder is None:
             dataset = None
         else:
-
             dataset = DEShawDataset(
                 data_root=data_folder,
                 molecule=molecule,
