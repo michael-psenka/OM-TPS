@@ -41,7 +41,7 @@ from utils import (
     cycle,
 )
 from logging_utils import save_ovito_traj
-from actions import SimpleAction, TruncatedAction, S2Action, HutchinsonAction
+from actions import TruncatedAction, S2Action, HutchinsonAction
 
 from dynamics.langevin import temp_dict
 import mdtraj as md
@@ -271,7 +271,7 @@ parser.add_argument(
 parser.add_argument(
     "--action",
     type=str,
-    help="Which action to use. Options: hessian, truncated, simple, or hutch",
+    help="Which action to use. Options: hessian, truncated, or hutch",
     default="truncated",
 )
 
@@ -601,18 +601,25 @@ def generate_samples(
             )
             cluster_coords = np.load(cluster_centers_path)
 
-            # Load samples from the ground truth simulations to serve as endpoints for interpolation
-            dataset = DEShawDataset(
-                data_root="/data/sanjeevr/Reference_MD_Sims",
-                molecule=Molecules[protein_name.upper()],
-                simulation_id=0,
-                atom_selection=AtomSelection.A_CARBON,
-                return_bond_graph=False,
-                transform=to_angstrom,
-                align=False,
-            )
-
-            gt_traj = 10 * torch.tensor(dataset.traj.xyz)  # convert to angstroms
+            # Load samples from the ground truth simulations to serve as endpoints for interpolation            
+            gt_traj_path = os.path.join("/data/sanjeevr/Reference_MD_Sims", Molecules[protein_name.upper()].value, "gt_traj.pt")
+            if os.path.exists(gt_traj_path):
+                gt_traj = torch.load(gt_traj_path)
+            else:
+                print("Loading ground truth trajectory")
+                dataset = DEShawDataset(
+                    data_root="/data/sanjeevr/Reference_MD_Sims",
+                    molecule=Molecules[protein_name.upper()],
+                    simulation_id=0,
+                    atom_selection=AtomSelection.A_CARBON,
+                    return_bond_graph=False,
+                    transform=to_angstrom,
+                    align=False,
+                )
+                gt_traj = torch.tensor(dataset.traj.xyz)
+                torch.save(gt_traj, gt_traj_path)
+            
+            gt_traj = 10 * gt_traj  # convert to angstroms
             gt_traj -= gt_traj.mean(1, keepdims=True)  # center
 
             # Get TICA
@@ -647,8 +654,6 @@ def generate_samples(
                 action_cls = S2Action
             elif samp_args.action == "truncated":
                 action_cls = TruncatedAction
-            elif samp_args.action == "simple":
-                action_cls = SimpleAction
             elif samp_args.action == "hutch":
                 action_cls = HutchinsonAction
 
@@ -658,6 +663,14 @@ def generate_samples(
                 optimizer = torch.optim.SGD
             else:
                 raise Exception("Invalid argument 'optimizer'")
+
+            masses = samp_args.masses
+            if masses is None:
+                if "alanine" in args.mol:
+                    masses = [12.8] * trainset.num_beads
+                else:
+                    masses = [12.0] * trainset.num_beads
+
             interpolator = (
                 OMInterpolatorWrapper(
                     model.ema_model,
@@ -676,7 +689,7 @@ def generate_samples(
                     optimizer=optimizer,
                     lr=samp_args.lr,
                     dt=samp_args.om_dt,
-                    gamma=samp_args.om_gamma,
+                    gamma=samp_args.om_gamma * torch.tensor(masses).to(device),
                     D=samp_args.om_d,
                     anneal=samp_args.anneal,
                     sample_latent_time=samp_args.sample_latent_time,

@@ -2,8 +2,8 @@ python sample.py \
     --model_path saved_models/trp_cage \
     --gen_mode om_interpolate \
     --save_interval 50 \
-    --num_samples_eval 2 \
-    --batch_size_gen 2 \
+    --num_samples_eval 1 \
+    --batch_size_gen 1 \
     --latent_time 15 \
     --initial_guess_level 10\
     --subsample_points_percent 1.0 \
@@ -12,10 +12,10 @@ python sample.py \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
-    --append_exp_name test_length=200_dt=0.005 \
-    --om_dt 0.005 \
+    --append_exp_name test_length=1000_dt=0.001 \
+    --om_dt 0.001 \
     --om_gamma 1 \
-    --path_length 200 \
+    --path_length 1000 \
     --steps 2000
 
 # python sample.py \

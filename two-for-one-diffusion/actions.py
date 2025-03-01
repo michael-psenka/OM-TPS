@@ -1,41 +1,6 @@
 import torch
 
 
-class S2Action(torch.nn.Module):
-    """Action with Hessian"""
-
-    def __init__(self, force_func, laplace_func, dt, gamma, D):
-        """
-        Args:
-            force_func: Force function
-            laplace_func: Laplace function
-            dt: float, time step
-            gamma: float, diffusion coefficient
-            D: float, diffusion coefficient
-        """
-        super(S2Action, self).__init__()
-        self.force_func = force_func
-        self.laplace_func = laplace_func
-        self.dt = dt
-        self.gamma = gamma
-        self.D = D
-
-    def forward(self, path: torch.Tensor):
-        """
-        Args: path of shape [P, N, 3]
-        """
-        first_term = torch.square((path[1:] - path[:-1])) * (self.gamma / 4 / self.dt)
-        second_term = torch.square(self.force_func(path[:-1])) * (
-            self.dt / 4 / self.gamma
-        )
-        third_term = self.laplace_func(path[:-1]) * (
-            self.dt * self.D / torch.tensor(2.0)
-        )
-        result = torch.sum(first_term + second_term + third_term)
-        # return result
-        return first_term.sum(), (second_term + third_term).sum()
-
-
 class TruncatedAction(torch.nn.Module):
     """S2Action with Hessian term ignored."""
 
@@ -50,7 +15,7 @@ class TruncatedAction(torch.nn.Module):
         super(TruncatedAction, self).__init__()
         self.force_func = force_func
         self.dt = dt
-        self.gamma = gamma * 12  # take into account mass in g/mol
+        self.gamma = gamma.unsqueeze(0).unsqueeze(-1) # shape of [1, n_atoms, 1]
 
     def forward(
         self,
@@ -80,36 +45,36 @@ class TruncatedAction(torch.nn.Module):
         return first_term.sum(), second_term.sum(), torch.tensor(0).to(torch.float32)
 
 
-class SimpleAction(torch.nn.Module):
-    """
-    Action without hessian.
-    Basically same as src.actions.SimpleAction but for 2D MB, not images.
-    """
 
-    def __init__(self, force_func, dt, gamma, laplace_func=None, D=None):
+class S2Action(torch.nn.Module):
+    """Action with Hessian"""
+
+    def __init__(self, force_func, laplace_func, dt, gamma, D):
         """
         Args:
             force_func: Force function
+            laplace_func: Laplace function
             dt: float, time step
             gamma: float, diffusion coefficient
+            D: float, diffusion coefficient
         """
-        super(SimpleAction, self).__init__()
+        super(S2Action, self).__init__()
         self.force_func = force_func
+        self.laplace_func = laplace_func
         self.dt = dt
-        self.gamma = gamma
+        self.gamma = gamma.unsqueeze(0).unsqueeze(-1) # shape of [1, n_atoms, 1]
+        self.D = D
 
     def forward(self, path: torch.Tensor):
-        # Args: path of shape [P, N, 3]
-        first_term = torch.square((path[1:] - path[:-1])) * (self.gamma / self.dt)
-        f_n = self.force_func(path[:-1]).to(path.device)
-        f_np = self.force_func(path[1:]).to(path.device)
-        # print("force norm: ", f_n.norm(dim = -1).mean())
-        second_term = (torch.square(f_n) + torch.square(f_np)) * (
-            self.dt / self.gamma / 2.0
-        )
-        third_term = (path[1:] - path[:-1]) * (f_np - f_n)
+        """
+        Args: path of shape [P, N, 3]
+        """
+        first_term = torch.square((path[1:] - path[:-1])) / (2 * self.dt)
+        second_term = torch.square(self.force_func(path[:-1])) * (self.dt / (2 * self.gamma**2))
+        third_term = self.laplace_func(path[:-1]) * self.dt * self.D / self.gamma
         result = torch.sum(first_term + second_term + third_term)
-        return result / torch.tensor(4.0)
+        # return result
+        return first_term.sum(), (second_term + third_term).sum()
 
 
 class HutchinsonAction(torch.nn.Module):
@@ -122,7 +87,7 @@ class HutchinsonAction(torch.nn.Module):
     def __init__(self, force_func, dt, gamma, D, N=1):
         super(HutchinsonAction, self).__init__()
         self.dt = dt
-        self.gamma = gamma
+        self.gamma = gamma.unsqueeze(0).unsqueeze(-1) # shape of [1, n_atoms, 1]
         self.D = D
         self.N = N
         self.force_func = force_func
@@ -141,9 +106,6 @@ class HutchinsonAction(torch.nn.Module):
                 forces = forces.reshape(forces.shape[0], -1).gather(
                     -1, subsample_dimensions.expand(forces.shape[0], -1)
                 )
-                # noised_xs_input = noised_xs_input.reshape(
-                #     num_paths, noised_xs_input.shape[1], -1
-                # ).gather(-1, indices.expand(-1, noised_xs_input.shape[1], -1))
 
             for _ in range(self.N):
                 # Generate random vector of -1s and 1s.
@@ -203,16 +165,13 @@ class HutchinsonAction(torch.nn.Module):
                 path = path.reshape(-1, 2, path.shape[-1])
             else:
                 path = path.reshape(-1, 2, path.shape[-2], path.shape[-1])
-            first_term = torch.square((path[:, 1] - path[:, 0])) * (
-                self.gamma / 4 / self.dt
-            )
+            first_term = torch.square((path[:, 1] - path[:, 0])) / (2 * self.dt)
         else:
-            first_term = torch.square((path[1:] - path[:-1])) * (
-                self.gamma / 4 / self.dt
-            )
-        second_term = torch.sum(torch.square(f_n) * (self.dt / 4 / self.gamma), axis=-1)
+            first_term = torch.square((path[1:] - path[:-1])) / (2 * self.dt)
 
-        third_term = laplace * self.dt * self.D / torch.tensor(2.0)
+        second_term = torch.square(f_n) * (self.dt / (2 * self.gamma**2))
+
+        third_term = laplace * self.dt * self.D / self.gamma
 
         # Result is the action and is expected to have shape [batch, 1]
         return first_term.sum(), second_term.sum(), third_term.sum()

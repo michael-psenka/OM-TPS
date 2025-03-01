@@ -6,7 +6,7 @@ import numpy as np
 import mdtraj as md
 import random
 from git import Repo
-from actions import SimpleAction, TruncatedAction
+from actions import TruncatedAction
 from rmsd import kabsch_rmsd, kabsch_rotate
 from scipy.linalg import svd
 
@@ -339,6 +339,7 @@ class InterpolatorWrapper(torch.nn.Module):
             path_length=self.path_length,
             latent_time=self.latent_time,
             temperature=self.temperature,
+
             interpolation_fn=self.interpolation_fn,
         )
 

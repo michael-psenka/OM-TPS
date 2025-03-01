@@ -13,7 +13,7 @@ from ase import units
 import warnings
 from tqdm import tqdm
 from rmsd import kabsch_rotate
-from actions import S2Action, TruncatedAction, SimpleAction, HutchinsonAction
+from actions import S2Action, TruncatedAction, HutchinsonAction
 from dynamics.langevin import ForcesWrapper, temp_dict
 
 from utils import (
