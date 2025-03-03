@@ -339,7 +339,6 @@ class InterpolatorWrapper(torch.nn.Module):
             path_length=self.path_length,
             latent_time=self.latent_time,
             temperature=self.temperature,
-
             interpolation_fn=self.interpolation_fn,
         )
 

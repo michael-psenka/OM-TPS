@@ -1,21 +1,62 @@
+# python sample.py \
+#     --model_path saved_models/trp_cage \
+#     --gen_mode om_interpolate \
+#     --save_interval 50 \
+#     --num_samples_eval 1 \
+#     --batch_size_gen 1 \
+#     --latent_time 15 \
+#     --initial_guess_level 10\
+#     --subsample_points_percent 1.0 \
+#     --subsample_dimensions_percent 1.0 \
+#     --no_encode_and_decode \
+#     --action truncated \
+#     --optimizer adam \
+#     --lr 2e-1 \
+#     --append_exp_name test_length=1000_dt=0.001 \
+#     --om_dt 0.001 \
+#     --om_gamma 1 \
+#     --path_length 1000 \
+#     --steps 2000
+
+
+# python sample.py \
+#     --model_path saved_models/chignolin \
+#     --gen_mode om_interpolate \
+#     --num_samples_eval 8 \
+#     --batch_size_gen 2 \
+#     --latent_time 20 \
+#     --initial_guess_level 250\
+#     --subsample_points_percent 1.0 \
+#     --subsample_dimensions_percent 1.0 \
+#     --no_encode_and_decode \
+#     --action truncated \
+#     --optimizer adam \
+#     --lr 2e-1 \
+#     --append_exp_name test \
+#     --om_dt 0.001 \
+#     --om_gamma 1 \
+#     --path_length 1000 \
+#     --om_d 1.0 \
+#     --steps 5000
+
 python sample.py \
-    --model_path saved_models/trp_cage \
+    --model_path saved_models/bba \
     --gen_mode om_interpolate \
-    --save_interval 50 \
-    --num_samples_eval 1 \
+    --num_samples_eval 4 \
     --batch_size_gen 1 \
-    --latent_time 15 \
-    --initial_guess_level 10\
+    --latent_time 20 \
+    --initial_guess_level 25\
     --subsample_points_percent 1.0 \
     --subsample_dimensions_percent 1.0 \
     --no_encode_and_decode \
-    --action truncated \
-    --optimizer adam \
-    --lr 2e-1 \
-    --append_exp_name test_length=1000_dt=0.001 \
+    --action hutch \
+    --optimizer sgd \
+    --lr 1e-5 \
+    --append_exp_name test \
     --om_dt 0.001 \
     --om_gamma 1 \
-    --path_length 1000 \
+    --path_length 100 \
+    --om_d 1.0 \
     --steps 2000
 
 # python sample.py \

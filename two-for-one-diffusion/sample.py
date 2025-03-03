@@ -440,20 +440,20 @@ def main(samp_args):
         else pd.read_csv(samp_args.split, index_col="name").index
     )
     for name in names:
-        try:
-            generate_samples(
-                model,
-                trainset,
-                samp_args.noise_level,
-                args,
-                device,
-                eval_folder,
-                testset,
-                name,
-            )
-        except:
-            print(f"Failed to generate samples for {name}")
-            continue
+        # try:
+        generate_samples(
+            model,
+            trainset,
+            samp_args.noise_level,
+            args,
+            device,
+            eval_folder,
+            testset,
+            name,
+        )
+        # except:
+        #     print(f"Failed to generate samples for {name}")
+        #     continue
 
     # writer.flush()
     # writer.close()
@@ -601,9 +601,14 @@ def generate_samples(
             )
             cluster_coords = np.load(cluster_centers_path)
 
-            # Load samples from the ground truth simulations to serve as endpoints for interpolation            
-            gt_traj_path = os.path.join("/data/sanjeevr/Reference_MD_Sims", Molecules[protein_name.upper()].value, "gt_traj.pt")
+            # Load samples from the ground truth simulations to serve as endpoints for interpolation
+            gt_traj_path = os.path.join(
+                "/data/sanjeevr/Reference_MD_Sims",
+                Molecules[protein_name.upper()].value,
+                "gt_traj.pt",
+            )
             if os.path.exists(gt_traj_path):
+
                 gt_traj = torch.load(gt_traj_path)
             else:
                 print("Loading ground truth trajectory")
@@ -618,7 +623,7 @@ def generate_samples(
                 )
                 gt_traj = torch.tensor(dataset.traj.xyz)
                 torch.save(gt_traj, gt_traj_path)
-            
+
             gt_traj = 10 * gt_traj  # convert to angstroms
             gt_traj -= gt_traj.mean(1, keepdims=True)  # center
 
@@ -632,14 +637,14 @@ def generate_samples(
                 bins=101,
                 evalset="testset",
             )
-            # assign cluster centers to the ground truth samples
+            # assign cluster centers to the ground truth samples (only look at every 100th frame to save time)
             cluster_assignments, _ = discretize_trajectory(
-                gt_traj, tic_evaluator, cluster_coords
+                gt_traj[::100], tic_evaluator, cluster_coords
             )
 
             # Sample endpoints from the cluster centers
-            endpoint_1 = gt_traj[cluster_assignments == clusters[0]]
-            endpoint_2 = gt_traj[cluster_assignments == clusters[1]]
+            endpoint_1 = gt_traj[::100][cluster_assignments == clusters[0]]
+            endpoint_2 = gt_traj[::100][cluster_assignments == clusters[1]]
 
             # # Replicate the endpoints to have samp_args.num_samples_eval samples
             endpoint_1_samples = endpoint_1.repeat(
@@ -690,7 +695,7 @@ def generate_samples(
                     lr=samp_args.lr,
                     dt=samp_args.om_dt,
                     gamma=samp_args.om_gamma * torch.tensor(masses).to(device),
-                    D=samp_args.om_d,
+                    D=samp_args.om_d / (trainset.std if args.scale_data else 1.0) ** 2,
                     anneal=samp_args.anneal,
                     sample_latent_time=samp_args.sample_latent_time,
                     cosine_scheduler=samp_args.cosine_scheduler,

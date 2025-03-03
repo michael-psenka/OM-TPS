@@ -15,7 +15,7 @@ class TruncatedAction(torch.nn.Module):
         super(TruncatedAction, self).__init__()
         self.force_func = force_func
         self.dt = dt
-        self.gamma = gamma.unsqueeze(0).unsqueeze(-1) # shape of [1, n_atoms, 1]
+        self.gamma = gamma.unsqueeze(0).unsqueeze(-1)  # shape of [1, n_atoms, 1]
 
     def forward(
         self,
@@ -45,7 +45,6 @@ class TruncatedAction(torch.nn.Module):
         return first_term.sum(), second_term.sum(), torch.tensor(0).to(torch.float32)
 
 
-
 class S2Action(torch.nn.Module):
     """Action with Hessian"""
 
@@ -62,7 +61,7 @@ class S2Action(torch.nn.Module):
         self.force_func = force_func
         self.laplace_func = laplace_func
         self.dt = dt
-        self.gamma = gamma.unsqueeze(0).unsqueeze(-1) # shape of [1, n_atoms, 1]
+        self.gamma = gamma.unsqueeze(0).unsqueeze(-1)  # shape of [1, n_atoms, 1]
         self.D = D
 
     def forward(self, path: torch.Tensor):
@@ -70,7 +69,9 @@ class S2Action(torch.nn.Module):
         Args: path of shape [P, N, 3]
         """
         first_term = torch.square((path[1:] - path[:-1])) / (2 * self.dt)
-        second_term = torch.square(self.force_func(path[:-1])) * (self.dt / (2 * self.gamma**2))
+        second_term = torch.square(self.force_func(path[:-1])) * (
+            self.dt / (2 * self.gamma**2)
+        )
         third_term = self.laplace_func(path[:-1]) * self.dt * self.D / self.gamma
         result = torch.sum(first_term + second_term + third_term)
         # return result
@@ -87,7 +88,7 @@ class HutchinsonAction(torch.nn.Module):
     def __init__(self, force_func, dt, gamma, D, N=1):
         super(HutchinsonAction, self).__init__()
         self.dt = dt
-        self.gamma = gamma.unsqueeze(0).unsqueeze(-1) # shape of [1, n_atoms, 1]
+        self.gamma = gamma.unsqueeze(0).unsqueeze(-1)  # shape of [1, n_atoms, 1]
         self.D = D
         self.N = N
         self.force_func = force_func
