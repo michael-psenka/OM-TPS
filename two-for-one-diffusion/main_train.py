@@ -367,7 +367,7 @@ if __name__ == "__main__":
         remove_freq=args.remove_freq,  # frequency of removing clusters from data
     )
 
-
+    # temp hard coding
     norm_factor = 3.6533 #trainset.std if args.scale_data else 1.0
 
     # Set device
@@ -391,8 +391,7 @@ if __name__ == "__main__":
             objective="pred_velocity",
         )
     else:
-        import pdb;  pdb.set_trace()
-        num_beads = 
+        
         DDPM_model = GaussianDiffusion(
             model=model,
             features=trainset.bead_onehot,

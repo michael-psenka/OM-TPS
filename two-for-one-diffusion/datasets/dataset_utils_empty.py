@@ -241,6 +241,7 @@ def get_dataset(
             train_idx = idx_range[:num_train]
             val_idx = idx_range[num_train : num_train + num_val]
             test_idx = idx_range[num_train + num_val :]
+            trainset = dataset.get_subset(train_idx, topology, train=True)
             valset = dataset.get_subset(val_idx, topology, train=False)
             testset = dataset.get_subset(test_idx, topology, train=False)
         else:
