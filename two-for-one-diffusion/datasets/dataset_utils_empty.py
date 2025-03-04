@@ -36,7 +36,6 @@ class AtomSelection(Enum):
     A_CARBON = "c-alpha"
     ALL = "all"
 
-
 class Molecules(Enum):
     CHIGNOLIN = "CLN025"
     TRP_CAGE = "2JOF"
@@ -173,6 +172,7 @@ def get_dataset(
             trainset = dataset
             valset = dataset
             testset = dataset
+            
 
     elif mol.upper() in AtlasProteins.__members__:
         mol = AtlasProteins[mol.upper()].value
@@ -241,7 +241,6 @@ def get_dataset(
             train_idx = idx_range[:num_train]
             val_idx = idx_range[num_train : num_train + num_val]
             test_idx = idx_range[num_train + num_val :]
-            trainset = dataset.get_subset(train_idx, topology, train=True)
             valset = dataset.get_subset(val_idx, topology, train=False)
             testset = dataset.get_subset(test_idx, topology, train=False)
         else:

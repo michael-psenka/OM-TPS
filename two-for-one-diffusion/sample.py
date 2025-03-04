@@ -98,6 +98,12 @@ parser.add_argument(
     default="iid",
     help="generative mode, either iid, interpolate, or langevin",
 )
+parser.add_argument(
+    "--atom_selection",
+    type=str,
+    default="c-alpha",
+    help="coarse-graining method, either c-alpha or protein",
+)
 
 parser.add_argument(
     "--append_exp_name",
@@ -309,11 +315,12 @@ def main(samp_args):
     # Load args from training
     if samp_args.flow_matching:
         arg_name = "args-flow.pickle"
-    else:
-        if samp_args.transition_data_removed:
+    elif samp_args.transition_data_removed:
             arg_name = "args-transition-data-removed.pickle"
-        else:
-            arg_name = "args.pickle"
+    elif samp_args.atom_selection == "protein":
+        arg_name = "args-all-atom.pickle"
+    else:
+        arg_name = "args.pickle"
     with open(
         join(
             samp_args.model_path,
@@ -339,6 +346,10 @@ def main(samp_args):
     samp_args.append_exp_name += transition_removed_append
     flow_append = "_flowmatching" if samp_args.flow_matching else ""
     samp_args.append_exp_name += flow_append
+
+    all_atom_append = "_all-atom" if samp_args.atom_selection == "protein" else ""
+    samp_args.append_exp_name += all_atom_append
+
     samp_args.original_append_exp_name = samp_args.append_exp_name
 
     samp_args.append_exp_name = (
@@ -379,6 +390,12 @@ def main(samp_args):
     eval_folder.mkdir(exist_ok=True, parents=True)
 
     # writer = SummaryWriter(str(eval_folder))
+    if args.atom_selection == "protein":
+        atom_selection = AtomSelection.PROTEIN
+    elif args.atom_selection == "c-alpha":
+        atom_selection = AtomSelection.C_ALPHA
+    else:
+        raise Exception("Invalid atom selection, must be 'protein' or 'c-alpha'")
 
     # Load dataset from args
     trainset, valset, testset = get_dataset(
@@ -386,12 +403,16 @@ def main(samp_args):
         args.mean0,
         args.data_folder,
         args.fold,
+        atom_selection,
         shuffle_before_splitting=args.shuffle_data_before_splitting,
     )
 
     norm_factor = trainset.std if args.scale_data else 1.0
 
     # Init model from args
+    # TODO: hardcoded for now, fix
+    trainset.num_beads = 166
+    trainset.bead_onehot = torch.eye(trainset.num_beads)
     model_nn = get_model(args, trainset, device)
     # print(model_nn)
 
@@ -400,7 +421,9 @@ def main(samp_args):
         model_cls = FlowMatching
     else:
         model_cls = GaussianDiffusion
-
+    
+    
+    
     DDPM_model = model_cls(
         model=model_nn,
         features=trainset.bead_onehot,
@@ -417,16 +440,17 @@ def main(samp_args):
         model_path = (
             samp_args.model_path + f"/model-{samp_args.model_checkpoint}-flow.pt"
         )
+    elif samp_args.transition_data_removed:
+        model_path = (
+            samp_args.model_path
+            + f"/model-{samp_args.model_checkpoint}-transition-data-removed.pt"
+        )
+    elif samp_args.atom_selection == "protein":
+        model_path = samp_args.model_path + f"/model-{samp_args.model_checkpoint}-all-atom.pt"
     else:
-        if samp_args.transition_data_removed:
-            model_path = (
-                samp_args.model_path
-                + f"/model-{samp_args.model_checkpoint}-transition-data-removed.pt"
-            )
-        else:
-            model_path = (
-                samp_args.model_path + f"/model-{samp_args.model_checkpoint}.pt"
-            )
+        model_path = (
+            samp_args.model_path + f"/model-{samp_args.model_checkpoint}.pt"
+        )
     if torch.cuda.is_available():
         data_dict = torch.load(model_path)
     else:
@@ -642,9 +666,38 @@ def generate_samples(
                 gt_traj[::100], tic_evaluator, cluster_coords
             )
 
+            start_points = cluster_assignments == clusters[0]
+            end_points = cluster_assignments == clusters[1]
+
+            if samp_args.atom_selection == "protein":
+                # load all atom traj
+                gt_traj_path = os.path.join(
+                "/data/sanjeevr/Reference_MD_Sims",
+                Molecules[protein_name.upper()].value,
+                "gt_traj_all-atom.pt",
+            )
+                if os.path.exists(gt_traj_path):
+                    gt_traj = torch.load(gt_traj_path)
+                else:
+                    print("Loading all-atom ground truth trajectory")
+                    dataset = DEShawDataset(
+                        data_root="/data/sanjeevr/Reference_MD_Sims",
+                        molecule=Molecules[protein_name.upper()],
+                        simulation_id=0,
+                        atom_selection=AtomSelection.PROTEIN,
+                        return_bond_graph=False,
+                        transform=to_angstrom,
+                        align=False,
+                    )
+                    gt_traj = torch.tensor(dataset.traj.xyz)
+                    torch.save(gt_traj, gt_traj_path)
+
+                gt_traj = 10 * gt_traj  # convert to angstroms
+                gt_traj -= gt_traj.mean(1, keepdims=True)  # center
+
             # Sample endpoints from the cluster centers
-            endpoint_1 = gt_traj[::100][cluster_assignments == clusters[0]]
-            endpoint_2 = gt_traj[::100][cluster_assignments == clusters[1]]
+            endpoint_1 = gt_traj[::100][start_points]
+            endpoint_2 = gt_traj[::100][end_points]
 
             # # Replicate the endpoints to have samp_args.num_samples_eval samples
             endpoint_1_samples = endpoint_1.repeat(
@@ -916,20 +969,21 @@ def generate_samples(
         )
 
     else:
-        evaluate_fastfolders(
-            protein_name,
-            samp_args.gen_mode,
-            samp_args.original_append_exp_name,
-            checkpoint_folder="./saved_models",
-            reference_folder="./evaluate/saved_references",
-            pdb_folder="./datasets",
-            model=model.ema_model,
-            num_paths=samp_args.num_samples_eval,
-            endpoints=clusters if "interpolate" in samp_args.gen_mode else None,
-            compute_rates=samp_args.post_om_md_simulate,
-            log=not samp_args.disable_logging,
-            gif=True,
-        )
+        if samp_args.atom_selection != "protein":
+            evaluate_fastfolders(
+                protein_name,
+                samp_args.gen_mode,
+                samp_args.original_append_exp_name,
+                checkpoint_folder="./saved_models",
+                reference_folder="./evaluate/saved_references",
+                pdb_folder="./datasets",
+                model=model.ema_model,
+                num_paths=samp_args.num_samples_eval,
+                endpoints=clusters if "interpolate" in samp_args.gen_mode else None,
+                compute_rates=samp_args.post_om_md_simulate,
+                log=not samp_args.disable_logging,
+                gif=True,
+            )
     print("Evaluation complete.")
 
     return sampled_mol
