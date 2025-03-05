@@ -503,7 +503,6 @@ class DEShawDataset(MDTrajectory):
         self.simulation_id = simulation_id
         self.atom_selection = atom_selection
         self.tic_evaluator = tic_evaluator
-
         full_simulation_id = "-".join(
             [molecule.value, str(simulation_id), atom_selection.value]
         )

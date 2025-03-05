@@ -27,14 +27,18 @@ def save_ovito_traj(
     """
 
     t = gsd.hoomd.open(name=filename, mode="w")
-    cell = 1.5 * torch.eye(3) * positions.cpu().abs().max()
+    # cell = 1.5 * torch.eye(3) * positions.cpu().abs().max()
+    cell = 25 * torch.eye(3)
 
     if align:
         positions = center_zero(positions)
 
     for i, pos in enumerate(positions):
         if align:
-            pos = kabsch_rotate(pos, positions[0])
+            try:
+                pos = kabsch_rotate(pos, positions[0])
+            except:
+                pass
         t.append(create_frame(i, pos, cell, create_bonds, all_backbone))
 
     t.close()

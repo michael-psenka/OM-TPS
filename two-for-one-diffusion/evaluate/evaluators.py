@@ -2,6 +2,7 @@ import mdtraj as md
 import numpy as np
 import torch
 import os
+from datasets.dataset_utils_empty import AtomSelection
 from evaluate.evaluators_CGflowmatching import (
     mse as mse_CGFM,
     get_prob,
@@ -10,9 +11,11 @@ from evaluate.evaluators_CGflowmatching import (
     kl_div,
     K_BT_IN_KCAL_PER_MOL,
 )
+from utils import center_zero
 import matplotlib.pyplot as plt
 
 from deeptime.decomposition import TICA
+import pyemma.coordinates as coor
 
 from matplotlib.colors import LogNorm, Normalize
 import matplotlib.path as mpath
@@ -401,29 +404,39 @@ class TicEvaluator:
         mol_name,
         eval_folder,
         data_folder,
+        atom_selection=AtomSelection.A_CARBON,
         folded_pdb_folder="../datasets/folded_pdbs",
         bins=101,
         lagtime=100,
         saved_ref="none",
         evalset="testset",
+        gt_traj=None,
     ):
         self.mol_name = mol_name
         self.plots_folder = eval_folder
         self.bins = bins
+        self.atom_selection = atom_selection
         if mol_name.upper() in Molecules.__members__:
             protid = Molecules[mol_name.upper()].value
         else:
             protid = AtlasProteins[mol_name.upper()].value
-        try:
-            folded_pdb = f"{folded_pdb_folder}/{protid}.pdb"
+
+        folded_pdb = f"{folded_pdb_folder}/{protid}-0-protein.pdb"
+        if self.atom_selection == AtomSelection.A_CARBON:
+            # Only keep alpha carbons
             self.folded = process_pdb(folded_pdb, mol_name)
-        except OSError:
-            folded_pdb = f"{folded_pdb_folder}/{protid}/{protid}.pdb"
-            self.folded = process_pdb(folded_pdb, mol_name)
+        elif self.atom_selection == AtomSelection.PROTEIN:
+            self.folded = md.load(folded_pdb).remove_solvent()
+            self.feat = coor.featurizer(folded_pdb)
+            self.feat.add_backbone_torsions(cossin=True)
+            self.feat.add_sidechain_torsions(cossin=True)
 
         # Check if the computed objects are already saved
         if saved_ref == "none":
-            saved_ref = f"./evaluate/saved_references/saved_TICA_{mol_name.upper()}_{evalset}.pickle"
+            if atom_selection == AtomSelection.A_CARBON:
+                saved_ref = f"./evaluate/saved_references/saved_TICA_{mol_name.upper()}_{evalset}.pickle"
+            elif atom_selection == AtomSelection.PROTEIN:
+                saved_ref = f"./evaluate/saved_references/saved_TICA_{mol_name.upper()}_all_atom_{evalset}.pickle"
         if os.path.exists(saved_ref):
             # Load the saved objects
             with open(saved_ref, "rb") as f:
@@ -434,21 +447,45 @@ class TicEvaluator:
                     self.bin_edges_y,
                 ) = pickle.load(f)
         else:
-            trainset_sorted, valset_sorted, testset_sorted = get_dataset(
-                mol_name,
-                mean0=True,
-                data_folder=data_folder,
-                pdb_folder=folded_pdb_folder,
-                fold=None,
-                traindata_subset=None,
-                shuffle_before_splitting=False,
-            )
+            if gt_traj is not None:
+                sorted_data_xyz = 10 * center_zero(gt_traj)
+            else:
+                gt_traj_path = os.path.join(
+                    data_folder,
+                    protid,
+                    (
+                        "gt_traj.pt"
+                        if self.atom_selection == AtomSelection.A_CARBON
+                        else "gt_traj_all-atom.pt"
+                    ),
+                )
+                if os.path.exists(gt_traj_path):
+                    # load the existing dataset
+                    sorted_data_xyz = 10 * center_zero(torch.load(gt_traj_path))
+                else:
+                    # load the dataset from the raw MD trajectories
+                    trainset_sorted, valset_sorted, testset_sorted = get_dataset(
+                        mol_name,
+                        mean0=True,
+                        data_folder=data_folder,
+                        pdb_folder=folded_pdb_folder,
+                        fold=None,
+                        atom_selection=atom_selection,
+                        traindata_subset=None,
+                        shuffle_before_splitting=False,
+                    )
 
-            sorted_data_xyz = torch.cat(
-                (trainset_sorted[:][0], valset_sorted[:][0], testset_sorted[:][0]),
-                dim=0,
-            )
+                    sorted_data_xyz = torch.cat(
+                        (
+                            trainset_sorted[:][0],
+                            valset_sorted[:][0],
+                            testset_sorted[:][0],
+                        ),
+                        dim=0,
+                    )
+                    torch.save(sorted_data_xyz / 10, gt_traj_path)
 
+            print("Computing TIC features")
             tic_features = self.get_tic_features(sorted_data_xyz, self.folded)
 
             # We compute the TIC eigenvalues on the training and validation partitions both together
@@ -476,6 +513,11 @@ class TicEvaluator:
                 pickle.dump(
                     (self.tica, self.gt_prob, self.bin_edges_x, self.bin_edges_y), f
                 )
+            self.bin_mids_x = (self.bin_edges_x[1:] + self.bin_edges_x[:-1]) / 2
+            self.bin_mids_y = (self.bin_edges_y[1:] + self.bin_edges_y[:-1]) / 2
+
+            # Make a plot of the TIC samples
+            self.eval(sorted_data_xyz, "GT", plot_tic=True)
 
         self.bin_mids_x = (self.bin_edges_x[1:] + self.bin_edges_x[:-1]) / 2
         self.bin_mids_y = (self.bin_edges_y[1:] + self.bin_edges_y[:-1]) / 2
@@ -489,18 +531,26 @@ class TicEvaluator:
 
     def get_tic_features(self, xyz, folded, separate=False):
         """
-        Calculate features for TIC analysis, dihedrals and pairwise distances.
+        Calculate features for TIC analysis.
+        For A_CARBON, we calculate dihedrals and pairwise distances.
+        For PROTEIN, we calculate backbone and sidechain torsions.
         """
         traj = md.Trajectory(xyz.numpy() / 10, topology=folded.topology)
 
-        ind = np.arange(0, xyz.shape[1] - 3)
-        ind = np.stack((ind, ind + 1, ind + 2, ind + 3)).T
-        dihedrals = md.compute_dihedrals(traj, ind)
+        if self.atom_selection == AtomSelection.A_CARBON:
+            # backbone dihedrals and pairwise distances
+            ind = np.arange(0, xyz.shape[1] - 3)
+            ind = np.stack((ind, ind + 1, ind + 2, ind + 3)).T
+            dihedrals = md.compute_dihedrals(traj, ind)
 
-        pwds = get_pwd_triu_batch(xyz).numpy()
-        if separate:
-            return dihedrals, pwds
-        return np.hstack((dihedrals, pwds))
+            pwds = get_pwd_triu_batch(xyz).numpy()
+            if separate:
+                return dihedrals, pwds
+            return np.hstack((dihedrals, pwds))
+        elif self.atom_selection == AtomSelection.PROTEIN:
+            # backbone and sidechain torsions
+            feat = self.feat.transform(traj)
+            return feat
 
     def eval(
         self,

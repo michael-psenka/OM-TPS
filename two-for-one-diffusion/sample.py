@@ -317,8 +317,6 @@ def main(samp_args):
         arg_name = "args-flow.pickle"
     elif samp_args.transition_data_removed:
         arg_name = "args-transition-data-removed.pickle"
-    elif samp_args.atom_selection == "protein":
-        arg_name = "args-all-atom.pickle"
     else:
         arg_name = "args.pickle"
     with open(
@@ -346,9 +344,6 @@ def main(samp_args):
     samp_args.append_exp_name += transition_removed_append
     flow_append = "_flowmatching" if samp_args.flow_matching else ""
     samp_args.append_exp_name += flow_append
-
-    all_atom_append = "_all-atom" if samp_args.atom_selection == "protein" else ""
-    samp_args.append_exp_name += all_atom_append
 
     samp_args.original_append_exp_name = samp_args.append_exp_name
 
@@ -391,9 +386,9 @@ def main(samp_args):
 
     # writer = SummaryWriter(str(eval_folder))
     if samp_args.atom_selection == "protein":
-        atom_selection = AtomSelection.PROTEIN
+        samp_args.atom_selection = AtomSelection.PROTEIN
     elif samp_args.atom_selection == "c-alpha":
-        atom_selection = AtomSelection.A_CARBON
+        samp_args.atom_selection = AtomSelection.A_CARBON
     else:
         raise Exception("Invalid atom selection, must be 'protein' or 'c-alpha'")
 
@@ -403,7 +398,7 @@ def main(samp_args):
         args.mean0,
         args.data_folder,
         args.fold,
-        atom_selection,
+        samp_args.atom_selection,
         shuffle_before_splitting=args.shuffle_data_before_splitting,
     )
 
@@ -411,8 +406,8 @@ def main(samp_args):
 
     # Init model from args
     # TODO: hardcoded for now, fix
-    # trainset.num_beads = 166
-    # trainset.bead_onehot = torch.eye(trainset.num_beads)
+    trainset.num_beads = 166
+    trainset.bead_onehot = torch.eye(trainset.num_beads)
     model_nn = get_model(args, trainset, device)
     # print(model_nn)
 
@@ -442,10 +437,6 @@ def main(samp_args):
         model_path = (
             samp_args.model_path
             + f"/model-{samp_args.model_checkpoint}-transition-data-removed.pt"
-        )
-    elif samp_args.atom_selection == "protein":
-        model_path = (
-            samp_args.model_path + f"/model-{samp_args.model_checkpoint}-all-atom.pt"
         )
     else:
         model_path = samp_args.model_path + f"/model-{samp_args.model_checkpoint}.pt"
@@ -490,8 +481,7 @@ def generate_samples(
         iid_sample_path = Path(
             os.path.join(os.path.dirname(eval_folder), "main_eval_output_iid")
         )
-
-        protein_name = iid_sample_path.parts[-2]
+        protein_name = iid_sample_path.parts[-2].split("_")[0]
     else:
         protein_name = "tetrapeptide"
 
@@ -627,10 +617,13 @@ def generate_samples(
             gt_traj_path = os.path.join(
                 "/data/sanjeevr/Reference_MD_Sims",
                 Molecules[protein_name.upper()].value,
-                "gt_traj.pt",
+                (
+                    "gt_traj.pt"
+                    if samp_args.atom_selection == AtomSelection.A_CARBON
+                    else "gt_traj_all-atom.pt"
+                ),
             )
             if os.path.exists(gt_traj_path):
-
                 gt_traj = torch.load(gt_traj_path)
             else:
                 print("Loading ground truth trajectory")
@@ -638,7 +631,7 @@ def generate_samples(
                     data_root="/data/sanjeevr/Reference_MD_Sims",
                     molecule=Molecules[protein_name.upper()],
                     simulation_id=0,
-                    atom_selection=AtomSelection.A_CARBON,
+                    atom_selection=sample_args.atom_selection,
                     return_bond_graph=False,
                     transform=to_angstrom,
                     align=False,
@@ -653,11 +646,13 @@ def generate_samples(
             tic_evaluator = TicEvaluator(
                 val_data=None,
                 mol_name=protein_name,
-                eval_folder=iid_sample_path,
-                data_folder="datasets",
+                eval_folder=eval_folder,
+                data_folder="/data/sanjeevr/Reference_MD_Sims",
+                atom_selection=samp_args.atom_selection,
                 folded_pdb_folder="datasets/folded_pdbs",
                 bins=101,
                 evalset="testset",
+                gt_traj=gt_traj / 10,
             )
             # assign cluster centers to the ground truth samples (only look at every 100th frame to save time)
             cluster_assignments, _ = discretize_trajectory(
@@ -667,7 +662,7 @@ def generate_samples(
             start_points = cluster_assignments == clusters[0]
             end_points = cluster_assignments == clusters[1]
 
-            if samp_args.atom_selection == "protein":
+            if samp_args.atom_selection == AtomSelection.PROTEIN:
                 # load all atom traj
                 gt_traj_path = os.path.join(
                     "/data/sanjeevr/Reference_MD_Sims",
@@ -937,16 +932,16 @@ def generate_samples(
         json.dump(metadata, open(f"{eval_folder}/{name}_metadata.json", "w"))
 
     else:
-        if samp_args.atom_selection == "protein":
-            # TODO: hardcoded for now, fix this
+        if samp_args.atom_selection == AtomSelection.PROTEIN:
             topology = md.load_topology(
-                "/data/sanjeevr/Reference_MD_Sims/CLN025/simulation_0/protein/CLN025-0-protein/CLN025-0-protein.pdb"
+                f"./datasets/folded_pdbs/{Molecules[mol_name.upper()].value}-0-protein.pdb"
             )
         else:
             topology = trainset.topology
         all_mol_traj = md.Trajectory(
             sampled_mol[0:1000].numpy() / 10, topology=topology
         )
+
         all_mol_traj.save_pdb(
             str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb")
         )
@@ -958,7 +953,7 @@ def generate_samples(
         align=samp_args.gen_mode == "iid",
         all_backbone="tetrapeptide" in protein_name
         and trainset.atom_selection == "backbone",
-        create_bonds=samp_args.atom_selection == "c-alpha",
+        create_bonds=samp_args.atom_selection == AtomSelection.A_CARBON,
     )
 
     # Perform final evaluations (producing plots, GIFs, etc.)
@@ -975,7 +970,7 @@ def generate_samples(
         )
 
     else:
-        if samp_args.atom_selection != "protein":
+        if samp_args.atom_selection != AtomSelection.PROTEIN:
             evaluate_fastfolders(
                 protein_name,
                 samp_args.gen_mode,

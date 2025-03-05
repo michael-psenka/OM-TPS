@@ -21,6 +21,7 @@ conda activate om-diffusion
 python main_train.py \
     --mol chignolin \
     --flow_matching \
+    --start_from_last_saved True \
     --data_folder /data/sanjeevr/Reference_MD_Sims \
     --eval_interval 10000 \
     --experiment_name chignolin_all_atom_flowmatching_weightdecay=1e-4_sgd \
