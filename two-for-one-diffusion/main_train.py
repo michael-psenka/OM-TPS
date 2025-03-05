@@ -368,7 +368,7 @@ if __name__ == "__main__":
     )
 
     # temp hard coding
-    norm_factor = 3.6533 #trainset.std if args.scale_data else 1.0
+    norm_factor = trainset.std if args.scale_data else 1.0  # 3.6533
 
     # Set device
     # Note: Code does not work for cpu in current form
@@ -391,7 +391,7 @@ if __name__ == "__main__":
             objective="pred_velocity",
         )
     else:
-        
+
         DDPM_model = GaussianDiffusion(
             model=model,
             features=trainset.bead_onehot,

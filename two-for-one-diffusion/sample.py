@@ -316,7 +316,7 @@ def main(samp_args):
     if samp_args.flow_matching:
         arg_name = "args-flow.pickle"
     elif samp_args.transition_data_removed:
-            arg_name = "args-transition-data-removed.pickle"
+        arg_name = "args-transition-data-removed.pickle"
     elif samp_args.atom_selection == "protein":
         arg_name = "args-all-atom.pickle"
     else:
@@ -421,9 +421,7 @@ def main(samp_args):
         model_cls = FlowMatching
     else:
         model_cls = GaussianDiffusion
-    
-    
-    
+
     DDPM_model = model_cls(
         model=model_nn,
         features=trainset.bead_onehot,
@@ -446,11 +444,11 @@ def main(samp_args):
             + f"/model-{samp_args.model_checkpoint}-transition-data-removed.pt"
         )
     elif samp_args.atom_selection == "protein":
-        model_path = samp_args.model_path + f"/model-{samp_args.model_checkpoint}-all-atom.pt"
-    else:
         model_path = (
-            samp_args.model_path + f"/model-{samp_args.model_checkpoint}.pt"
+            samp_args.model_path + f"/model-{samp_args.model_checkpoint}-all-atom.pt"
         )
+    else:
+        model_path = samp_args.model_path + f"/model-{samp_args.model_checkpoint}.pt"
     if torch.cuda.is_available():
         data_dict = torch.load(model_path)
     else:
@@ -672,10 +670,10 @@ def generate_samples(
             if samp_args.atom_selection == "protein":
                 # load all atom traj
                 gt_traj_path = os.path.join(
-                "/data/sanjeevr/Reference_MD_Sims",
-                Molecules[protein_name.upper()].value,
-                "gt_traj_all-atom.pt",
-            )
+                    "/data/sanjeevr/Reference_MD_Sims",
+                    Molecules[protein_name.upper()].value,
+                    "gt_traj_all-atom.pt",
+                )
                 if os.path.exists(gt_traj_path):
                     gt_traj = torch.load(gt_traj_path)
                 else:
@@ -939,8 +937,15 @@ def generate_samples(
         json.dump(metadata, open(f"{eval_folder}/{name}_metadata.json", "w"))
 
     else:
+        if samp_args.atom_selection == "protein":
+            # TODO: hardcoded for now, fix this
+            topology = md.load_topology(
+                "/data/sanjeevr/Reference_MD_Sims/CLN025/simulation_0/protein/CLN025-0-protein/CLN025-0-protein.pdb"
+            )
+        else:
+            topology = trainset.topology
         all_mol_traj = md.Trajectory(
-            sampled_mol[0:1000].numpy() / 10, topology=trainset.topology
+            sampled_mol[0:1000].numpy() / 10, topology=topology
         )
         all_mol_traj.save_pdb(
             str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb")
@@ -953,6 +958,7 @@ def generate_samples(
         align=samp_args.gen_mode == "iid",
         all_backbone="tetrapeptide" in protein_name
         and trainset.atom_selection == "backbone",
+        create_bonds=samp_args.atom_selection == "c-alpha",
     )
 
     # Perform final evaluations (producing plots, GIFs, etc.)

@@ -6,28 +6,28 @@
 #SBATCH --time=24:00:00
 
 conda activate om-diffusion
-# python main_train.py \
-#     --mol chignolin \
-#     --start_from_last_saved True \
-#     --data_folder /data/sanjeevr/Reference_MD_Sims \
-#     --eval_interval 10000 \
-#     --experiment_name chignolin_all_atom_weightdecay=1e-4_sgd \
-#     --batch_size 56 \
-#     --atom_selection protein \
-#     --weight_decay 1e-4 \
-#     --num_samples 100 \
-#     --iterations_on_val 1
-
 python main_train.py \
     --mol chignolin \
+    --start_from_last_saved True \
     --data_folder /data/sanjeevr/Reference_MD_Sims \
     --eval_interval 10000 \
-    --experiment_name chignolin_all_atom_weightdecay=1e-4_sgd_correctscale \
+    --experiment_name chignolin_all_atom_weightdecay=1e-4_sgd \
     --batch_size 56 \
     --atom_selection protein \
     --weight_decay 1e-4 \
     --num_samples 100 \
     --iterations_on_val 1
+
+# python main_train.py \
+#     --mol chignolin \
+#     --data_folder /data/sanjeevr/Reference_MD_Sims \
+#     --eval_interval 10000 \
+#     --experiment_name chignolin_all_atom_weightdecay=1e-4_sgd_correctscale \
+#     --batch_size 56 \
+#     --atom_selection protein \
+#     --weight_decay 1e-4 \
+#     --num_samples 100 \
+#     --iterations_on_val 1
 
 # BBA
 

@@ -1,33 +1,23 @@
-# python sample.py \
-#     --model_path saved_models/chignolin \
-#     --gen_mode om_interpolate \
-#     --atom_selection protein \
-#     --num_samples_eval 1 \
-#     --batch_size_gen 1 \
-#     --latent_time 20 \
-#     --initial_guess_level 250\
-#     --subsample_points_percent 1.0 \
-#     --subsample_dimensions_percent 1.0 \
-#     --no_encode_and_decode \
-#     --action truncated \
-#     --optimizer adam \
-#     --lr 2e-1 \
-#     --append_exp_name test \
-#     --om_dt 0.001 \
-#     --om_gamma 1 \
-#     --path_length 100 \
-#     --steps 2000
-
-python main_train.py \
-    --mol chignolin \
-    --data_folder /data/sanjeevr/Reference_MD_Sims \
-    --eval_interval 10000 \
-    --experiment_name chignolin_all_atom_weightdecay=1e-4_sgd_correctscale \
-    --batch_size 56 \
+python sample.py \
+    --model_path saved_models/chignolin \
+    --gen_mode interpolate \
     --atom_selection protein \
-    --weight_decay 1e-4 \
-    --num_samples 100 \
-    --iterations_on_val 1
+    --num_samples_eval 1 \
+    --batch_size_gen 1 \
+    --latent_time 999 \
+    --initial_guess_level 999\
+    --subsample_points_percent 1.0 \
+    --subsample_dimensions_percent 1.0 \
+    --no_encode_and_decode \
+    --action truncated \
+    --optimizer adam \
+    --lr 2e-1 \
+    --append_exp_name test \
+    --om_dt 0.1 \
+    --om_gamma 1 \
+    --path_length 25 \
+    --steps 0
+
 
 # python sample.py \
 #     --model_path saved_models/trp_cage \

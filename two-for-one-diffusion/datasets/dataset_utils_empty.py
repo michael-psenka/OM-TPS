@@ -36,6 +36,7 @@ class AtomSelection(Enum):
     A_CARBON = "c-alpha"
     ALL = "all"
 
+
 class Molecules(Enum):
     CHIGNOLIN = "CLN025"
     TRP_CAGE = "2JOF"
@@ -172,7 +173,6 @@ def get_dataset(
             trainset = dataset
             valset = dataset
             testset = dataset
-            
 
     elif mol.upper() in AtlasProteins.__members__:
         mol = AtlasProteins[mol.upper()].value
