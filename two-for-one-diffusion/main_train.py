@@ -346,7 +346,7 @@ if __name__ == "__main__":
         )  # TODO: take into account atom selection here
 
     if args.atom_selection == "c-alpha":
-        atom_selection = AtomSelection.C_ALPHA
+        atom_selection = AtomSelection.A_CARBON
     elif args.atom_selection == "protein":
         atom_selection = AtomSelection.PROTEIN
     elif args.atom_selection == "all":
@@ -367,7 +367,8 @@ if __name__ == "__main__":
         remove_freq=args.remove_freq,  # frequency of removing clusters from data
     )
 
-    norm_factor = trainset.std if args.scale_data else 1.0
+    # temp hard coding
+    norm_factor = trainset.std if args.scale_data else 1.0  # 3.6533
 
     # Set device
     # Note: Code does not work for cpu in current form
@@ -390,6 +391,7 @@ if __name__ == "__main__":
             objective="pred_velocity",
         )
     else:
+
         DDPM_model = GaussianDiffusion(
             model=model,
             features=trainset.bead_onehot,

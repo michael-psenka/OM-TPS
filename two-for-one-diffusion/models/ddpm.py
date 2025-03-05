@@ -300,8 +300,9 @@ class GaussianDiffusion(nn.Module):
         Loop over diffusion timesteps to go from noise to molecule starting at t=t.
         """
         device = self.betas.device
-
+        # t+=1
         b = mol_t.shape[0]
+        # mol_t = torch.randn_like(mol_t).to(mol_t.device) # temp
         mol = center_zero(mol_t)
         assert_center_zero(mol)
 
@@ -333,7 +334,10 @@ class GaussianDiffusion(nn.Module):
         )
         return (
             self.p_sample_loop(
-                mol_t=starting_mol, t=self.num_timesteps, z=z, temperature=temperature
+                mol_t=starting_mol,
+                t=self.num_timesteps - 1,
+                z=z,
+                temperature=temperature,
             )
             * self.norm_factor
         )
@@ -419,7 +423,11 @@ class GaussianDiffusion(nn.Module):
         xs = self.p_sample_loop(
             noised_xs.reshape(-1, n_atoms, 3),
             latent_time,
-            z=z.unsqueeze(0).repeat(path_length * num_paths, 1),
+            z=(
+                z.unsqueeze(0).repeat(path_length * num_paths, 1)
+                if z is not None
+                else None
+            ),
             temperature=temperature,
         )
 
@@ -528,6 +536,7 @@ class GaussianDiffusion(nn.Module):
 
         if initial_guess_level != 0:
             # denoise to data space before optimization
+
             noised_xs = self.p_sample_loop(
                 noised_xs.reshape(-1, n_atoms, 3),
                 initial_guess_level,
@@ -898,7 +907,7 @@ class GaussianDiffusion(nn.Module):
         )
         # Print improvement in path term
         print(
-            f"Initial path norm: {path_terms[0]}, Final path norm: {path_terms[-1]}, Percent improvement: {(path_terms[0] - path_terms[-1]) / path_terms[0] * 100}%"
+            f"Initial path norm: {path_terms[0]}, Final path norm: {path_terms[-1]}, Percent improvement: {(path_terms[0] - path_terms[-1]) / (path_terms[0]+1e-8) * 100}%"
         )
         # Print improvement in force term
         print(

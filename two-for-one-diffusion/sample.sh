@@ -1,3 +1,24 @@
+python sample.py \
+    --model_path saved_models/chignolin \
+    --gen_mode interpolate \
+    --atom_selection protein \
+    --num_samples_eval 1 \
+    --batch_size_gen 1 \
+    --latent_time 999 \
+    --initial_guess_level 999\
+    --subsample_points_percent 1.0 \
+    --subsample_dimensions_percent 1.0 \
+    --no_encode_and_decode \
+    --action truncated \
+    --optimizer adam \
+    --lr 2e-1 \
+    --append_exp_name test \
+    --om_dt 0.1 \
+    --om_gamma 1 \
+    --path_length 25 \
+    --steps 0
+
+
 # python sample.py \
 #     --model_path saved_models/trp_cage \
 #     --gen_mode om_interpolate \
@@ -39,25 +60,25 @@
 #     --om_d 1.0 \
 #     --steps 5000
 
-python sample.py \
-    --model_path saved_models/bba \
-    --gen_mode om_interpolate \
-    --num_samples_eval 4 \
-    --batch_size_gen 1 \
-    --latent_time 20 \
-    --initial_guess_level 25\
-    --subsample_points_percent 1.0 \
-    --subsample_dimensions_percent 1.0 \
-    --no_encode_and_decode \
-    --action hutch \
-    --optimizer sgd \
-    --lr 1e-5 \
-    --append_exp_name test \
-    --om_dt 0.001 \
-    --om_gamma 1 \
-    --path_length 100 \
-    --om_d 1.0 \
-    --steps 2000
+# python sample.py \
+#     --model_path saved_models/bba \
+#     --gen_mode om_interpolate \
+#     --num_samples_eval 4 \
+#     --batch_size_gen 1 \
+#     --latent_time 20 \
+#     --initial_guess_level 25\
+#     --subsample_points_percent 1.0 \
+#     --subsample_dimensions_percent 1.0 \
+#     --no_encode_and_decode \
+#     --action hutch \
+#     --optimizer sgd \
+#     --lr 1e-5 \
+#     --append_exp_name test \
+#     --om_dt 0.001 \
+#     --om_gamma 1 \
+#     --path_length 100 \
+#     --om_d 1.0 \
+#     --steps 2000
 
 # python sample.py \
 #     --model_path saved_models/chignolin \
