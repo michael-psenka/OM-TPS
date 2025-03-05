@@ -390,10 +390,10 @@ def main(samp_args):
     eval_folder.mkdir(exist_ok=True, parents=True)
 
     # writer = SummaryWriter(str(eval_folder))
-    if args.atom_selection == "protein":
+    if samp_args.atom_selection == "protein":
         atom_selection = AtomSelection.PROTEIN
-    elif args.atom_selection == "c-alpha":
-        atom_selection = AtomSelection.C_ALPHA
+    elif samp_args.atom_selection == "c-alpha":
+        atom_selection = AtomSelection.A_CARBON
     else:
         raise Exception("Invalid atom selection, must be 'protein' or 'c-alpha'")
 
@@ -411,8 +411,8 @@ def main(samp_args):
 
     # Init model from args
     # TODO: hardcoded for now, fix
-    trainset.num_beads = 166
-    trainset.bead_onehot = torch.eye(trainset.num_beads)
+    # trainset.num_beads = 166
+    # trainset.bead_onehot = torch.eye(trainset.num_beads)
     model_nn = get_model(args, trainset, device)
     # print(model_nn)
 

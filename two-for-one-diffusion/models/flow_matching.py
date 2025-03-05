@@ -138,7 +138,7 @@ class FlowMatching(nn.Module):
             self.temp_data is not None
         ), "Temperature data must be provided for computing scaling factor"
         kbt_inv = self.kb_inv / self.temp_data
-        scaling_factor = -1 / (kbt_inv * self.sqrt_one_minus_alphas_cumprod[t])
+        scaling_factor = -1 / (kbt_inv * self.path.scheduler(t).sigma_t)
         return scaling_factor
 
     def force_func(self, x, t, z=None):
@@ -161,7 +161,10 @@ class FlowMatching(nn.Module):
         noise_pred = self.path.velocity_to_epsilon(
             velocity_pred, x, (1 - (1.0 * t / 10)).unsqueeze(-1).unsqueeze(-1)
         )
-        return -noise_pred
+        return (
+            self.scaling_factor(1 - (1.0 * t / 10)).unsqueeze(-1).unsqueeze(-1)
+            * noise_pred
+        )
 
     def predict_start_from_noise(self, x_t, t, noise):
         """
