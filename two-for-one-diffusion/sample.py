@@ -662,32 +662,6 @@ def generate_samples(
             start_points = cluster_assignments == clusters[0]
             end_points = cluster_assignments == clusters[1]
 
-            if samp_args.atom_selection == AtomSelection.PROTEIN:
-                # load all atom traj
-                gt_traj_path = os.path.join(
-                    "/data/sanjeevr/Reference_MD_Sims",
-                    Molecules[protein_name.upper()].value,
-                    "gt_traj_all-atom.pt",
-                )
-                if os.path.exists(gt_traj_path):
-                    gt_traj = torch.load(gt_traj_path)
-                else:
-                    print("Loading all-atom ground truth trajectory")
-                    dataset = DEShawDataset(
-                        data_root="/data/sanjeevr/Reference_MD_Sims",
-                        molecule=Molecules[protein_name.upper()],
-                        simulation_id=0,
-                        atom_selection=AtomSelection.PROTEIN,
-                        return_bond_graph=False,
-                        transform=to_angstrom,
-                        align=False,
-                    )
-                    gt_traj = torch.tensor(dataset.traj.xyz)
-                    torch.save(gt_traj, gt_traj_path)
-
-                gt_traj = 10 * gt_traj  # convert to angstroms
-                gt_traj -= gt_traj.mean(1, keepdims=True)  # center
-
             # Sample endpoints from the cluster centers
             endpoint_1 = gt_traj[::100][start_points]
             endpoint_2 = gt_traj[::100][end_points]
@@ -978,6 +952,7 @@ def generate_samples(
                 checkpoint_folder="./saved_models",
                 reference_folder="./evaluate/saved_references",
                 pdb_folder="./datasets",
+                atom_selection=samp_args.atom_selection,
                 model=model.ema_model,
                 num_paths=samp_args.num_samples_eval,
                 endpoints=clusters if "interpolate" in samp_args.gen_mode else None,

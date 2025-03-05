@@ -107,6 +107,7 @@ def evaluate_fastfolders(
     checkpoint_folder,
     reference_folder,
     pdb_folder,
+    atom_selection=AtomSelection.A_CARBON,
     subsample=0,
     n_sims=-1,
     opt_steps=0,
@@ -143,18 +144,31 @@ def evaluate_fastfolders(
         f"{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}",
     )
 
-    # Load the reference dataset
-    dataset = DEShawDataset(
-        data_root="/data/sanjeevr/Reference_MD_Sims",
-        molecule=Molecules[protein_name.upper()],
-        simulation_id=0,
-        atom_selection=AtomSelection.A_CARBON,
-        return_bond_graph=False,
-        transform=to_angstrom,
-        align=False,
+    gt_traj_path = os.path.join(
+        "/data/sanjeevr/Reference_MD_Sims",
+        Molecules[protein_name.upper()].value,
+        (
+            "gt_traj.pt"
+            if atom_selection == AtomSelection.A_CARBON
+            else "gt_traj_all-atom.pt"
+        ),
     )
+    if os.path.exists(gt_traj_path):
+        gt_traj = 10 * torch.load(gt_traj_path)
+    else:
+        print("Loading ground truth trajectory")
+        # Load the reference dataset
+        dataset = DEShawDataset(
+            data_root="/data/sanjeevr/Reference_MD_Sims",
+            molecule=Molecules[protein_name.upper()],
+            simulation_id=0,
+            atom_selection=atom_selection,
+            return_bond_graph=False,
+            transform=to_angstrom,
+            align=False,
+        )
 
-    gt_traj = 10 * dataset.traj.xyz  # convert to angstroms
+        gt_traj = 10 * dataset.traj.xyz  # convert to angstroms
     gt_traj -= gt_traj.mean(1, keepdims=True)  # center
 
     # Define starting and ending states for interpolation
@@ -163,29 +177,58 @@ def evaluate_fastfolders(
     else:
         cluster_endpoints_path = Path(
             os.path.join(
-                reference_folder, f"saved_cluster_endpoints_{protein_name.upper()}.npy"
+                reference_folder,
+                (
+                    f"saved_cluster_endpoints_{protein_name.upper()}_all_atom.npy"
+                    if atom_selection == AtomSelection.PROTEIN
+                    else f"saved_cluster_endpoints_{protein_name.upper()}.npy"
+                ),
             )
         )
 
     ref_dihedral_path = Path(
-        os.path.join(reference_folder, f"saved_dihedrals_{protein_name.upper()}.npy")
+        os.path.join(
+            reference_folder,
+            (
+                f"saved_dihedrals_{protein_name.upper()}_all_atom.npy"
+                if atom_selection == AtomSelection.PROTEIN
+                else f"saved_cluster_endpoints_{protein_name.upper()}.npy"
+            ),
+        )
     )
     if ref_dihedral_path.exists():
         ref_dihedrals = np.load(ref_dihedral_path)
         gt_prob_matrix = np.load(
             os.path.join(
-                reference_folder, f"saved_transition_matrix_{protein_name.upper()}.npy"
+                reference_folder,
+                (
+                    f"saved_transition_matrix_{protein_name.upper()}_all_atom.npy"
+                    if atom_selection == AtomSelection.PROTEIN
+                    else f"saved_cluster_endpoints_{protein_name.upper()}.npy"
+                ),
             )
         )
 
         kmeans_cluster_centers = np.load(
             os.path.join(
-                reference_folder, f"saved_cluster_centers_{protein_name.upper()}.npy"
+                reference_folder,
+                (
+                    f"saved_cluster_centers_{protein_name.upper()}_all_atom.npy"
+                    if atom_selection == AtomSelection.PROTEIN
+                    else f"saved_cluster_endpoints_{protein_name.upper()}.npy"
+                ),
             )
         )
 
         ref_pwds = np.load(
-            os.path.join(reference_folder, f"saved_pwds_{protein_name.upper()}.npy")
+            os.path.join(
+                reference_folder,
+                (
+                    f"saved_pwds_{protein_name.upper()}_all_atom.npy"
+                    if atom_selection == AtomSelection.PROTEIN
+                    else f"saved_cluster_endpoints_{protein_name.upper()}.npy"
+                ),
+            )
         )
 
     else:
@@ -1061,6 +1104,9 @@ def dynamics_analysis(
 
     # TODO: pass in folders here too
     # Load data
+    import pdb
+
+    pdb.set_trace()
     if num_clusters is None:
         num_clusters = num_clusters_per_protein[protein_name]
 
