@@ -93,8 +93,8 @@ CLUSTER_ENDPOINTS = {
 
 CLUSTER_ENDPOINTS_ALL_ATOM = {
     "chignolin": [11, 8],
-    # "trp_cage": [2, 13],
-    # "bba": [9, 17],
+    "trp_cage": [2, 4],
+    "bba": [14, 12],
     # "villin": [0, 17],
     # "protein_g": [11, 14],
 }
@@ -159,7 +159,7 @@ def evaluate_fastfolders(
         f"gt_traj{all_atom_append}.pt",
     )
     if os.path.exists(gt_traj_path):
-        gt_traj = 10 * torch.load(gt_traj_path)
+        gt_traj = 10 * torch.tensor(torch.load(gt_traj_path))
     else:
         print("Loading ground truth trajectory")
         # Load the reference dataset
@@ -217,7 +217,11 @@ def evaluate_fastfolders(
         )
     if endpoints is None:
         # cluster_endpoints = np.load(cluster_endpoints_path)
-        cluster_endpoints = CLUSTER_ENDPOINTS[protein_name]
+        cluster_endpoints = (
+            CLUSTER_ENDPOINTS[protein_name]
+            if atom_selection == AtomSelection.A_CARBON
+            else CLUSTER_ENDPOINTS_ALL_ATOM[protein_name]
+        )
         start, end = cluster_endpoints[0], cluster_endpoints[1]
 
     # Get TIC evaluator
@@ -646,7 +650,11 @@ def get_tic_free_energy_plots(
     # Load topology from pdb file
     topology = md.load(pdb_file).topology
 
-    start, end = CLUSTER_ENDPOINTS[protein_name]
+    start, end = (
+        CLUSTER_ENDPOINTS[protein_name]
+        if atom_selection == AtomSelection.A_CARBON
+        else CLUSTER_ENDPOINTS_ALL_ATOM[protein_name]
+    )
 
     # Load pretrained committor model
     device = torch.device(torch.cuda.current_device())

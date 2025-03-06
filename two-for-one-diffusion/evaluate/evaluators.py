@@ -522,12 +522,12 @@ class TicEvaluator:
         self.bin_mids_x = (self.bin_edges_x[1:] + self.bin_edges_x[:-1]) / 2
         self.bin_mids_y = (self.bin_edges_y[1:] + self.bin_edges_y[:-1]) / 2
 
-        folded_transform = self.tica.transform(
+        self.folded_transform = self.tica.transform(
             self.get_tic_features(torch.from_numpy(self.folded.xyz) * 10, self.folded)
         )[0]
 
-        self.bin_x_folded = np.argmin(abs(self.bin_mids_x - folded_transform[0]))
-        self.bin_y_folded = np.argmin(abs(self.bin_mids_y - folded_transform[1]))
+        self.bin_x_folded = np.argmin(abs(self.bin_mids_x - self.folded_transform[0]))
+        self.bin_y_folded = np.argmin(abs(self.bin_mids_y - self.folded_transform[1]))
 
     def get_tic_features(self, xyz, folded, separate=False):
         """
@@ -535,7 +535,11 @@ class TicEvaluator:
         For A_CARBON, we calculate dihedrals and pairwise distances.
         For PROTEIN, we calculate backbone and sidechain torsions.
         """
-        traj = md.Trajectory(xyz.numpy() / 10, topology=folded.topology)
+
+        traj = md.Trajectory(
+            (xyz.numpy() if isinstance(xyz, torch.Tensor) else xyz) / 10,
+            topology=folded.topology,
+        )
 
         if self.atom_selection == AtomSelection.A_CARBON:
             # backbone dihedrals and pairwise distances
