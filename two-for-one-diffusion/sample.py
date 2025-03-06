@@ -620,7 +620,7 @@ def generate_samples(
                 (
                     "gt_traj.pt"
                     if samp_args.atom_selection == AtomSelection.A_CARBON
-                    else "gt_traj_all-atom.pt"
+                    else "gt_traj_all_atom.pt"
                 ),
             )
             if os.path.exists(gt_traj_path):
@@ -944,22 +944,21 @@ def generate_samples(
         )
 
     else:
-        if samp_args.atom_selection != AtomSelection.PROTEIN:
-            evaluate_fastfolders(
-                protein_name,
-                samp_args.gen_mode,
-                samp_args.original_append_exp_name,
-                checkpoint_folder="./saved_models",
-                reference_folder="./evaluate/saved_references",
-                pdb_folder="./datasets",
-                atom_selection=samp_args.atom_selection,
-                model=model.ema_model,
-                num_paths=samp_args.num_samples_eval,
-                endpoints=clusters if "interpolate" in samp_args.gen_mode else None,
-                compute_rates=samp_args.post_om_md_simulate,
-                log=not samp_args.disable_logging,
-                gif=True,
-            )
+        evaluate_fastfolders(
+            protein_name,
+            samp_args.gen_mode,
+            samp_args.original_append_exp_name,
+            checkpoint_folder="./saved_models",
+            reference_folder="./evaluate/saved_references",
+            pdb_folder="./datasets",
+            atom_selection=samp_args.atom_selection,
+            model=model.ema_model,
+            num_paths=samp_args.num_samples_eval,
+            endpoints=clusters if "interpolate" in samp_args.gen_mode else None,
+            compute_rates=samp_args.post_om_md_simulate,
+            log=not samp_args.disable_logging,
+            gif=True,
+        )
     print("Evaluation complete.")
 
     return sampled_mol

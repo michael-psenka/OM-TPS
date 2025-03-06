@@ -139,19 +139,16 @@ def evaluate_fastfolders(
         ), "Truncating optimization steps is only supported for OM interpolation"
 
     append_exp_name_str = "_" + append_exp_name if append_exp_name else ""
+    all_atom_append = "_all_atom" if atom_selection == AtomSelection.PROTEIN else ""
     eval_folder = os.path.join(
         checkpoint_folder,
-        f"{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}",
+        f"{protein_name+all_atom_append}/main_eval_output_{gen_mode}{append_exp_name_str}",
     )
 
     gt_traj_path = os.path.join(
         "/data/sanjeevr/Reference_MD_Sims",
         Molecules[protein_name.upper()].value,
-        (
-            "gt_traj.pt"
-            if atom_selection == AtomSelection.A_CARBON
-            else "gt_traj_all-atom.pt"
-        ),
+        f"gt_traj{all_atom_append}.pt",
     )
     if os.path.exists(gt_traj_path):
         gt_traj = 10 * torch.load(gt_traj_path)
@@ -178,72 +175,35 @@ def evaluate_fastfolders(
         cluster_endpoints_path = Path(
             os.path.join(
                 reference_folder,
-                (
-                    f"saved_cluster_endpoints_{protein_name.upper()}_all_atom.npy"
-                    if atom_selection == AtomSelection.PROTEIN
-                    else f"saved_cluster_endpoints_{protein_name.upper()}.npy"
-                ),
+                f"saved_cluster_endpoints_{protein_name.upper()}{all_atom_append}.npy",
             )
         )
 
-    ref_dihedral_path = Path(
+    gt_prob_matrix_path = Path(
         os.path.join(
             reference_folder,
-            (
-                f"saved_dihedrals_{protein_name.upper()}_all_atom.npy"
-                if atom_selection == AtomSelection.PROTEIN
-                else f"saved_cluster_endpoints_{protein_name.upper()}.npy"
-            ),
+            f"saved_transition_matrix_{protein_name.upper()}{all_atom_append}.npy",
         )
     )
-    if ref_dihedral_path.exists():
-        ref_dihedrals = np.load(ref_dihedral_path)
-        gt_prob_matrix = np.load(
-            os.path.join(
-                reference_folder,
-                (
-                    f"saved_transition_matrix_{protein_name.upper()}_all_atom.npy"
-                    if atom_selection == AtomSelection.PROTEIN
-                    else f"saved_cluster_endpoints_{protein_name.upper()}.npy"
-                ),
-            )
-        )
+    if gt_prob_matrix_path.exists():
+        gt_prob_matrix = np.load(gt_prob_matrix_path)
 
         kmeans_cluster_centers = np.load(
             os.path.join(
                 reference_folder,
-                (
-                    f"saved_cluster_centers_{protein_name.upper()}_all_atom.npy"
-                    if atom_selection == AtomSelection.PROTEIN
-                    else f"saved_cluster_endpoints_{protein_name.upper()}.npy"
-                ),
-            )
-        )
-
-        ref_pwds = np.load(
-            os.path.join(
-                reference_folder,
-                (
-                    f"saved_pwds_{protein_name.upper()}_all_atom.npy"
-                    if atom_selection == AtomSelection.PROTEIN
-                    else f"saved_cluster_endpoints_{protein_name.upper()}.npy"
-                ),
+                f"saved_cluster_centers_{protein_name.upper()}{all_atom_append}.npy",
             )
         )
 
     else:
         # Compute the necessary values from the reference simulation data
         print("Computing reference values...")
-        (
-            gt_prob_matrix,
-            kmeans_cluster_centers,
-            ref_dihedrals,
-            ref_pwds,
-        ) = dynamics_analysis(
+        (gt_prob_matrix, kmeans_cluster_centers) = dynamics_analysis(
             protein_name,
             reference_folder,
             pdb_folder,
             sampled_mol=None,
+            atom_selection=atom_selection,
             num_clusters=20,
             gt_traj=gt_traj,
         )
@@ -258,6 +218,7 @@ def evaluate_fastfolders(
         mol_name=protein_name,
         eval_folder=eval_folder,
         data_folder=pdb_folder,
+        atom_selection=atom_selection,
         folded_pdb_folder=os.path.join(pdb_folder, "folded_pdbs"),
         bins=101,
         evalset="testset",
@@ -268,7 +229,7 @@ def evaluate_fastfolders(
         subsample = int(subsample * 1000)  # convert from nanoseconds to frames
     if gen_mode == "gt":
         eval_folder = os.path.join(
-            checkpoint_folder, f"{protein_name}/main_eval_output_gt"
+            checkpoint_folder, f"{protein_name}{all_atom_append}/main_eval_output_gt"
         )
         os.makedirs(eval_folder, exist_ok=True)
         sampled_mol = torch.tensor(gt_traj)
@@ -277,7 +238,7 @@ def evaluate_fastfolders(
         append_exp_name_str = "_" + append_exp_name if append_exp_name else ""
         eval_folder = os.path.join(
             checkpoint_folder,
-            f"{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}",
+            f"{protein_name}{all_atom_append}/main_eval_output_{gen_mode}{append_exp_name_str}",
         )
         sample_path = Path(eval_folder, f"sample-{gen_mode}.pt")
 
@@ -285,11 +246,12 @@ def evaluate_fastfolders(
         sampled_mol = torch.load(sample_path)
 
     pdb_file = os.path.join(
-        pdb_folder, f"folded_pdbs/{Molecules[protein_name.upper()].value}-0-c-alpha.pdb"
+        pdb_folder,
+        f"folded_pdbs/{Molecules[protein_name.upper()].value}-0-{atom_selection.value}.pdb",
     )
 
     if opt_steps != 0:
-        # sample from an intermdiate point in the optimization trajectory
+        # sample from an intermediate point in the optimization trajectory
         path_history = Path(eval_folder, f"path_history-{gen_mode}.pt")
         path_history = torch.load(path_history)
         sampled_mol = path_history[opt_steps // 50]
@@ -315,14 +277,17 @@ def evaluate_fastfolders(
     committor_probs_file = os.path.join(
         reference_folder, f"{protein_name}_committor_probs_{start}_{end}.npy"
     )
-
-    bin_committor_probs = np.load(committor_probs_file)
+    bin_committor_probs = None
+    if os.path.exists(committor_probs_file):
+        bin_committor_probs = np.load(committor_probs_file)
 
     # Load GT transition ensemble TIC coordinates
     gt_transition_ensemble_file = os.path.join(
         reference_folder, f"{protein_name}_{start}_{end}_transition_ensemble_TICA.npy"
     )
-    gt_transition_ensemble = np.load(gt_transition_ensemble_file)
+    gt_transition_ensemble = None
+    if os.path.exists(gt_transition_ensemble_file):
+        gt_transition_ensemble = np.load(gt_transition_ensemble_file)
 
     n_ref_samples = 1000
 
@@ -449,20 +414,24 @@ def evaluate_fastfolders(
             [np.count_nonzero(transition_ensemble == i) for i in range(20)]
         )
         transition_state_dist = transition_state_dist / transition_state_dist.sum()
-        gt_transition_ensemble, _ = discretize_trajectory(
-            gt_transition_ensemble,
-            tic_evaluator,
-            kmeans_cluster_centers,
-            transform=False,
-        )
-        ref_transition_state_dist = np.array(
-            [np.count_nonzero(gt_transition_ensemble == i) for i in range(20)]
-        )
+        transition_jsd = -1
+        if gt_transition_ensemble is not None:
+            gt_transition_ensemble, _ = discretize_trajectory(
+                gt_transition_ensemble,
+                tic_evaluator,
+                kmeans_cluster_centers,
+                transform=False,
+            )
+            ref_transition_state_dist = np.array(
+                [np.count_nonzero(gt_transition_ensemble == i) for i in range(20)]
+            )
 
-        ref_transition_state_dist = (
-            ref_transition_state_dist / ref_transition_state_dist.sum()
-        )
-        transition_jsd = jensenshannon(ref_transition_state_dist, transition_state_dist)
+            ref_transition_state_dist = (
+                ref_transition_state_dist / ref_transition_state_dist.sum()
+            )
+            transition_jsd = jensenshannon(
+                ref_transition_state_dist, transition_state_dist
+            )
 
         # Compute the likelihood of the sampled trajectories under the reference MSM
         path_probabilities = None
@@ -530,6 +499,7 @@ def evaluate_fastfolders(
         checkpoint_folder,
         reference_folder,
         pdb_folder,
+        atom_selection,
         sampled_mol,
         opt_steps=opt_steps,
         gen_paths=(
@@ -542,8 +512,6 @@ def evaluate_fastfolders(
         gif=gif,
         window_size=window_size,
         num_paths=num_paths,
-        ref_dihedrals=ref_dihedrals,
-        ref_pwds=ref_pwds,
         log=log,
     )
 
@@ -636,6 +604,7 @@ def get_tic_free_energy_plots(
     checkpoint_folder,
     reference_folder,
     pdb_folder,
+    atom_selection,
     sampled_mol,
     opt_steps=0,
     gen_paths=None,
@@ -644,8 +613,6 @@ def get_tic_free_energy_plots(
     window_size=7,
     gif=False,
     num_paths=8,
-    ref_dihedrals=None,
-    ref_pwds=None,
     log=False,
 ):
     """
@@ -656,13 +623,15 @@ def get_tic_free_energy_plots(
 
     # Load data
     append_exp_name_str = "_" + append_exp_name if append_exp_name else ""
+    all_atom_append = "_all_atom" if atom_selection == AtomSelection.PROTEIN else ""
     eval_folder = os.path.join(
         checkpoint_folder,
-        f"{protein_name}/main_eval_output_{gen_mode}{append_exp_name_str}",
+        f"{protein_name}{all_atom_append}/main_eval_output_{gen_mode}{append_exp_name_str}",
     )
     sample_path = Path(eval_folder, f"sample-{gen_mode}.pt")
     pdb_file = os.path.join(
-        pdb_folder, f"folded_pdbs/{Molecules[protein_name.upper()].value}-0-c-alpha.pdb"
+        pdb_folder,
+        f"folded_pdbs/{Molecules[protein_name.upper()].value}-0-{atom_selection.value}.pdb",
     )
     n_atoms = sampled_mol.shape[1]
 
@@ -674,21 +643,18 @@ def get_tic_free_energy_plots(
     # Load pretrained committor model
     device = torch.device(torch.cuda.current_device())
     model = GraphTransformer(num_beads=n_atoms, hidden_nf=64, conservative=True)
-    committor_model = CommittorNN(model)
+    committor_model = None
     committor_state_dict_file = os.path.join(
-        checkpoint_folder, protein_name, f"committor-model-{start}_{end}.pt"
+        checkpoint_folder,
+        protein_name + all_atom_append,
+        f"committor-model-{start}_{end}.pt",
     )
-    if not os.path.exists(committor_state_dict_file):
-        # load from two-for-one-diffusion saved models
-        committor_state_dict_file = os.path.join(
-            "/home/sanjeevr/om-diffusion/two-for-one-diffusion/saved_models",
-            protein_name,
-            f"committor-model-{start}_{end}.pt",
-        )
-    state_dict = torch.load(committor_state_dict_file)
+    if os.path.exists(committor_state_dict_file):
+        committor_model = CommittorNN(model)
+        state_dict = torch.load(committor_state_dict_file)
 
-    committor_model.load_state_dict(state_dict.state_dict())
-    committor_model.to(device)
+        committor_model.load_state_dict(state_dict.state_dict())
+        committor_model.to(device)
 
     # store endpoints if interpolation is used
     if "interpolate" in gen_mode:
@@ -702,6 +668,7 @@ def get_tic_free_energy_plots(
         mol_name=protein_name,
         eval_folder=eval_folder,
         data_folder=pdb_folder,
+        atom_selection=atom_selection,
         folded_pdb_folder=os.path.join(pdb_folder, "folded_pdbs"),
         bins=101,
         evalset="testset",
@@ -757,56 +724,56 @@ def get_tic_free_energy_plots(
     for i, path in tqdm(enumerate(loop)):
         # Get samples TIC free energy landscape
 
-        dihedrals, pwds = tic_evaluator.get_tic_features(
-            path, tic_evaluator.folded, separate=True
+        sample_tic_features = tic_evaluator.get_tic_features(
+            path, tic_evaluator.folded, separate=False
         )
 
-        sample_tic_features = np.hstack((dihedrals, pwds))
+        # sample_tic_features = np.hstack((dihedrals, pwds))
         transformed_samples = tic_evaluator.tica(sample_tic_features)
 
         # Plot dihedral angle histogram
-        plt.figure()
-        plt.hist(
-            np.ravel(dihedrals), bins=100, density=True, label="Interpolation Path"
-        )
-        if ref_dihedrals is not None:
-            plt.hist(
-                np.ravel(ref_dihedrals),
-                bins=100,
-                density=True,
-                alpha=0.5,
-                label="Reference",
-            )
-        plt.legend()
-        plt.title(f"Step {i}: Dihedral angular distribution function")
+        # plt.figure()
+        # plt.hist(
+        #     np.ravel(dihedrals), bins=100, density=True, label="Interpolation Path"
+        # )
+        # if ref_dihedrals is not None:
+        #     plt.hist(
+        #         np.ravel(ref_dihedrals),
+        #         bins=100,
+        #         density=True,
+        #         alpha=0.5,
+        #         label="Reference",
+        #     )
+        # plt.legend()
+        # plt.title(f"Step {i}: Dihedral angular distribution function")
 
-        plt.xlabel("Dihedral angle (radians)")
-        plt.ylabel("Frequency")
-        plt.ylim(0, 0.6)
-        plt.show()
-        file_name = join(gif_folder, f"dihedral_{i}.png")
-        plt.savefig(file_name)
-        plt.close()
-        dihedral_hist_paths.append(file_name)
+        # plt.xlabel("Dihedral angle (radians)")
+        # plt.ylabel("Frequency")
+        # plt.ylim(0, 0.6)
+        # plt.show()
+        # file_name = join(gif_folder, f"dihedral_{i}.png")
+        # plt.savefig(file_name)
+        # plt.close()
+        # dihedral_hist_paths.append(file_name)
 
         # Plot pairwise distance histogram
-        plt.figure()
-        plt.hist(np.ravel(pwds), bins=100, density=True, label="Interpolation Path")
-        if ref_pwds is not None:
-            plt.hist(
-                np.ravel(ref_pwds), bins=100, density=True, alpha=0.5, label="Reference"
-            )
-        plt.legend()
-        plt.title(f"Step {i}: Pairwise distance distribution function")
+        # plt.figure()
+        # plt.hist(np.ravel(pwds), bins=100, density=True, label="Interpolation Path")
+        # if ref_pwds is not None:
+        #     plt.hist(
+        #         np.ravel(ref_pwds), bins=100, density=True, alpha=0.5, label="Reference"
+        #     )
+        # plt.legend()
+        # plt.title(f"Step {i}: Pairwise distance distribution function")
 
-        plt.xlabel("Pairwise distance (Angstroms)")
-        plt.ylabel("Frequency")
-        plt.ylim(0, 0.2)
-        plt.show()
-        file_name = join(gif_folder, f"pwd_{i}.png")
-        plt.savefig(file_name)
-        plt.close()
-        pwd_hist_paths.append(file_name)
+        # plt.xlabel("Pairwise distance (Angstroms)")
+        # plt.ylabel("Frequency")
+        # plt.ylim(0, 0.2)
+        # plt.show()
+        # file_name = join(gif_folder, f"pwd_{i}.png")
+        # plt.savefig(file_name)
+        # plt.close()
+        # pwd_hist_paths.append(file_name)
 
         # Find the bins of the samples
         bins_x = np.digitize(transformed_samples[:, 0], tic_evaluator.bin_edges_x)
@@ -815,7 +782,10 @@ def get_tic_free_energy_plots(
         bins_x = np.clip(bins_x, 0, tic_evaluator.bins - 1)
         bins_y = np.clip(bins_y, 0, tic_evaluator.bins - 1)
         bin_idx = bins_x * tic_evaluator.bins + bins_y
-        path_committor_probs = bin_committor_probs[bin_idx]
+
+        path_committor_probs = None
+        if bin_committor_probs is not None:
+            path_committor_probs = bin_committor_probs[bin_idx]
 
         # probabilities of the samples as a function of path position
         gt_probs = np.zeros((path.shape[0],))
@@ -872,45 +842,50 @@ def get_tic_free_energy_plots(
         tic_paths.append(file_name)
 
         device = torch.device(torch.cuda.current_device())
+        transition_rates = None
+        if committor_model is not None:
+            norm_grads = []
+            pred_probs = []
+            for x in path.split(256):
+                x = (x - x.mean(1, keepdim=True)) / norm_stds[
+                    Molecules[protein_name.upper()]
+                ]
+                x = x.requires_grad_(True).to(device)
+                h = torch.eye(x.shape[-2]).to(device)
+                t = torch.zeros((x.shape[0],)).to(device)
+                pred_prob = committor_model(x, h, t)
+                grad_prob = torch.autograd.grad(
+                    outputs=pred_prob,  # [batch_size, ]
+                    inputs=x,  # [batch_size, n_nodes, 3]
+                    grad_outputs=torch.ones_like(pred_prob),
+                    retain_graph=True,  # Make sure the graph is not destroyed during training
+                    create_graph=True,  # Create graph for second derivative
+                    allow_unused=True,
+                )[0].detach()
+                pred_probs.append(pred_prob.detach())
+                norm_grads.append(grad_prob.reshape(x.shape[0], -1).norm(dim=1))
 
-        norm_grads = []
-        pred_probs = []
-        for x in path.split(256):
-            x = (x - x.mean(1, keepdim=True)) / norm_stds[
-                Molecules[protein_name.upper()]
-            ]
-            x = x.requires_grad_(True).to(device)
-            h = torch.eye(x.shape[-2]).to(device)
-            t = torch.zeros((x.shape[0],)).to(device)
-            pred_prob = committor_model(x, h, t)
-            grad_prob = torch.autograd.grad(
-                outputs=pred_prob,  # [batch_size, ]
-                inputs=x,  # [batch_size, n_nodes, 3]
-                grad_outputs=torch.ones_like(pred_prob),
-                retain_graph=True,  # Make sure the graph is not destroyed during training
-                create_graph=True,  # Create graph for second derivative
-                allow_unused=True,
-            )[0].detach()
-            pred_probs.append(pred_prob.detach())
-            norm_grads.append(grad_prob.reshape(x.shape[0], -1).norm(dim=1))
+            transition_rates = (
+                torch.cat(norm_grads, dim=0).cpu().numpy().astype(np.float64)
+            )
+            mean_transition_rates.append(
+                transition_rates.reshape(num_paths, -1).mean(-1)
+            )
+            pred_probs = torch.cat(pred_probs).reshape(num_paths, -1).cpu().numpy()
+            nn_committor_probs.append(pred_probs)
 
-        transition_rates = torch.cat(norm_grads, dim=0).cpu().numpy().astype(np.float64)
-        mean_transition_rates.append(transition_rates.reshape(num_paths, -1).mean(-1))
-        pred_probs = torch.cat(pred_probs).reshape(num_paths, -1).cpu().numpy()
-        nn_committor_probs.append(pred_probs)
-
-        # Box plot of transition rates
-        plt.figure()
-        plt.boxplot(transition_rates)
-        plt.ylim(1e-6, 1e-1)
-        plt.yscale("log")
-        plt.title(f"Step {i}: Transition rates")
-        plt.ylabel("Transition rate / (kBT / gamma)")
-        plt.show()
-        file_name = join(gif_folder, f"transition_rates_{i}.png")
-        plt.savefig(file_name)
-        plt.close()
-        transition_rate_paths.append(file_name)
+            # Box plot of transition rates
+            plt.figure()
+            plt.boxplot(transition_rates)
+            plt.ylim(1e-6, 1e-1)
+            plt.yscale("log")
+            plt.title(f"Step {i}: Transition rates")
+            plt.ylabel("Transition rate / (kBT / gamma)")
+            plt.show()
+            file_name = join(gif_folder, f"transition_rates_{i}.png")
+            plt.savefig(file_name)
+            plt.close()
+            transition_rate_paths.append(file_name)
 
         # Calculate and plot the free energy profile along the path
         free_energy_profile = -np.log(gt_probs + np.exp(-10))
@@ -932,42 +907,43 @@ def get_tic_free_energy_plots(
         free_energy_paths.append(file_name)
 
         # Plot the committor function along the path
+        if path_committor_probs is not None:
+            plt.figure()
 
-        plt.figure()
-        # plot free energy profile of all paths
-
-        mean_committor_probs = (
-            torch.tensor(path_committor_probs).reshape(num_paths, -1).mean(0)
-        )
-        plt.plot(mean_committor_probs)
-        plt.ylim(-0.1, 1.1)
-        plt.xlabel("Path Step")
-        plt.ylabel("Committor Probability")
-        plt.title(f"Step {i}: Transition free energy profile: {protein_name}")
-        plt.axhline(0, color="blue", linestyle="--", label="Starting State")
-        plt.axhline(1, color="red", linestyle="--", label="Ending State")
-        plt.legend()
-        plt.show()
-        file_name = join(gif_folder, f"path_committor_{i}.png")
-        plt.savefig(file_name)
-        plt.close()
-        committor_paths.append(file_name)
+            mean_committor_probs = (
+                torch.tensor(path_committor_probs).reshape(num_paths, -1).mean(0)
+            )
+            plt.plot(mean_committor_probs)
+            plt.ylim(-0.1, 1.1)
+            plt.xlabel("Path Step")
+            plt.ylabel("Committor Probability")
+            plt.title(f"Step {i}: Transition free energy profile: {protein_name}")
+            plt.axhline(0, color="blue", linestyle="--", label="Starting State")
+            plt.axhline(1, color="red", linestyle="--", label="Ending State")
+            plt.legend()
+            plt.show()
+            file_name = join(gif_folder, f"path_committor_{i}.png")
+            plt.savefig(file_name)
+            plt.close()
+            committor_paths.append(file_name)
 
     # Save mean transition rates
-    mean_transition_rates = np.stack(mean_transition_rates)
-    nn_committor_probs = np.stack(nn_committor_probs)
-    path_committor_probs = path_committor_probs.reshape(num_paths, -1)
-    np.save(
-        join(tic_evaluator.plots_folder, "path_committor_probs.npy"),
-        path_committor_probs,
-    )
-    np.save(
-        join(tic_evaluator.plots_folder, "mean_transition_rates.npy"),
-        mean_transition_rates,
-    )
-    np.save(
-        join(tic_evaluator.plots_folder, "nn_committor_probs.npy"), nn_committor_probs
-    )
+    if mean_transition_rates:
+        mean_transition_rates = np.stack(mean_transition_rates)
+        nn_committor_probs = np.stack(nn_committor_probs)
+        path_committor_probs = path_committor_probs.reshape(num_paths, -1)
+        np.save(
+            join(tic_evaluator.plots_folder, "path_committor_probs.npy"),
+            path_committor_probs,
+        )
+        np.save(
+            join(tic_evaluator.plots_folder, "mean_transition_rates.npy"),
+            mean_transition_rates,
+        )
+        np.save(
+            join(tic_evaluator.plots_folder, "nn_committor_probs.npy"),
+            nn_committor_probs,
+        )
 
     # Create a GIF from the saved TICA images
     tica_gif_path = join(tic_evaluator.plots_folder, "tica_samples.gif")
@@ -1019,55 +995,57 @@ def get_tic_free_energy_plots(
     ]
 
     # Save as GIF
-    images[0].save(
-        transition_rate_gif_path,
-        save_all=True,
-        append_images=images[1:],
-        optimize=False,
-        duration=100,  # Duration for each frame in milliseconds
-        loop=0,  # Loop forever
-    )
+    if images:
+        images[0].save(
+            transition_rate_gif_path,
+            save_all=True,
+            append_images=images[1:],
+            optimize=False,
+            duration=100,  # Duration for each frame in milliseconds
+            loop=0,  # Loop forever
+        )
 
     # Repeat for the dihedral angle histograms
     dihedral_hist_gif_path = join(tic_evaluator.plots_folder, "dihedral_hist.gif")
     images = [
         Image.open(dihedral_hist_path) for dihedral_hist_path in dihedral_hist_paths
     ]
-    images[0].save(
-        dihedral_hist_gif_path,
-        save_all=True,
-        append_images=images[1:],
-        optimize=False,
-        duration=100,  # Duration for each frame in milliseconds
-        loop=0,  # Loop forever
-    )
+    if images:
+        images[0].save(
+            dihedral_hist_gif_path,
+            save_all=True,
+            append_images=images[1:],
+            optimize=False,
+            duration=100,  # Duration for each frame in milliseconds
+            loop=0,  # Loop forever
+        )
 
     # Repeat for the pairwise distance histograms
     pwd_hist_gif_path = join(tic_evaluator.plots_folder, "pwd_hist.gif")
     images = [Image.open(pwd_hist_path) for pwd_hist_path in pwd_hist_paths]
-    images[0].save(
-        pwd_hist_gif_path,
-        save_all=True,
-        append_images=images[1:],
-        optimize=False,
-        duration=100,  # Duration for each frame in milliseconds
-        loop=0,  # Loop forever
-    )
+    if images:
+        images[0].save(
+            pwd_hist_gif_path,
+            save_all=True,
+            append_images=images[1:],
+            optimize=False,
+            duration=100,  # Duration for each frame in milliseconds
+            loop=0,  # Loop forever
+        )
 
     # Save the GIFs to the wandb run
     if log:
-        wandb.log(
-            {
-                "Reference TICA": wandb.Image(
-                    join(tic_evaluator.plots_folder, "TICA_reference.png")
-                ),
-                "TICA Samples": wandb.Image(tica_gif_path),
-                "Free Energy Profiles": wandb.Image(free_energy_gif_path),
-                "Transition Rates": wandb.Image(transition_rate_gif_path),
-                "Dihedral Angle Histograms": wandb.Image(dihedral_hist_gif_path),
-                "Pairwise Distance Histograms": wandb.Image(pwd_hist_gif_path),
-            }
-        )
+        log_dict = {
+            "Reference TICA": wandb.Image(
+                join(tic_evaluator.plots_folder, "TICA_reference.png")
+            ),
+            "TICA Samples": wandb.Image(tica_gif_path),
+            "Free Energy Profiles": wandb.Image(free_energy_gif_path),
+        }
+        if os.path.exists(transition_rate_gif_path):
+            log_dict["Transition Rates"] = wandb.Image(transition_rate_gif_path)
+
+        wandb.log(log_dict)
 
     # Remove the temporary image files
     for image_path in (
@@ -1091,6 +1069,7 @@ def dynamics_analysis(
     reference_folder,
     pdb_folder,
     sampled_mol,
+    atom_selection,
     num_clusters=None,
     gt_traj=None,
     gt_cluster_assignments=None,
@@ -1104,18 +1083,18 @@ def dynamics_analysis(
 
     # TODO: pass in folders here too
     # Load data
-    import pdb
 
-    pdb.set_trace()
+    all_atom_append = "_all_atom" if atom_selection == AtomSelection.PROTEIN else ""
+
     if num_clusters is None:
         num_clusters = num_clusters_per_protein[protein_name]
 
     if gt_traj is not None:
         eval_folder = reference_folder
         sampled_mol = torch.tensor(gt_traj)
-
     pdb_file = os.path.join(
-        pdb_folder, f"folded_pdbs/{Molecules[protein_name.upper()].value}-0-c-alpha.pdb"
+        pdb_folder,
+        f"folded_pdbs/{Molecules[protein_name.upper()].value}-0-{atom_selection.value}.pdb",
     )
 
     n_atoms = sampled_mol.shape[1]
@@ -1131,21 +1110,26 @@ def dynamics_analysis(
         mol_name=protein_name,
         eval_folder=None,
         data_folder=pdb_folder,
+        atom_selection=atom_selection,
         folded_pdb_folder=os.path.join(pdb_folder, "folded_pdbs"),
         bins=101,
         evalset="testset",
+        gt_traj=gt_traj / 10,
     )  # The evalset is the set we'll compare to in the next evaluation steps
 
     # Get samples TIC free energy landscape
-    dihedrals, pwds = tic_evaluator.get_tic_features(
-        sampled_mol, tic_evaluator.folded, separate=True
+    print("Computing TIC features for samples...")
+    sample_tic_features = tic_evaluator.get_tic_features(
+        sampled_mol, tic_evaluator.folded, separate=False
     )
-
-    sample_tic_features = np.hstack((dihedrals, pwds))
+    # if atom_selection == AtomSelection.A_CARBON:
+    #     dihedrals, pwds = sample_tic_features
+    #     sample_tic_features = np.hstack((dihedrals, pwds))
     transformed_samples = tic_evaluator.tica(sample_tic_features)
 
     if gt_cluster_assignments is None:
         # K-means clustering
+        print("Performing k-means clustering of samples in TIC-space...")
         kmeans = MiniBatchKMeans(
             n_clusters=num_clusters,
             max_iter=0,
@@ -1154,12 +1138,12 @@ def dynamics_analysis(
             n_jobs=16,
             tolerance=1e-7,
         )
-
         assignments = kmeans.fit_transform(transformed_samples)
     else:
         assignments = gt_cluster_assignments
 
     # Create MSM with k-means cluster assignments
+    print("Creating Markov State Model...")
     count_matrix = TransitionCountEstimator.count(
         count_mode="sliding", dtrajs=[assignments.astype("int")], lagtime=lagtime
     )
@@ -1169,7 +1153,8 @@ def dynamics_analysis(
         start_cluster_idx, end_cluster_idx = find_min_flux_states(count_matrix)
         np.save(
             os.path.join(
-                reference_folder, f"saved_cluster_endpoints_{protein_name.upper()}.npy"
+                reference_folder,
+                f"saved_cluster_endpoints_{protein_name.upper()}{all_atom_append}.npy",
             ),
             np.array([start_cluster_idx, end_cluster_idx]),
         )
@@ -1177,7 +1162,8 @@ def dynamics_analysis(
         # Also save the transition matrix
         np.save(
             os.path.join(
-                reference_folder, f"saved_transition_matrix_{protein_name.upper()}.npy"
+                reference_folder,
+                f"saved_transition_matrix_{protein_name.upper()}{all_atom_append}.npy",
             ),
             count_matrix,
         )
@@ -1193,25 +1179,26 @@ def dynamics_analysis(
             np.save(
                 os.path.join(
                     reference_folder,
-                    f"saved_cluster_centers_{protein_name.upper()}.npy",
+                    f"saved_cluster_centers_{protein_name.upper()}{all_atom_append}.npy",
                 ),
                 kmeans_cluster_centers,
             )
 
-        # Save the dihedrals and pairwise distances for the reference simulation
-        np.save(
-            os.path.join(
-                reference_folder, f"saved_dihedrals_{protein_name.upper()}.npy"
-            ),
-            dihedrals,
-        )
+        # if atom_selection == AtomSelection.A_CARBON
+        #     # Save the dihedrals and pairwise distances for the reference simulation
+        #     np.save(
+        #         os.path.join(
+        #             reference_folder, f"saved_dihedrals_{protein_name.upper()}.npy"
+        #         ),
+        #         dihedrals,
+        #     )
 
-        np.save(
-            os.path.join(reference_folder, f"saved_pwds_{protein_name.upper()}.npy"),
-            pwds,
-        )
+        #     np.save(
+        #         os.path.join(reference_folder, f"saved_pwds_{protein_name.upper()}.npy"),
+        #         pwds,
+        #     )
 
-    return count_matrix, kmeans_cluster_centers, dihedrals, pwds
+    return count_matrix, kmeans_cluster_centers  # , dihedrals, pwds
 
 
 if __name__ == "__main__":
@@ -1222,6 +1209,14 @@ if __name__ == "__main__":
         default="chignolin",
         help="Name of the protein to evaluate",
     )
+
+    parser.add_argument(
+        "--atom_selection",
+        type=str,
+        default="c-alpha",
+        help="Level of coarse-graining, either 'c-alpha' or 'protein'",
+    )
+
     parser.add_argument(
         "--gen_mode",
         type=str,
@@ -1309,6 +1304,8 @@ if __name__ == "__main__":
         f"_opt_steps={int(args.opt_steps)}" if args.opt_steps != 0 else ""
     )
 
+    all_atom_append = f"_all-atom" if args.atom_selection == "protein" else ""
+
     if not args.disable_logging:
         # validate_git_status()
         wandb.login()
@@ -1320,7 +1317,8 @@ if __name__ == "__main__":
             + args.gen_mode
             + append
             + subsample_append
-            + opt_steps_append,
+            + opt_steps_append
+            + all_atom_append,
             config=args,
         )
 
@@ -1333,6 +1331,12 @@ if __name__ == "__main__":
 
     new_append = append + subsample_append + opt_steps_append
 
+    atom_selection = (
+        AtomSelection.C_ALPHA
+        if args.atom_selection == "c-alpha"
+        else AtomSelection.PROTEIN
+    )
+
     evaluate_fastfolders(
         args.protein_name,
         args.gen_mode,
@@ -1340,6 +1344,7 @@ if __name__ == "__main__":
         checkpoint_folder,
         args.reference_folder,
         args.pdb_folder,
+        atom_selection,
         args.subsample,
         args.n_sims,
         args.opt_steps,

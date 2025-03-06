@@ -542,7 +542,6 @@ class TicEvaluator:
             ind = np.arange(0, xyz.shape[1] - 3)
             ind = np.stack((ind, ind + 1, ind + 2, ind + 3)).T
             dihedrals = md.compute_dihedrals(traj, ind)
-
             pwds = get_pwd_triu_batch(xyz).numpy()
             if separate:
                 return dihedrals, pwds

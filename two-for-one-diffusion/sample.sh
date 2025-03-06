@@ -14,10 +14,10 @@ python sample.py \
     --optimizer adam \
     --lr 2e-1 \
     --append_exp_name test \
-    --om_dt 0.1 \
+    --om_dt 0.001 \
     --om_gamma 1 \
-    --path_length 25 \
-    --steps 1
+    --path_length 100 \
+    --steps 100
 
 # python sample.py \
 #     --model_path saved_models/villin \
