@@ -21,7 +21,11 @@ from datasets.dataset_utils_empty import (
     DEShawDataset,
     to_angstrom,
 )
-from evaluate.evaluate_fastfolders import evaluate_fastfolders, CLUSTER_ENDPOINTS
+from evaluate.evaluate_fastfolders import (
+    evaluate_fastfolders,
+    CLUSTER_ENDPOINTS,
+    CLUSTER_ENDPOINTS_ALL_ATOM,
+)
 
 # from evaluate.evaluate_tetrapeptides import evaluate_tetrapeptide
 from evaluate.evaluators import (
@@ -485,6 +489,10 @@ def generate_samples(
     else:
         protein_name = "tetrapeptide"
 
+    all_atom_append = (
+        "_all_atom" if args.atom_selection == AtomSelection.A_CARBON else ""
+    )
+
     dl = torch.utils.data.DataLoader(
         testset,
         batch_size=min(len(testset), samp_args.batch_size_gen),
@@ -596,19 +604,23 @@ def generate_samples(
                 os.path.join(
                     "evaluate",
                     "saved_references",
-                    f"saved_cluster_endpoints_{protein_name.upper()}.npy",
+                    f"saved_cluster_endpoints_{protein_name.upper()}{all_atom_append}.npy",
                 )
             )
 
             # clusters = np.load(cluster_endpoints_path)
             # use pre-defined cluster centers (min flux endpoints aren't always reasonable)
-            clusters = CLUSTER_ENDPOINTS[protein_name]
+            clusters = (
+                CLUSTER_ENDPOINTS[protein_name]
+                if samp_args.atom_selection == AtomSelection.A_CARBON
+                else CLUSTER_ENDPOINTS_ALL_ATOM[protein_name]
+            )
 
             cluster_centers_path = Path(
                 os.path.join(
                     "evaluate",
                     "saved_references",
-                    f"saved_cluster_centers_{protein_name.upper()}.npy",
+                    f"saved_cluster_centers_{protein_name.upper()}{all_atom_append}.npy",
                 )
             )
             cluster_coords = np.load(cluster_centers_path)

@@ -91,6 +91,14 @@ CLUSTER_ENDPOINTS = {
     "protein_g": [11, 14],
 }
 
+CLUSTER_ENDPOINTS_ALL_ATOM = {
+    "chignolin": [11, 8],
+    # "trp_cage": [2, 13],
+    # "bba": [9, 17],
+    # "villin": [0, 17],
+    # "protein_g": [11, 14],
+}
+
 PDB_ID_TO_NAME = {
     "cln025": "chignolin",
     "2jof": "trp_cage",
