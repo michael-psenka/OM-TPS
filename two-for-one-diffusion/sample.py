@@ -490,8 +490,15 @@ def generate_samples(
         protein_name = "tetrapeptide"
 
     all_atom_append = (
-        "_all_atom" if args.atom_selection == AtomSelection.A_CARBON else ""
+        "_all_atom" if samp_args.atom_selection == AtomSelection.PROTEIN else ""
     )
+
+    topology = md.load_topology(
+        f"./datasets/folded_pdbs/{Molecules[protein_name.upper()].value}-0-{samp_args.atom_selection.value}.pdb"
+    )
+
+    # adjust masses
+    samp_args.masses = [atom.element.mass for atom in list(topology.atoms)]
 
     dl = torch.utils.data.DataLoader(
         testset,
@@ -779,7 +786,6 @@ def generate_samples(
             print(
                 f"Initiating Langevin MD simulations from transition paths. Total steps: {int(samp_args.n_timesteps)}"
             )
-
             masses = samp_args.masses
             if masses is None:
                 if "alanine" in args.mol:
@@ -853,7 +859,6 @@ def generate_samples(
             verbose=True,
         )
         # init_mol = torch.load("endpoint_1_samples_bba.pt")
-
         masses = samp_args.masses
         if masses is None:
             if "alanine" in args.mol:
@@ -918,12 +923,6 @@ def generate_samples(
         json.dump(metadata, open(f"{eval_folder}/{name}_metadata.json", "w"))
 
     else:
-        if samp_args.atom_selection == AtomSelection.PROTEIN:
-            topology = md.load_topology(
-                f"./datasets/folded_pdbs/{Molecules[mol_name.upper()].value}-0-protein.pdb"
-            )
-        else:
-            topology = trainset.topology
         all_mol_traj = md.Trajectory(
             sampled_mol[0:1000].numpy() / 10, topology=topology
         )
