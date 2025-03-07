@@ -94,12 +94,14 @@ class Evaluator:
         folded_pdb_folder="./datasets/folded_pdbs",
         data_folder="./data",
         evalsetname="",
+        atom_selection=AtomSelection.A_CARBON,
     ):
         self.ref_data = ref_data[:][0]
         self.topology = topology
         self.eval_folder = eval_folder
         self.folded_pdb_folder = folded_pdb_folder
         self.mol_name = mol_name
+        self.atom_selection = atom_selection
 
         # Dihedral energies evaluator
         if "alanine" in mol_name:
@@ -117,6 +119,7 @@ class Evaluator:
                 data_folder=data_folder,
                 folded_pdb_folder=folded_pdb_folder,
                 evalset=evalsetname,
+                atom_selection=atom_selection,
             )
         if "protein_g" != mol_name.lower():
             # Pairwise distance evaluator
@@ -146,8 +149,9 @@ class Evaluator:
 
         if "protein_g" != self.mol_name.lower():
             # PWD Results
-            print(f"PWD Analysis {milestone}")
-            dict_results["PWD JS"] = self.pwd_evaluator.eval(sampled_mol)
+            if self.atom_selection == AtomSelection.A_CARBON:
+                print(f"PWD Analysis {milestone}")
+                dict_results["PWD JS"] = self.pwd_evaluator.eval(sampled_mol)
 
         # Print metrics
         for key in dict_results:

@@ -170,6 +170,7 @@ class Trainer(object):
                 mol_name=mol_name,
                 eval_folder=str(self.results_folder),
                 data_folder=args.data_folder,
+                atom_selection=args.atom_selection,
             )
             self.evaluator_test = Evaluator(
                 self.test_data,
@@ -177,15 +178,16 @@ class Trainer(object):
                 mol_name=mol_name,
                 eval_folder=str(self.results_folder),
                 data_folder=args.data_folder,
+                atom_selection=args.atom_selection,
             )
 
             # Plot the TIC of training data as a reference
             self.results_folder.mkdir(exist_ok=True, parents=True)
-            # self.evaluator_val.tic.eval(
-            #     self.train_data.tensors[0],
-            #     title=f"Reference_TIC_training_data",
-            #     plot_tic=True,
-            # )
+            self.evaluator_val.tic.eval(
+                self.train_data.tensors[0],
+                title=f"Reference_TIC_training_data",
+                plot_tic=True,
+            )
 
         self.eval_langevin = eval_langevin
         self.best_val_loss = inf
@@ -234,6 +236,11 @@ class Trainer(object):
         self.model.load_state_dict(data_dict["model"])
         self.ema.load_state_dict(data_dict["ema"])
         self.scaler.load_state_dict(data_dict["scaler"])
+        for param_group in self.opt.param_groups:
+            if self.args.learning_rate != 4e-4:
+                print(f"Overwriting learning rate with {self.args.learning_rate}")
+                param_group["lr"] = self.args.learning_rate
+
         self.opt.load_state_dict(data_dict["opt"])
         self.scheduler.load_state_dict(data_dict["scheduler"])
 
@@ -338,15 +345,14 @@ class Trainer(object):
                     )
 
                     if "tetrapeptides" not in self.mol_name:
-                        pass
-                        # results_dict = self.evaluator_val.eval(
-                        #     sampled_mol,
-                        #     milestone=str(milestone) + "_iid",
-                        #     save_plots=True,
-                        # )
-                        # # Write metrics to Tensorboard
-                        # for key in results_dict:
-                        #     self.writer.add_scalar(key, results_dict[key], self.step)
+                        results_dict = self.evaluator_val.eval(
+                            sampled_mol,
+                            milestone=str(milestone) + "_iid",
+                            save_plots=True,
+                        )
+                        # Write metrics to Tensorboard
+                        for key in results_dict:
+                            self.writer.add_scalar(key, results_dict[key], self.step)
 
                     self.model.train()
                     self.model_dp.train()
@@ -382,12 +388,12 @@ class Trainer(object):
             )
 
         if self.mol_name != "tetrapeptides":
-            # results_val_dict = self.evaluator_val.eval(
-            #     sampled_mol, milestone="final_iid_val", save_plots=True
-            # )
-            # results_test_dict = self.evaluator_test.eval(
-            #     sampled_mol, milestone="final_iid_test", save_plots=False
-            # )
+            results_val_dict = self.evaluator_val.eval(
+                sampled_mol, milestone="final_iid_val", save_plots=True
+            )
+            results_test_dict = self.evaluator_test.eval(
+                sampled_mol, milestone="final_iid_test", save_plots=False
+            )
             pass
 
         # Write metrics to Tensorboard

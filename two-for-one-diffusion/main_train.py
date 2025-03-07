@@ -333,6 +333,15 @@ print(args)
 
 if __name__ == "__main__":
 
+    if args.atom_selection == "c-alpha":
+        args.atom_selection = AtomSelection.A_CARBON
+    elif args.atom_selection == "protein":
+        args.atom_selection = AtomSelection.PROTEIN
+    elif args.atom_selection == "all":
+        args.atom_selection = AtomSelection.ALL
+    else:
+        raise ValueError("Unknown atom selection")
+
     tic_evaluator = None
     if args.mol.lower() in all_molecules:
         tic_evaluator = TicEvaluator(
@@ -343,23 +352,15 @@ if __name__ == "__main__":
             folded_pdb_folder="./datasets/folded_pdbs",
             bins=101,
             evalset="testset",
-        )  # TODO: take into account atom selection here
-
-    if args.atom_selection == "c-alpha":
-        atom_selection = AtomSelection.A_CARBON
-    elif args.atom_selection == "protein":
-        atom_selection = AtomSelection.PROTEIN
-    elif args.atom_selection == "all":
-        atom_selection = AtomSelection.ALL
-    else:
-        raise ValueError("Unknown atom selection")
+            atom_selection=args.atom_selection,
+        )
 
     trainset, valset, testset = get_dataset(
         args.mol,
         args.mean0,
         args.data_folder,
         args.fold,
-        atom_selection=atom_selection,
+        atom_selection=args.atom_selection,
         traindata_subset=args.traindata_subset,
         shuffle_before_splitting=args.shuffle_data_before_splitting,
         tic_evaluator=tic_evaluator,

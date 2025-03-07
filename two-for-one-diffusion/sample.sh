@@ -3,8 +3,8 @@ python sample.py \
     --gen_mode om_interpolate \
     --flow_matching \
     --atom_selection protein \
-    --num_samples_eval 1 \
-    --batch_size_gen 1 \
+    --num_samples_eval 100 \
+    --batch_size_gen 10 \
     --latent_time 0.5 \
     --initial_guess_level 7\
     --subsample_points_percent 1.0 \
@@ -13,11 +13,11 @@ python sample.py \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
-    --append_exp_name test \
+    --append_exp_name test_bonds \
     --om_dt 0.001 \
     --om_gamma 1 \
-    --path_length 20 \
-    --steps 100
+    --path_length 30 \
+    --steps 2000
 
 # python sample.py \
 #     --model_path saved_models/villin \

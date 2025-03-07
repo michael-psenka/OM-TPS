@@ -339,7 +339,7 @@ class GaussianDiffusion(nn.Module):
                 z=z,
                 temperature=temperature,
             )
-            * self.norm_factor
+            * 3.6533  # self.norm_factor
         )
 
     def q_sample(self, x_start, t, noise=None):

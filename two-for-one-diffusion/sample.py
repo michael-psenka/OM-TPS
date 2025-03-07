@@ -410,8 +410,9 @@ def main(samp_args):
 
     # Init model from args
     # TODO: hardcoded for now, fix
-    trainset.num_beads = 166
-    trainset.bead_onehot = torch.eye(trainset.num_beads)
+    if samp_args.atom_selection == AtomSelection.PROTEIN:
+        trainset.num_beads = 166
+        trainset.bead_onehot = torch.eye(trainset.num_beads)
     model_nn = get_model(args, trainset, device)
     # print(model_nn)
 
@@ -496,6 +497,14 @@ def generate_samples(
     topology = md.load_topology(
         f"./datasets/folded_pdbs/{Molecules[protein_name.upper()].value}-0-{samp_args.atom_selection.value}.pdb"
     )
+    bonds = None
+    # Extract bonds as a list of tuples (atom1_index, atom2_index)
+    if samp_args.atom_selection == AtomSelection.PROTEIN:
+        bonds = [(bond[0].index, bond[1].index) for bond in topology.bonds]
+
+        # Convert to a PyTorch tensor
+        # TODO: these bonds seem to be wrong, fix
+        bonds = torch.tensor(bonds, dtype=torch.long)
 
     # adjust masses
     samp_args.masses = [atom.element.mass for atom in list(topology.atoms)]
@@ -673,6 +682,27 @@ def generate_samples(
                 evalset="testset",
                 gt_traj=gt_traj / 10,
             )
+
+            # TODO: This was code to figure out that there is some atom ordering discrepancy between the ground truth and the folded trajectory
+            # folded = tic_evaluator.folded.xyz * 10
+            # folded -= folded.mean(1, keepdims=True)
+            # from rmsd import kabsch_rotate
+            # from tqdm import tqdm
+            # gt_traj = gt_traj[::100]
+            # for i in tqdm(range(len(gt_traj))):
+            #     gt_traj[i] = torch.tensor(kabsch_rotate(gt_traj[i].cpu(), folded[0]))
+            # dists = np.linalg.norm(gt_traj - folded, axis=(-2, -1))
+            # closest = gt_traj[dists.argmin()]
+
+            # concat = np.concatenate([closest[None], folded], axis=0)
+
+            # all_mol_traj = md.Trajectory(concat / 10, topology=topology)
+
+            # all_mol_traj.save_pdb("test.pdb")
+            # import pdb; pdb.set_trace()
+
+            # save_ovito_traj(concat, "test.gsd", bonds=bonds)
+
             # assign cluster centers to the ground truth samples (only look at every 100th frame to save time)
             cluster_assignments, _ = discretize_trajectory(
                 gt_traj[::100], tic_evaluator, cluster_coords
@@ -684,6 +714,10 @@ def generate_samples(
             # Sample endpoints from the cluster centers
             endpoint_1 = gt_traj[::100][start_points]
             endpoint_2 = gt_traj[::100][end_points]
+
+            import pdb
+
+            pdb.set_trace()
 
             # # Replicate the endpoints to have samp_args.num_samples_eval samples
             endpoint_1_samples = endpoint_1.repeat(
@@ -924,12 +958,16 @@ def generate_samples(
 
     else:
         all_mol_traj = md.Trajectory(
-            sampled_mol[0:1000].numpy() / 10, topology=topology
+            torch.clamp(sampled_mol[0:1000], -1000, 1000).numpy() / 10,
+            topology=topology,
         )
 
-        all_mol_traj.save_pdb(
-            str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb")
-        )
+        try:
+            all_mol_traj.save_pdb(
+                str(str(eval_folder) + f"/sample-{samp_args.gen_mode}.pdb")
+            )
+        except:
+            print("Failed to save pdb file, skipping...")
 
     # Also save as gsd
     save_ovito_traj(
@@ -938,7 +976,8 @@ def generate_samples(
         align=samp_args.gen_mode == "iid",
         all_backbone="tetrapeptide" in protein_name
         and trainset.atom_selection == "backbone",
-        create_bonds=samp_args.atom_selection == AtomSelection.A_CARBON,
+        create_bonds=True,
+        bonds=bonds,
     )
 
     # Perform final evaluations (producing plots, GIFs, etc.)
