@@ -1,3 +1,17 @@
+# python main_train.py \
+#     --mol chignolin \
+#     --conservative False \
+#     --num_layers_gnn 6 \
+#     --hidden_features_gnn 256 \
+#     --data_folder /data/sanjeevr/Reference_MD_Sims \
+#     --eval_interval 10000 \
+#     --experiment_name chignolin_all_atom_weightdecay=1e-4_sgd_correctscale_nonconservative_LARGE \
+#     --batch_size 48 \
+#     --atom_selection protein \
+#     --weight_decay 1e-4 \
+#     --num_samples 100 \
+#     --iterations_on_val 1
+
 python sample.py \
     --model_path saved_models/chignolin_all_atom \
     --gen_mode om_interpolate \

@@ -1,9 +1,10 @@
 #!/bin/bash
 #SBATCH --mail-type=BEGIN,END,FAIL  # Send email when job begins, ends, or fails
 #SBATCH --mail-user=sanjeevr@umich.edu  # Replace with your email
-#SBATCH --partition=gpu
+#SBATCH --partition=long
+#SBATCH --qos=long
 #SBATCH --gpus=1
-#SBATCH --time=24:00:00
+#SBATCH --time=6:00:00
 
 # conda activate om-diffusion
 # python main_train.py \
@@ -32,15 +33,30 @@
 #     --iterations_on_val 1 \
 #     --learning_rate 1e-5
 
+# python main_train.py \
+#     --mol chignolin \
+#     --flow_matching \
+#     --start_from_last_saved True \
+#     --data_folder /data/sanjeevr/Reference_MD_Sims \
+#     --eval_interval 10000 \
+#     --experiment_name chignolin_all_atom_flowmatching_weightdecay=1e-4_sgd_correctscale \
+#     --batch_size 48 \
+#     --learning_rate 1e-5 \
+#     --atom_selection protein \
+#     --weight_decay 1e-4 \
+#     --num_samples 100 \
+#     --iterations_on_val 1
+
 python main_train.py \
     --mol chignolin \
+    --conservative False \
     --flow_matching \
-    --start_from_last_saved True \
+    --num_layers_gnn 6 \
+    --hidden_features_gnn 256 \
     --data_folder /data/sanjeevr/Reference_MD_Sims \
     --eval_interval 10000 \
-    --experiment_name chignolin_all_atom_flowmatching_weightdecay=1e-4_sgd_correctscale \
+    --experiment_name test \
     --batch_size 48 \
-    --learning_rate 1e-5 \
     --atom_selection protein \
     --weight_decay 1e-4 \
     --num_samples 100 \

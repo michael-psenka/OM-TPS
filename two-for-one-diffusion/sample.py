@@ -509,6 +509,13 @@ def generate_samples(
     # adjust masses
     samp_args.masses = [atom.element.mass for atom in list(topology.atoms)]
 
+    # set atomic numbers for all-atom proteins
+    z = (
+        [atom.element.number for atom in list(topology.atoms)]
+        if samp_args.atom_selection == AtomSelection.PROTEIN
+        else None
+    )
+
     dl = torch.utils.data.DataLoader(
         testset,
         batch_size=min(len(testset), samp_args.batch_size_gen),
@@ -531,6 +538,7 @@ def generate_samples(
             samp_args.num_samples_eval // parallel_batches,
             samp_args.batch_size_gen // parallel_batches,
             verbose=True,
+            z=z.to(device) if z is not None else None,
         )
 
     # Generate interpolated samples
@@ -659,7 +667,7 @@ def generate_samples(
                     data_root="/data/sanjeevr/Reference_MD_Sims",
                     molecule=Molecules[protein_name.upper()],
                     simulation_id=0,
-                    atom_selection=sample_args.atom_selection,
+                    atom_selection=samp_args.atom_selection,
                     return_bond_graph=False,
                     transform=to_angstrom,
                     align=False,
@@ -699,9 +707,9 @@ def generate_samples(
             # all_mol_traj = md.Trajectory(concat / 10, topology=topology)
 
             # all_mol_traj.save_pdb("test.pdb")
-            # import pdb; pdb.set_trace()
 
             # save_ovito_traj(concat, "test.gsd", bonds=bonds)
+            # import pdb; pdb.set_trace()
 
             # assign cluster centers to the ground truth samples (only look at every 100th frame to save time)
             cluster_assignments, _ = discretize_trajectory(
@@ -810,7 +818,7 @@ def generate_samples(
             endpoint_2_samples.to(device),
             batch_size=samp_args.batch_size_gen // parallel_batches,
             verbose=True,
-            z=z.to(device) if "tetrapeptide" in protein_name else None,
+            z=z.to(device) if z is not None else None,
         )
         sampled_mol = output["sampled_mol"]
 

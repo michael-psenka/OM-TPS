@@ -21,6 +21,8 @@ from utils import (
     random_rotation,
 )
 
+from datasets.dataset_utils_empty import AtomSelection
+
 from logging_utils import save_ovito_traj
 
 
@@ -149,7 +151,12 @@ class Trainer(object):
         self.num_saved_samples = num_saved_samples
         self.num_samples_final_eval = num_samples_final_eval
         self.topology = topology
-
+        self.all_atom_protein_z = (
+            [atom.element.number for atom in list(self.topology.atoms)]
+            if args.atom_selection == AtomSelection.PROTEIN
+            else None
+        )
+        self.all_atom_protein_z = torch.tensor(self.all_atom_protein_z)
         # Tensorboard writer
         tzinfo = dt.timezone(dt.timedelta(hours=2))  # timezone UTC+2
         now = dt.datetime.now(tzinfo)
@@ -253,7 +260,11 @@ class Trainer(object):
             for iter_num in tqdm(range(val_iters)):
                 val_data = next(dl)
                 mol = val_data[0].to(self.device)
-                z = val_data[1].to(self.device) if len(val_data) == 2 else None
+                z = (
+                    val_data[1].to(self.device)
+                    if len(val_data) == 2
+                    else self.all_atom_protein_z.to(self.device)
+                )
                 loss += self.model_ema_dp(mol, z=z, t_diff_range=t_diff_range).mean()
             loss /= val_iters
             self.writer.add_scalar(f"Loss {partition_name}", loss.item(), self.step)
@@ -272,7 +283,11 @@ class Trainer(object):
                 for i in range(self.gradient_accumulate_every):
                     input = next(self.dl_train)
                     mol = input[0].to(self.device)
-                    z = input[1].to(self.device) if len(input) == 2 else None
+                    z = (
+                        input[1].to(self.device)
+                        if len(input) == 2
+                        else self.all_atom_protein_z.to(self.device)
+                    )
                     if self.data_aug:
                         mol = random_rotation(mol)
 
@@ -325,7 +340,7 @@ class Trainer(object):
                     z = (
                         next(self.dl_val)[1].to(self.device)
                         if "tetrapeptide" in self.mol_name
-                        else None
+                        else self.all_atom_protein_z.to(self.device)
                     )
                     # Evaluate i.i.d.
                     sampled_mol = sample_from_model(

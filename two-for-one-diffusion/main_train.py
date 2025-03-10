@@ -4,6 +4,7 @@ import torch
 import sys
 import os
 import warnings
+import mdtraj as md
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -402,6 +403,10 @@ if __name__ == "__main__":
             loss_weights=args.loss_weights,
         )
 
+    topology = md.load_topology(
+        f"./datasets/folded_pdbs/{Molecules[args.mol.upper()].value}-0-{args.atom_selection.value}.pdb"
+    )
+
     # Trainer
     trainer = Trainer(
         DDPM_model.to(device),
@@ -415,7 +420,7 @@ if __name__ == "__main__":
         ema_decay=args.ema_decay,
         save_and_sample_every=args.eval_interval,
         num_saved_samples=args.num_samples,
-        topology=trainset.topology if hasattr(trainset, "topology") else None,
+        topology=topology,
         results_folder=args.results_folder,
         data_aug=args.data_aug,
         tb_folder=args.tensorboard_folder,
