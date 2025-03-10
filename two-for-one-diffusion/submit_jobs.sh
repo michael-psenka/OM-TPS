@@ -6,17 +6,25 @@
 #SBATCH --time=24:00:00
 
 conda activate om-diffusion
-python main_train.py \
-    --mol chignolin \
-    --start_from_last_saved True \
-    --data_folder /data/sanjeevr/Reference_MD_Sims \
-    --eval_interval 10000 \
-    --experiment_name chignolin_all_atom_weightdecay=1e-4_sgd_correctscale \
-    --batch_size 56 \
-    --atom_selection protein \
-    --weight_decay 1e-4 \
-    --num_samples 100 \
-    --iterations_on_val 1
+python sample.py \
+    --model_path saved_models/bba \
+    --gen_mode om_interpolate \
+    --num_samples_eval 32 \
+    --batch_size_gen 4 \
+    --latent_time 20 \
+    --initial_guess_level 250\
+    --subsample_points_percent 1.0 \
+    --subsample_dimensions_percent 1.0 \
+    --no_encode_and_decode \
+    --action hutch \
+    --optimizer sgd \
+    --lr 1e-5 \
+    --append_exp_name test_initial_latent_time=250_hutch_minus_SGD_32paths_physical_params_pl100_lr1e-5_savemoreoften \
+    --om_dt 0.001 \
+    --om_gamma 1 \
+    --om_d 1.0 \
+    --path_length 100 \
+    --steps 2000
 
 # python main_train.py \
 #     --mol chignolin \

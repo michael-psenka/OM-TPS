@@ -410,8 +410,8 @@ def main(samp_args):
 
     # Init model from args
     # TODO: hardcoded for now, fix
-    trainset.num_beads = 166
-    trainset.bead_onehot = torch.eye(trainset.num_beads)
+    # trainset.num_beads = 166
+    # trainset.bead_onehot = torch.eye(trainset.num_beads)
     model_nn = get_model(args, trainset, device)
     # print(model_nn)
 
@@ -490,7 +490,7 @@ def generate_samples(
         protein_name = "tetrapeptide"
 
     all_atom_append = (
-        "_all_atom" if args.atom_selection == AtomSelection.A_CARBON else ""
+        "_all_atom" if samp_args.atom_selection == AtomSelection.PROTEIN else ""
     )
 
     dl = torch.utils.data.DataLoader(

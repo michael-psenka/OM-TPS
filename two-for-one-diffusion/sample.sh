@@ -1,23 +1,45 @@
+# python sample.py \
+#     --model_path saved_models/chignolin_all-atom \
+#     --gen_mode om_interpolate \
+#     --flow_matching \
+#     --atom_selection protein \
+#     --num_samples_eval 10 \
+#     --batch_size_gen 1 \
+#     --latent_time 7 \
+#     --initial_guess_level 999\
+#     --subsample_points_percent 1.0 \
+#     --subsample_dimensions_percent 1.0 \
+#     --no_encode_and_decode \
+#     --action truncated \
+#     --optimizer adam \
+#     --lr 2e-1 \
+#     --append_exp_name test \
+#     --om_dt 0.001 \
+#     --om_gamma 1 \
+#     --path_length 100 \
+#     --steps 100
+
 python sample.py \
-    --model_path saved_models/chignolin_all-atom \
-    --gen_mode om_interpolate \
-    --flow_matching \
-    --atom_selection protein \
-    --num_samples_eval 10 \
-    --batch_size_gen 1 \
-    --latent_time 7 \
-    --initial_guess_level 999\
+    --model_path saved_models/bba \
+    --gen_mode interpolate \
+    --num_samples_eval 32 \
+    --batch_size_gen 4 \
+    --latent_time 20 \
+    --initial_guess_level 250\
     --subsample_points_percent 1.0 \
     --subsample_dimensions_percent 1.0 \
     --no_encode_and_decode \
-    --action truncated \
-    --optimizer adam \
-    --lr 2e-1 \
-    --append_exp_name test \
+    --action hutch \
+    --optimizer sgd \
+    --lr 1e-5 \
+    --append_exp_name test_noisy \
     --om_dt 0.001 \
     --om_gamma 1 \
+    --om_d 1.0 \
     --path_length 100 \
-    --steps 100
+    --steps 2000
+
+
 
 # python sample.py \
 #     --model_path saved_models/villin \

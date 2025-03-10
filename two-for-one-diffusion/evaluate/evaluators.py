@@ -15,7 +15,7 @@ from utils import center_zero
 import matplotlib.pyplot as plt
 
 from deeptime.decomposition import TICA
-import pyemma.coordinates as coor
+# import pyemma.coordinates as coor
 
 from matplotlib.colors import LogNorm, Normalize
 import matplotlib.path as mpath

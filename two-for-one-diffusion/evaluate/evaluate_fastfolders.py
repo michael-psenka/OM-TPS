@@ -172,6 +172,7 @@ def evaluate_fastfolders(
             transform=to_angstrom,
             align=False,
         )
+        torch.save(dataset.traj.xyz, gt_traj_path, _use_new_zipfile_serialization=False, pickle_protocol=5)
 
         gt_traj = 10 * dataset.traj.xyz  # convert to angstroms
     gt_traj -= gt_traj.mean(1, keepdims=True)  # center
@@ -841,7 +842,7 @@ def get_tic_free_energy_plots(
             prob_samp,
             endpoints=endpoints if "interpolate" in gen_mode else None,
             gen_paths=gen_paths,
-            ref_paths=ref_paths,
+            ref_paths=None, #ref_paths,
             file_name=file_name,
             title="Samples",
             save_plot=True,
@@ -963,7 +964,7 @@ def get_tic_free_energy_plots(
         save_all=True,
         append_images=images[1:],
         optimize=False,
-        duration=100,  # Duration for each frame in milliseconds
+        duration=200,  # Duration for each frame in milliseconds
         loop=0,  # Loop forever
     )
 
@@ -1340,7 +1341,7 @@ if __name__ == "__main__":
     new_append = append + subsample_append + opt_steps_append
 
     atom_selection = (
-        AtomSelection.C_ALPHA
+        AtomSelection.A_CARBON
         if args.atom_selection == "c-alpha"
         else AtomSelection.PROTEIN
     )
