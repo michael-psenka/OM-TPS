@@ -93,8 +93,8 @@ CLUSTER_ENDPOINTS = {
 
 CLUSTER_ENDPOINTS_ALL_ATOM = {
     "chignolin": [11, 8],
-    # "trp_cage": [2, 13],
-    # "bba": [9, 17],
+    "trp_cage": [2, 4],
+    "bba": [14, 12],
     # "villin": [0, 17],
     # "protein_g": [11, 14],
 }
@@ -159,7 +159,7 @@ def evaluate_fastfolders(
         f"gt_traj{all_atom_append}.pt",
     )
     if os.path.exists(gt_traj_path):
-        gt_traj = 10 * torch.load(gt_traj_path)
+        gt_traj = 10 * torch.tensor(torch.load(gt_traj_path))
     else:
         print("Loading ground truth trajectory")
         # Load the reference dataset
@@ -218,7 +218,11 @@ def evaluate_fastfolders(
         )
     if endpoints is None:
         # cluster_endpoints = np.load(cluster_endpoints_path)
-        cluster_endpoints = CLUSTER_ENDPOINTS[protein_name]
+        cluster_endpoints = (
+            CLUSTER_ENDPOINTS[protein_name]
+            if atom_selection == AtomSelection.A_CARBON
+            else CLUSTER_ENDPOINTS_ALL_ATOM[protein_name]
+        )
         start, end = cluster_endpoints[0], cluster_endpoints[1]
 
     # Get TIC evaluator
@@ -388,59 +392,64 @@ def evaluate_fastfolders(
         bins_y = np.clip(bins_y, 0, tic_evaluator.bins - 1)
         bin_idx = bins_x * tic_evaluator.bins + bins_y
 
-        transition_ensemble_mask = np.logical_and(
-            bin_committor_probs[bin_idx] > 0.45, bin_committor_probs[bin_idx] < 0.55
-        )
-        transition_ensemble = transformed_samples[transition_ensemble_mask]
-        transition_ensemble_mols = center_zero(
-            sampled_mol[transition_ensemble_mask]
-        ).numpy()
+        transition_jsd = -1
+        if bin_committor_probs is not None:
+            transition_ensemble_mask = np.logical_and(
+                bin_committor_probs[bin_idx] > 0.45, bin_committor_probs[bin_idx] < 0.55
+            )
+            transition_ensemble = transformed_samples[transition_ensemble_mask]
+            transition_ensemble_mols = center_zero(
+                sampled_mol[transition_ensemble_mask]
+            ).numpy()
 
-        # align the transition ensemble to the first frame
-        for i in range(transition_ensemble_mols.shape[0]):
-            transition_ensemble_mols[i] = kabsch_rotate(
-                transition_ensemble_mols[i], sampled_mol[0]
+            # align the transition ensemble to the first frame
+            for i in range(transition_ensemble_mols.shape[0]):
+                transition_ensemble_mols[i] = kabsch_rotate(
+                    transition_ensemble_mols[i], sampled_mol[0]
+                )
+
+            # save transition ensemble as a pdb
+            transition_ensemble_mols = md.Trajectory(
+                transition_ensemble_mols / 10, topology=topology
+            )
+            transition_ensemble_mols.save_pdb(
+                str(str(eval_folder) + f"/transition_ensemble.pdb")
             )
 
-        # save transition ensemble as a pdb
-        transition_ensemble_mols = md.Trajectory(
-            transition_ensemble_mols / 10, topology=topology
-        )
-        transition_ensemble_mols.save_pdb(
-            str(str(eval_folder) + f"/transition_ensemble.pdb")
-        )
+            # save transition ensemble TICA coordinates
+            np.save(
+                str(str(eval_folder) + f"/transition_ensemble_TICA.npy"),
+                transition_ensemble,
+            )
 
-        # save transition ensemble TICA coordinates
-        np.save(
-            str(str(eval_folder) + f"/transition_ensemble_TICA.npy"),
-            transition_ensemble,
-        )
-
-        transition_ensemble, _ = discretize_trajectory(
-            transition_ensemble, tic_evaluator, kmeans_cluster_centers, transform=False
-        )
-        transition_state_dist = np.array(
-            [np.count_nonzero(transition_ensemble == i) for i in range(20)]
-        )
-        transition_state_dist = transition_state_dist / transition_state_dist.sum()
-        transition_jsd = -1
-        if gt_transition_ensemble is not None:
-            gt_transition_ensemble, _ = discretize_trajectory(
-                gt_transition_ensemble,
+            transition_ensemble, _ = discretize_trajectory(
+                transition_ensemble,
                 tic_evaluator,
                 kmeans_cluster_centers,
                 transform=False,
             )
-            ref_transition_state_dist = np.array(
-                [np.count_nonzero(gt_transition_ensemble == i) for i in range(20)]
+            transition_state_dist = np.array(
+                [np.count_nonzero(transition_ensemble == i) for i in range(20)]
             )
+            transition_state_dist = transition_state_dist / transition_state_dist.sum()
 
-            ref_transition_state_dist = (
-                ref_transition_state_dist / ref_transition_state_dist.sum()
-            )
-            transition_jsd = jensenshannon(
-                ref_transition_state_dist, transition_state_dist
-            )
+            if gt_transition_ensemble is not None:
+                gt_transition_ensemble, _ = discretize_trajectory(
+                    gt_transition_ensemble,
+                    tic_evaluator,
+                    kmeans_cluster_centers,
+                    transform=False,
+                )
+                ref_transition_state_dist = np.array(
+                    [np.count_nonzero(gt_transition_ensemble == i) for i in range(20)]
+                )
+
+                ref_transition_state_dist = (
+                    ref_transition_state_dist / ref_transition_state_dist.sum()
+                )
+                transition_jsd = jensenshannon(
+                    ref_transition_state_dist, transition_state_dist
+                )
 
         # Compute the likelihood of the sampled trajectories under the reference MSM
         path_probabilities = None
@@ -647,7 +656,11 @@ def get_tic_free_energy_plots(
     # Load topology from pdb file
     topology = md.load(pdb_file).topology
 
-    start, end = CLUSTER_ENDPOINTS[protein_name]
+    start, end = (
+        CLUSTER_ENDPOINTS[protein_name]
+        if atom_selection == AtomSelection.A_CARBON
+        else CLUSTER_ENDPOINTS_ALL_ATOM[protein_name]
+    )
 
     # Load pretrained committor model
     device = torch.device(torch.cuda.current_device())
@@ -987,14 +1000,15 @@ def get_tic_free_energy_plots(
     images = [Image.open(committor_path) for committor_path in committor_paths]
 
     # Save as GIF
-    images[0].save(
-        committor_gif_path,
-        save_all=True,
-        append_images=images[1:],
-        optimize=False,
-        duration=100,  # Duration for each frame in milliseconds
-        loop=0,  # Loop forever
-    )
+    if images:
+        images[0].save(
+            committor_gif_path,
+            save_all=True,
+            append_images=images[1:],
+            optimize=False,
+            duration=100,  # Duration for each frame in milliseconds
+            loop=0,  # Loop forever
+        )
 
     # Repeat for the transition rate box plots
     transition_rate_gif_path = join(tic_evaluator.plots_folder, "transition_rates.gif")

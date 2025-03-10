@@ -134,6 +134,7 @@ dependencies:
       - nvidia-nvjitlink-cu12==12.1.105
       - nvidia-nvtx-cu12==12.1.105
       - omegaconf==2.3.0
+      - openfold==1.0.1
       - packaging==24.1
       - pandas==1.5.3
       - pathos==0.3.3
@@ -163,12 +164,12 @@ dependencies:
       - tensorboard-data-server==0.7.2
       - threadpoolctl==3.5.0
       - tomli==2.1.0
-      - torch==2.5.0
+      - torch==2.5.0+cu121
       - torch-geometric==2.6.1
-      - torchaudio==2.5.0
+      - torchaudio==2.5.0+cu121
       - torchdiffeq==0.2.5
       - torchmetrics==1.4.3
-      - torchvision==0.20.0
+      - torchvision==0.20.0+cu121
       - tqdm==4.66.5
       - triton==3.1.0
       - typing-extensions==4.9.0

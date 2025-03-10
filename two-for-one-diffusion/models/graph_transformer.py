@@ -32,6 +32,7 @@ class GraphTransformer(nn.Module):
         use_distances: bool = True,
         conservative: bool = True,
         use_bead_identities: bool = False,
+        heads=8,
     ):
         """_summary_
 
@@ -53,6 +54,7 @@ class GraphTransformer(nn.Module):
         self.use_abs_coords = use_abs_coords
         self.conservative = conservative
         self.use_bead_identities = use_bead_identities
+        self.heads = heads
 
         in_node_nf = num_beads + 1 + use_abs_coords * 3
         if use_bead_identities:
@@ -80,6 +82,7 @@ class GraphTransformer(nn.Module):
             edge_dim=hidden_nf,  # optional - if left out, edge dimensions is assumed to be the same as the node dimensions above
             with_feedforwards=True,  # whether to add a feedforward after each attention layer, suggested by literature to be needed
             gated_residual=True,  # to use the gated residual to prevent over-smoothing
+            heads=self.heads,
         )
 
         self.to(self.device)
@@ -115,7 +118,10 @@ class GraphTransformer(nn.Module):
                 z = z.to(self.device)
                 if len(z.shape) == 1:
                     z = z.unsqueeze(0).repeat(bs, 1)
+                elif len(z.shape) == 2 and z.shape[0] == 1:
+                    z = z.repeat(bs, 1)
                 z = self.bead_embedding(z)
+
                 h = torch.cat((h, z), dim=2)
 
             # Concatenate node inputs

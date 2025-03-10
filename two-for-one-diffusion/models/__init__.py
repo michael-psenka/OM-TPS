@@ -1,5 +1,6 @@
 from models.graph_transformer import GraphTransformer
 from models.committor import CommittorNN
+from datasets.dataset_utils_empty import AtomSelection
 
 
 def get_model(args, trainset, device):
@@ -13,7 +14,8 @@ def get_model(args, trainset, device):
             use_abs_coords=args.use_abs_coords,
             use_distances=args.use_distances,
             conservative=args.conservative,
-            use_bead_identities=args.mol == "tetrapeptides",
+            use_bead_identities=args.mol == "tetrapeptides"
+            or args.atom_selection == AtomSelection.PROTEIN,
         )
     else:
         raise Exception(f"Network { args.backbone_network} not implemented")

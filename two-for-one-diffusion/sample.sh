@@ -1,45 +1,37 @@
-# python sample.py \
-#     --model_path saved_models/chignolin_all-atom \
-#     --gen_mode om_interpolate \
-#     --flow_matching \
+# python main_train.py \
+#     --mol chignolin \
+#     --conservative False \
+#     --num_layers_gnn 6 \
+#     --hidden_features_gnn 256 \
+#     --data_folder /data/sanjeevr/Reference_MD_Sims \
+#     --eval_interval 10000 \
+#     --experiment_name chignolin_all_atom_weightdecay=1e-4_sgd_correctscale_nonconservative_LARGE \
+#     --batch_size 48 \
 #     --atom_selection protein \
-#     --num_samples_eval 10 \
-#     --batch_size_gen 1 \
-#     --latent_time 7 \
-#     --initial_guess_level 999\
-#     --subsample_points_percent 1.0 \
-#     --subsample_dimensions_percent 1.0 \
-#     --no_encode_and_decode \
-#     --action truncated \
-#     --optimizer adam \
-#     --lr 2e-1 \
-#     --append_exp_name test \
-#     --om_dt 0.001 \
-#     --om_gamma 1 \
-#     --path_length 100 \
-#     --steps 100
+#     --weight_decay 1e-4 \
+#     --num_samples 100 \
+#     --iterations_on_val 1
 
 python sample.py \
-    --model_path saved_models/bba \
-    --gen_mode interpolate \
-    --num_samples_eval 32 \
-    --batch_size_gen 4 \
-    --latent_time 20 \
-    --initial_guess_level 250\
+    --model_path saved_models/chignolin_all_atom \
+    --gen_mode om_interpolate \
+    --flow_matching \
+    --atom_selection protein \
+    --num_samples_eval 100 \
+    --batch_size_gen 10 \
+    --latent_time 0.5 \
+    --initial_guess_level 7\
     --subsample_points_percent 1.0 \
     --subsample_dimensions_percent 1.0 \
     --no_encode_and_decode \
-    --action hutch \
-    --optimizer sgd \
-    --lr 1e-5 \
-    --append_exp_name test_noisy \
+    --action truncated \
+    --optimizer adam \
+    --lr 2e-1 \
+    --append_exp_name test_bonds \
     --om_dt 0.001 \
     --om_gamma 1 \
-    --om_d 1.0 \
-    --path_length 100 \
+    --path_length 30 \
     --steps 2000
-
-
 
 # python sample.py \
 #     --model_path saved_models/villin \
