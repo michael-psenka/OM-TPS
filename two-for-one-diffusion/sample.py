@@ -692,24 +692,32 @@ def generate_samples(
             )
 
             # TODO: This was code to figure out that there is some atom ordering discrepancy between the ground truth and the folded trajectory
-            # folded = tic_evaluator.folded.xyz * 10
-            # folded -= folded.mean(1, keepdims=True)
-            # from rmsd import kabsch_rotate
-            # from tqdm import tqdm
-            # gt_traj = gt_traj[::100]
-            # for i in tqdm(range(len(gt_traj))):
-            #     gt_traj[i] = torch.tensor(kabsch_rotate(gt_traj[i].cpu(), folded[0]))
-            # dists = np.linalg.norm(gt_traj - folded, axis=(-2, -1))
-            # closest = gt_traj[dists.argmin()]
+            folded = tic_evaluator.folded.xyz * 10
+            folded -= folded.mean(1, keepdims=True)
+            from rmsd import kabsch_rotate
+            from tqdm import tqdm
+            folded_pd = np.linalg.norm(folded[0][None] - folded[0][:, None], axis = -1)
+            closest_pd = np.linalg.norm(gt_traj[0][None] - gt_traj[0][:, None], axis = -1)
+            from scipy.optimize import linear_sum_assignment
+            # Find optimal permutation using Hungarian algorithm
+            row_ind, col_ind = linear_sum_assignment(np.abs(folded_pd - closest_pd))
+            import pdb; pdb.set_trace()
 
-            # concat = np.concatenate([closest[None], folded], axis=0)
+            gt_traj = gt_traj[::100]
+            for i in tqdm(range(len(gt_traj))):
+                gt_traj[i] = torch.tensor(kabsch_rotate(gt_traj[i].cpu(), folded[0]))
+            dists = np.linalg.norm(gt_traj - folded, axis=(-2, -1))
+            closest = gt_traj[dists.argmin()]
+            import pdb; pdb.set_trace()
 
-            # all_mol_traj = md.Trajectory(concat / 10, topology=topology)
+            concat = np.concatenate([closest[None], folded], axis=0)
+            
+            all_mol_traj = md.Trajectory(closest[None] / 10, topology=topology)
 
-            # all_mol_traj.save_pdb("test.pdb")
+            all_mol_traj.save_pdb("test.pdb")
 
-            # save_ovito_traj(concat, "test.gsd", bonds=bonds)
-            # import pdb; pdb.set_trace()
+            save_ovito_traj(concat, "test.gsd", bonds=bonds)
+            
 
             # assign cluster centers to the ground truth samples (only look at every 100th frame to save time)
             cluster_assignments, _ = discretize_trajectory(
