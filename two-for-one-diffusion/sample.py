@@ -538,7 +538,7 @@ def generate_samples(
             samp_args.num_samples_eval // parallel_batches,
             samp_args.batch_size_gen // parallel_batches,
             verbose=True,
-            z=z.to(device) if z is not None else None,
+            z=torch.tensor(z).to(device) if z is not None else None,
         )
 
     # Generate interpolated samples
@@ -723,10 +723,6 @@ def generate_samples(
             endpoint_1 = gt_traj[::100][start_points]
             endpoint_2 = gt_traj[::100][end_points]
 
-            import pdb
-
-            pdb.set_trace()
-
             # # Replicate the endpoints to have samp_args.num_samples_eval samples
             endpoint_1_samples = endpoint_1.repeat(
                 samp_args.num_samples_eval // len(endpoint_1) + 1, 1, 1
@@ -818,7 +814,7 @@ def generate_samples(
             endpoint_2_samples.to(device),
             batch_size=samp_args.batch_size_gen // parallel_batches,
             verbose=True,
-            z=z.to(device) if z is not None else None,
+            z=torch.tensor(z).to(device) if z is not None else None,
         )
         sampled_mol = output["sampled_mol"]
 

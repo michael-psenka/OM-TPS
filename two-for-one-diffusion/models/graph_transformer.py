@@ -114,7 +114,7 @@ class GraphTransformer(nn.Module):
             edge_attr = self.get_edge_attr(x)
             edge_attr = self.edge_embedding(edge_attr)
 
-            if z is not None:
+            if z is not None and self.use_bead_identities:
                 z = z.to(self.device)
                 if len(z.shape) == 1:
                     z = z.unsqueeze(0).repeat(bs, 1)

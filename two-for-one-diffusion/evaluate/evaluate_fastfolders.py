@@ -12,7 +12,6 @@ from os.path import join
 from deeptime.clustering import MiniBatchKMeans
 from deeptime.markov import TransitionCountEstimator, pcca
 from sklearn.preprocessing import normalize
-import seaborn as sns
 from scipy.spatial.distance import jensenshannon
 from pathlib import Path
 import os
@@ -172,7 +171,12 @@ def evaluate_fastfolders(
             transform=to_angstrom,
             align=False,
         )
-        torch.save(dataset.traj.xyz, gt_traj_path, _use_new_zipfile_serialization=False, pickle_protocol=5)
+        torch.save(
+            dataset.traj.xyz,
+            gt_traj_path,
+            _use_new_zipfile_serialization=False,
+            pickle_protocol=5,
+        )
 
         gt_traj = 10 * dataset.traj.xyz  # convert to angstroms
     gt_traj -= gt_traj.mean(1, keepdims=True)  # center
@@ -855,7 +859,7 @@ def get_tic_free_energy_plots(
             prob_samp,
             endpoints=endpoints if "interpolate" in gen_mode else None,
             gen_paths=gen_paths,
-            ref_paths=None, #ref_paths,
+            ref_paths=None,  # ref_paths,
             file_name=file_name,
             title="Samples",
             save_plot=True,

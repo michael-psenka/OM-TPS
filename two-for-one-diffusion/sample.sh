@@ -18,7 +18,7 @@ python sample.py \
     --flow_matching \
     --atom_selection protein \
     --num_samples_eval 100 \
-    --batch_size_gen 10 \
+    --batch_size_gen 1 \
     --latent_time 0.5 \
     --initial_guess_level 7\
     --subsample_points_percent 1.0 \

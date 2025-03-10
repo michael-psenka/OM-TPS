@@ -6,7 +6,8 @@
 #SBATCH --gpus=1
 #SBATCH --time=12:00:00
 
-# conda activate om-diffusion
+source /home/sanjeevr/mambaforge/etc/profile.d/conda.sh
+conda activate alphaflow
 # python main_train.py \
 #     --mol chignolin \
 #     --conservative False \
@@ -47,8 +48,8 @@
 #     --num_samples 100 \
 #     --iterations_on_val 1
 
-conda init
-conda activate alphaflow
+# conda init
+# conda activate alphaflow
 python main_train.py \
     --mol chignolin \
     --conservative False \

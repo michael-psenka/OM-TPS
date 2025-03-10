@@ -419,15 +419,6 @@ class GaussianDiffusion(nn.Module):
             self.device
         )  # make batch dimension come first [B, path_length, n_atoms, 3]
 
-        import pdb; pdb.set_trace()
-
-        import mdtraj as md
-        from datasets.dataset_utils_empty import Molecules
-        topology = md.load_topology(f"./datasets/folded_pdbs/{Molecules["BBA"].value}-0-c-alpha.pdb")
-        noised_xs = md.Trajectory(noised_xs.reshape(-1, n_atoms,3)[0:1000].cpu().numpy() / 10, topology=topology)
-
-        noised_xs.save_pdb("noisy.pdb")
-
         # decode
         xs = self.p_sample_loop(
             noised_xs.reshape(-1, n_atoms, 3),
