@@ -4,7 +4,7 @@
 #SBATCH --partition=long
 #SBATCH --qos=long
 #SBATCH --gpus=1
-#SBATCH --time=6:00:00
+#SBATCH --time=12:00:00
 
 # conda activate om-diffusion
 # python main_train.py \
@@ -47,15 +47,15 @@
 #     --num_samples 100 \
 #     --iterations_on_val 1
 
+conda init
+conda activate alphaflow
 python main_train.py \
     --mol chignolin \
     --conservative False \
     --flow_matching \
-    --num_layers_gnn 6 \
-    --hidden_features_gnn 256 \
     --data_folder /data/sanjeevr/Reference_MD_Sims \
     --eval_interval 10000 \
-    --experiment_name test \
+    --experiment_name chignolin_all_atom_flowmatching_weightdecay=1e-4_sgd_correctscale_nonconservative_atomnumbers \
     --batch_size 48 \
     --atom_selection protein \
     --weight_decay 1e-4 \
