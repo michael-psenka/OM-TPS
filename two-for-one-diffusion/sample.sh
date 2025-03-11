@@ -15,6 +15,7 @@
 python sample.py \
     --model_path saved_models/chignolin_all_atom \
     --gen_mode om_interpolate \
+    --non_conservative \
     --flow_matching \
     --atom_selection protein \
     --num_samples_eval 100 \
@@ -30,7 +31,7 @@ python sample.py \
     --append_exp_name test_bonds \
     --om_dt 0.001 \
     --om_gamma 1 \
-    --path_length 30 \
+    --path_length 100 \
     --steps 2000
 
 # python sample.py \

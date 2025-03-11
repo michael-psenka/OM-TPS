@@ -110,6 +110,12 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--non_conservative",
+    action="store_true",
+    help="don't use conservative generative model",
+)
+
+parser.add_argument(
     "--append_exp_name",
     type=str,
     default=None,
@@ -319,10 +325,16 @@ def main(samp_args):
     # Load args from training
     if samp_args.flow_matching:
         arg_name = "args-flow.pickle"
+        if samp_args.non_conservative:
+            arg_name = "args-flow-nonconservative.pickle"
     elif samp_args.transition_data_removed:
         arg_name = "args-transition-data-removed.pickle"
+    
     else:
-        arg_name = "args.pickle"
+        if samp_args.non_conservative:
+            arg_name = "args-nonconservative.pickle"
+        else:
+            arg_name = "args.pickle"
     with open(
         join(
             samp_args.model_path,
@@ -348,6 +360,10 @@ def main(samp_args):
     samp_args.append_exp_name += transition_removed_append
     flow_append = "_flowmatching" if samp_args.flow_matching else ""
     samp_args.append_exp_name += flow_append
+
+    nonconservative_append = "_nonconservative" if not samp_args.non_conservative else ""
+    samp_args.append_exp_name += nonconservative_append
+
 
     samp_args.original_append_exp_name = samp_args.append_exp_name
 
@@ -435,16 +451,26 @@ def main(samp_args):
 
     # Load weights into model
     if samp_args.flow_matching:
-        model_path = (
-            samp_args.model_path + f"/model-{samp_args.model_checkpoint}-flow.pt"
-        )
+        if samp_args.non_conservative:
+            model_path = (
+                samp_args.model_path + f"/model-{samp_args.model_checkpoint}-flow-nonconservative.pt"
+            )
+        else:
+            model_path = (
+                samp_args.model_path + f"/model-{samp_args.model_checkpoint}-flow.pt"
+            )
     elif samp_args.transition_data_removed:
         model_path = (
             samp_args.model_path
             + f"/model-{samp_args.model_checkpoint}-transition-data-removed.pt"
         )
     else:
-        model_path = samp_args.model_path + f"/model-{samp_args.model_checkpoint}.pt"
+        if not samp_args.conservative:
+            model_path = (
+                samp_args.model_path + f"/model-{samp_args.model_checkpoint}-nonconservative.pt"
+            )
+        else:
+            model_path = samp_args.model_path + f"/model-{samp_args.model_checkpoint}.pt"
     if torch.cuda.is_available():
         data_dict = torch.load(model_path)
     else:
