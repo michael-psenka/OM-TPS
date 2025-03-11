@@ -427,7 +427,7 @@ def main(samp_args):
     # Init model from args
     # TODO: hardcoded for now, fix
     if samp_args.atom_selection == AtomSelection.PROTEIN:
-        trainset.num_beads = 166
+        trainset.num_beads = 504
         trainset.bead_onehot = torch.eye(trainset.num_beads)
     model_nn = get_model(args, trainset, device)
     # print(model_nn)
@@ -465,7 +465,7 @@ def main(samp_args):
             + f"/model-{samp_args.model_checkpoint}-transition-data-removed.pt"
         )
     else:
-        if not samp_args.conservative:
+        if samp_args.non_conservative:
             model_path = (
                 samp_args.model_path + f"/model-{samp_args.model_checkpoint}-nonconservative.pt"
             )
@@ -512,7 +512,11 @@ def generate_samples(
         iid_sample_path = Path(
             os.path.join(os.path.dirname(eval_folder), "main_eval_output_iid")
         )
-        protein_name = iid_sample_path.parts[-2].split("_")[0]
+        protein_name = iid_sample_path.parts[-2].split("_")
+        if len(protein_name) > 3:
+            protein_name = protein_name[0] + "_" + protein_name[1] # trp_cage
+        else:
+            protein_name = protein_name[0]
     else:
         protein_name = "tetrapeptide"
 
@@ -718,24 +722,24 @@ def generate_samples(
             )
 
             # TODO: This was code to figure out that there is some atom ordering discrepancy between the ground truth and the folded trajectory
-            # folded = tic_evaluator.folded.xyz * 10
-            # folded -= folded.mean(1, keepdims=True)
-            # from rmsd import kabsch_rotate
-            # from tqdm import tqdm
-            # gt_traj = gt_traj[::100]
-            # for i in tqdm(range(len(gt_traj))):
-            #     gt_traj[i] = torch.tensor(kabsch_rotate(gt_traj[i].cpu(), folded[0]))
-            # dists = np.linalg.norm(gt_traj - folded, axis=(-2, -1))
-            # closest = gt_traj[dists.argmin()]
+            folded = tic_evaluator.folded.xyz * 10
+            folded -= folded.mean(1, keepdims=True)
+            from rmsd import kabsch_rotate
+            from tqdm import tqdm
+            gt_traj = gt_traj[::100]
+            for i in tqdm(range(len(gt_traj))):
+                gt_traj[i] = torch.tensor(kabsch_rotate(gt_traj[i].cpu(), folded[0]))
+            dists = np.linalg.norm(gt_traj - folded, axis=(-2, -1))
+            closest = gt_traj[dists.argmin()]
 
-            # concat = np.concatenate([closest[None], folded], axis=0)
+            concat = np.concatenate([closest[None], folded], axis=0)
 
-            # all_mol_traj = md.Trajectory(concat / 10, topology=topology)
+            all_mol_traj = md.Trajectory(concat / 10, topology=topology)
 
-            # all_mol_traj.save_pdb("test.pdb")
+            all_mol_traj.save_pdb("test.pdb")
 
-            # save_ovito_traj(concat, "test.gsd", bonds=bonds)
-            # import pdb; pdb.set_trace()
+            save_ovito_traj(concat, "test.gsd", bonds=bonds)
+            import pdb; pdb.set_trace()
 
             # assign cluster centers to the ground truth samples (only look at every 100th frame to save time)
             cluster_assignments, _ = discretize_trajectory(
