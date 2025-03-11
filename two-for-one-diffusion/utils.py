@@ -1,6 +1,7 @@
 import math
 import scipy
 import torch
+import networkx as nx
 from inspect import isfunction
 import numpy as np
 import mdtraj as md

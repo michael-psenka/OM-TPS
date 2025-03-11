@@ -1,8 +1,10 @@
 import torch
+import re
 import numpy as np
 import os
 from pathlib import Path
 from itertools import chain
+import networkx as nx
 from tqdm import tqdm
 import math
 import os, tempfile
@@ -100,6 +102,99 @@ CLUSTER_ENDPOINTS = {
     "villin": [0, 17],
     "protein_g": [11, 14],
 }
+
+
+def mae_to_pdb_atom_mapping(protein_name, forward=True):
+    """
+    In the case of all-atom proteins, we need to correct for the fact that the pdb and mae/dcd files have different atom orderings.
+    """
+
+    pdb_topology = md.load_topology(
+        f"./datasets/folded_pdbs/{Molecules[protein_name.upper()].value}-0-protein.pdb"
+    )
+    pdb_bonds = torch.tensor(
+        [(bond[0].index, bond[1].index) for bond in pdb_topology.bonds]
+    )
+    mae_bonds = extract_bonds_from_mae(
+        f"/data/sanjeevr/Reference_MD_Sims/{Molecules[protein_name.upper()].value}/simulation_0/protein/{Molecules[protein_name.upper()].value}-0-protein/{Molecules[protein_name.upper()].value}-0-protein.mae"
+    )
+    if forward:
+        return recover_permutation(mae_bonds, pdb_bonds)
+    return recover_permutation(pdb_bonds, mae_bonds)
+
+
+def extract_bonds_from_mae(file_path):
+    """
+    Extract bond indices from a .mae file
+    """
+    with open(file_path, "r") as f:
+        lines = f.readlines()
+
+    bond_section = False
+    bonds = []
+
+    for line in lines:
+        line = line.strip()
+
+        # Detect the start of the m_bond block
+        if line.startswith("m_bond"):
+            bond_section = True
+            continue
+
+        # Detect the end of the block
+        if bond_section and line.startswith("}"):
+            break
+
+        # Skip the header inside the block (first few lines)
+        if bond_section and ":::" in line:
+            continue
+
+        # Extract bond data
+        if bond_section:
+            parts = re.split(r"\s+", line)  # Split by whitespace
+            if len(parts) >= 4:  # Ensure valid data row
+                i_m_from, i_m_to = int(parts[1]), int(parts[2])
+                bonds.append([i_m_from, i_m_to])
+
+    # Convert to torch.Tensor
+    bond_tensor = torch.tensor(bonds, dtype=torch.int64) - 1
+
+    return bond_tensor
+
+
+def recover_permutation(bonds1, bonds2):
+    """
+    Recovers the permutation mapping node indices in the permuted graph (bonds1)
+    to those in the original one (bonds2) using vf2pp_isomorphism from networkx.
+
+    Args:
+        bonds1 (torch.Tensor): Permuted graph edges of shape [N, 2]
+        bonds2 (torch.Tensor): Original graph edges of shape [N, 2]
+
+    Returns:
+        dict or None: A dictionary mapping original node indices to permuted ones if an isomorphism exists, None otherwise.
+    """
+    # Create NetworkX graphs
+    G1 = nx.Graph()
+    G2 = nx.Graph()
+
+    G1.add_edges_from(bonds1.tolist())
+    G2.add_edges_from(bonds2.tolist())
+
+    # Compute isomorphism
+    iso_mapping = nx.vf2pp_isomorphism(G1, G2)
+
+    if iso_mapping is None:
+        return None
+
+    # Convert mapping to tensor
+    max_node = max(max(G1.nodes), max(G2.nodes)) + 1
+    perm_tensor = torch.full((max_node,), -1, dtype=torch.long)
+
+    for perm, orig in iso_mapping.items():
+        perm_tensor[orig] = perm
+
+    return perm_tensor
 
 
 def get_dataset(
@@ -529,7 +624,7 @@ class DEShawDataset(MDTrajectory):
         local_pdb_file = os.path.join(self.data_root, pdb_file)
 
         # Load the trajectory using mdtraj
-        traj = md.load(local_trajectory_files[:2], top=local_pdb_file)
+        traj = md.load(local_trajectory_files, top=local_pdb_file)
 
         super(DEShawDataset, self).__init__(
             traj=traj,

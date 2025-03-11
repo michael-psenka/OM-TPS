@@ -20,6 +20,7 @@ from datasets.dataset_utils_empty import (
     AtomSelection,
     DEShawDataset,
     to_angstrom,
+    mae_to_pdb_atom_mapping,
 )
 from evaluate.evaluate_fastfolders import (
     evaluate_fastfolders,
@@ -329,7 +330,7 @@ def main(samp_args):
             arg_name = "args-flow-nonconservative.pickle"
     elif samp_args.transition_data_removed:
         arg_name = "args-transition-data-removed.pickle"
-    
+
     else:
         if samp_args.non_conservative:
             arg_name = "args-nonconservative.pickle"
@@ -361,9 +362,10 @@ def main(samp_args):
     flow_append = "_flowmatching" if samp_args.flow_matching else ""
     samp_args.append_exp_name += flow_append
 
-    nonconservative_append = "_nonconservative" if not samp_args.non_conservative else ""
+    nonconservative_append = (
+        "_nonconservative" if not samp_args.non_conservative else ""
+    )
     samp_args.append_exp_name += nonconservative_append
-
 
     samp_args.original_append_exp_name = samp_args.append_exp_name
 
@@ -453,7 +455,8 @@ def main(samp_args):
     if samp_args.flow_matching:
         if samp_args.non_conservative:
             model_path = (
-                samp_args.model_path + f"/model-{samp_args.model_checkpoint}-flow-nonconservative.pt"
+                samp_args.model_path
+                + f"/model-{samp_args.model_checkpoint}-flow-nonconservative.pt"
             )
         else:
             model_path = (
@@ -467,10 +470,13 @@ def main(samp_args):
     else:
         if samp_args.non_conservative:
             model_path = (
-                samp_args.model_path + f"/model-{samp_args.model_checkpoint}-nonconservative.pt"
+                samp_args.model_path
+                + f"/model-{samp_args.model_checkpoint}-nonconservative.pt"
             )
         else:
-            model_path = samp_args.model_path + f"/model-{samp_args.model_checkpoint}.pt"
+            model_path = (
+                samp_args.model_path + f"/model-{samp_args.model_checkpoint}.pt"
+            )
     if torch.cuda.is_available():
         data_dict = torch.load(model_path)
     else:
@@ -514,7 +520,7 @@ def generate_samples(
         )
         protein_name = iid_sample_path.parts[-2].split("_")
         if len(protein_name) > 3:
-            protein_name = protein_name[0] + "_" + protein_name[1] # trp_cage
+            protein_name = protein_name[0] + "_" + protein_name[1]  # trp_cage
         else:
             protein_name = protein_name[0]
     else:
@@ -726,6 +732,7 @@ def generate_samples(
             folded -= folded.mean(1, keepdims=True)
             from rmsd import kabsch_rotate
             from tqdm import tqdm
+
             gt_traj = gt_traj[::100]
             for i in tqdm(range(len(gt_traj))):
                 gt_traj[i] = torch.tensor(kabsch_rotate(gt_traj[i].cpu(), folded[0]))
@@ -739,7 +746,9 @@ def generate_samples(
             all_mol_traj.save_pdb("test.pdb")
 
             save_ovito_traj(concat, "test.gsd", bonds=bonds)
-            import pdb; pdb.set_trace()
+            import pdb
+
+            pdb.set_trace()
 
             # assign cluster centers to the ground truth samples (only look at every 100th frame to save time)
             cluster_assignments, _ = discretize_trajectory(
