@@ -16,6 +16,7 @@ cd /home/sanjeevr/om-diffusion/two-for-one-diffusion
 #     --flow_matching \
 #     --data_folder /data/sanjeevr/Reference_MD_Sims \
 #     --eval_interval 10000 \
+#     --train_iter 500000 \
 #     --experiment_name chignolin_all_atom_flowmatching_weightdecay=1e-4_sgd_correctscale_atomnumbers_permuted \
 #     --batch_size 48 \
 #     --atom_selection protein \
@@ -30,8 +31,9 @@ python main_train.py \
     --num_layers_gnn 6 \
     --hidden_features_gnn 256 \
     --eval_interval 10000 \
+    --train_iter 500000 \
     --experiment_name chignolin_all_atom_flowmatching_weightdecay=1e-4_sgd_correctscale_atomnumbers_permuted_LARGE \
-    --batch_size 32 \
+    --batch_size 24 \
     --atom_selection protein \
     --weight_decay 1e-4 \
     --num_samples 100 \
@@ -41,6 +43,7 @@ python main_train.py \
 #     --mol chignolin \
 #     --data_folder /data/sanjeevr/Reference_MD_Sims \
 #     --eval_interval 10000 \
+#     --train_iter 500000 \
 #     --experiment_name chignolin_all_atom_weightdecay=1e-4_sgd_correctscale_atomnumbers_permuted \
 #     --batch_size 48 \
 #     --atom_selection protein \
@@ -54,6 +57,7 @@ python main_train.py \
 #     --num_layers_gnn 6 \
 #     --hidden_features_gnn 256 \
 #     --eval_interval 10000 \
+#     --train_iter 500000 \
 #     --experiment_name chignolin_all_atom_weightdecay=1e-4_sgd_correctscale_atomnumbers_permuted_LARGE \
 #     --batch_size 28 \
 #     --atom_selection protein \

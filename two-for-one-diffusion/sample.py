@@ -277,6 +277,12 @@ parser.add_argument(
     default=0.01,
 )
 
+parser.add_argument(
+    "--force_batch_size",
+    type=int,
+    help="Batch size in which to compute forces during OM optimization, -1 for full batch",
+    default=-1,
+)
 
 parser.add_argument(
     "--interpolation_temp",
@@ -737,7 +743,7 @@ def generate_samples(
 
             # all_mol_traj = md.Trajectory(concat / 10, topology=topology)
 
-            all_mol_traj.save_pdb("test.pdb")
+            # all_mol_traj.save_pdb("test.pdb")
 
             # save_ovito_traj(torch.tensor(concat), "test.gsd", bonds=bonds, align = True)
 
@@ -803,6 +809,7 @@ def generate_samples(
                     dt=samp_args.om_dt,
                     gamma=samp_args.om_gamma * torch.tensor(masses).to(device),
                     D=samp_args.om_d / (trainset.std if args.scale_data else 1.0) ** 2,
+                    force_batch_size=samp_args.force_batch_size,
                     anneal=samp_args.anneal,
                     sample_latent_time=samp_args.sample_latent_time,
                     cosine_scheduler=samp_args.cosine_scheduler,

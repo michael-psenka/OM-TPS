@@ -25,6 +25,7 @@ from utils import (
     assert_center_zero,
     slerp,
     NUM_RESIDUES_TO_PROTEIN,
+    compute_batched_forces,
 )
 
 # from torchmdnet.models.model import load_model as load_mlff_model
@@ -459,6 +460,7 @@ class GaussianDiffusion(nn.Module):
         dt=0.1,
         gamma=10,
         D=0.01,
+        force_batch_size=-1,
         anneal=False,
         sample_latent_time=False,
         cosine_scheduler=False,
@@ -494,6 +496,8 @@ class GaussianDiffusion(nn.Module):
         )
 
         num_paths, n_atoms = x1.shape[0], x1.shape[1]
+        if force_batch_size == -1:
+            force_batch_size = num_paths * path_length
         latent_time = int(latent_time)
 
         for i in range(num_paths):
@@ -535,18 +539,31 @@ class GaussianDiffusion(nn.Module):
         ).to(self.device)
 
         if initial_guess_level != 0:
-            # denoise to data space before optimization
+            # denoise to data space before optimization (in batched fashion)
+            num_samples = path_length * num_paths
+            num_batches = (
+                num_samples + force_batch_size - 1
+            ) // force_batch_size  # Ceiling division
 
-            noised_xs = self.p_sample_loop(
-                noised_xs.reshape(-1, n_atoms, 3),
-                initial_guess_level,
-                z=(
-                    z.unsqueeze(0).repeat(path_length * num_paths, 1)
-                    if z is not None
-                    else None
-                ),
-                temperature=temperature,
-            )
+            noised_xs_list = []
+            for i in range(num_batches):
+                start_idx = i * force_batch_size
+                end_idx = min((i + 1) * force_batch_size, num_samples)
+                batch_size_actual = end_idx - start_idx
+
+                noised_xs_batch = self.p_sample_loop(
+                    noised_xs[start_idx:end_idx].reshape(-1, n_atoms, 3),
+                    initial_guess_level,
+                    z=(
+                        z.unsqueeze(0).repeat(batch_size_actual, 1)
+                        if z is not None
+                        else None
+                    ),
+                    temperature=temperature,
+                )
+                noised_xs_list.append(noised_xs_batch)
+            # Concatenate all batches to form the final tensor
+            noised_xs = torch.cat(noised_xs_list, dim=0)
             noised_xs = noised_xs.reshape(path_length, num_paths, n_atoms, 3)
             # reset the endpoints
             noised_xs[0], noised_xs[-1] = original_x1, original_x2
@@ -746,14 +763,15 @@ class GaussianDiffusion(nn.Module):
 
                     # compute the forces (fully vectorized for speed)
                     if action_cls == HutchinsonAction:
+                        # do it inside the function, if we don't then we run into gradient issues computing the Hessian
                         forces = [None] * len(noised_xs)
                     else:
-                        forces = force_func(
-                            noised_xs_input_unique.reshape(-1, self.num_atoms, 3)
-                        ).reshape(num_paths, num_points, self.num_atoms, 3)
-
-                    # TODO: gradients of forces w.r.t noised_xs_input are zero for some reason
-
+                        # batched force computation to save memory (useful for all atom)
+                        forces = compute_batched_forces(
+                            noised_xs_input_unique,
+                            force_func,
+                            force_batch_size,
+                        )
                     # Subsample dimensions
                     if (
                         subsample_dimensions_percent is not None
@@ -789,6 +807,7 @@ class GaussianDiffusion(nn.Module):
 
                 # TODO: vmap over batch dimension
                 # (currently not possible because of calling requires_grad on x in GraphTransformer)
+
                 terms = [
                     action_func(
                         x,
@@ -880,16 +899,31 @@ class GaussianDiffusion(nn.Module):
         # decode the optimized paths (keeping every 50 for future visualization)
         for path in all_noised_xs[::50]:
             if encode_and_decode:
-                denoised_path = self.p_sample_loop(
-                    path.reshape(-1, n_atoms, 3),
-                    latent_time,
-                    z=(
-                        z.unsqueeze(0).repeat(num_paths * path_length, 1)
-                        if z is not None
-                        else None
-                    ),
-                    temperature=temperature,
-                )
+                # decode in batches
+                num_samples = path_length * num_paths
+                num_batches = (
+                    num_samples + force_batch_size - 1
+                ) // force_batch_size  # Ceiling division
+
+                denoised_path_list = []
+                for i in range(num_batches):
+                    start_idx = i * force_batch_size
+                    end_idx = min((i + 1) * force_batch_size, num_samples)
+                    batch_size_actual = end_idx - start_idx
+
+                    denoised_path_batch = self.p_sample_loop(
+                        path[start_idx:end_idx].reshape(-1, n_atoms, 3),
+                        initial_guess_level,
+                        z=(
+                            z.unsqueeze(0).repeat(batch_size_actual, 1)
+                            if z is not None
+                            else None
+                        ),
+                        temperature=temperature,
+                    )
+                    denoised_path_list.append(denoised_path_batch)
+                # Concatenate all batches to form the final tensor
+                denoised_path = torch.cat(denoised_path_batch, dim=0)
             else:
                 denoised_path = path
 

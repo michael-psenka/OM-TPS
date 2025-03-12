@@ -98,6 +98,18 @@ def cosine_beta_schedule(timesteps, s=0.008):
     return torch.clip(betas, 0, 0.999)
 
 
+def compute_batched_forces(x, force_func, force_batch_size):
+    forces = []
+    original_shape = x.shape
+    n_atoms = x.shape[-2]
+    x = x.reshape(-1, n_atoms, 3)
+    for i in range(0, x.shape[0], force_batch_size):
+        forces.append(force_func(x[i : i + force_batch_size]))
+    forces = torch.cat(forces)
+
+    return forces.reshape(original_shape)
+
+
 def center_zero(x):
     """
     Move the molecule center to zero.
@@ -365,6 +377,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         dt=0.1,
         gamma=10,
         D=0.01,
+        force_batch_size=-1,
         anneal=False,
         sample_latent_time=False,
         cosine_scheduler=False,
@@ -391,6 +404,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         self.dt = dt
         self.gamma = gamma
         self.D = D
+        self.force_batch_size = force_batch_size
         self.anneal = anneal
         self.sample_latent_time = sample_latent_time
         self.cosine_scheduler = cosine_scheduler
@@ -418,6 +432,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
             dt=self.dt,
             gamma=self.gamma,
             D=self.D,
+            force_batch_size=self.force_batch_size,
             anneal=self.anneal,
             sample_latent_time=self.sample_latent_time,
             cosine_scheduler=self.cosine_scheduler,
