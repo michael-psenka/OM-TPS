@@ -15,11 +15,12 @@
 python sample.py \
     --model_path saved_models/chignolin_all_atom \
     --gen_mode om_interpolate \
+    --flow_matching \
     --atom_selection protein \
     --num_samples_eval 8 \
     --batch_size_gen 1 \
-    --latent_time 20 \
-    --initial_guess_level 10\
+    --latent_time 0.5 \
+    --initial_guess_level 7\
     --subsample_points_percent 1.0 \
     --subsample_dimensions_percent 1.0 \
     --no_encode_and_decode \
@@ -30,7 +31,7 @@ python sample.py \
     --om_dt 0.001 \
     --om_gamma 1 \
     --path_length 100 \
-    --force_batch_size 1 \
+    --force_batch_size 20 \
     --steps 10
 
 # python main_train.py \
