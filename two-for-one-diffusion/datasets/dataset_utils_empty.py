@@ -624,7 +624,7 @@ class DEShawDataset(MDTrajectory):
         local_pdb_file = os.path.join(self.data_root, pdb_file)
 
         # Load the trajectory using mdtraj
-        traj = md.load(local_trajectory_files[:2], top=local_pdb_file)
+        traj = md.load(local_trajectory_files, top=local_pdb_file)
 
         super(DEShawDataset, self).__init__(
             traj=traj,
