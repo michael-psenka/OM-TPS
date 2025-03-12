@@ -53,7 +53,6 @@ class GraphTransformer(nn.Module):
         self.use_distances = use_distances
         self.use_abs_coords = use_abs_coords
         self.conservative = conservative
-        use_bead_identities = False
         self.use_bead_identities = use_bead_identities
         self.heads = heads
 
