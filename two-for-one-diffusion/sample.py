@@ -20,6 +20,7 @@ from datasets.dataset_utils_empty import (
     AtomSelection,
     DEShawDataset,
     to_angstrom,
+    mae_to_pdb_atom_mapping,
 )
 from evaluate.evaluate_fastfolders import (
     evaluate_fastfolders,
@@ -107,6 +108,12 @@ parser.add_argument(
     type=str,
     default="c-alpha",
     help="coarse-graining method, either c-alpha or protein",
+)
+
+parser.add_argument(
+    "--non_conservative",
+    action="store_true",
+    help="don't use conservative generative model",
 )
 
 parser.add_argument(
@@ -319,10 +326,16 @@ def main(samp_args):
     # Load args from training
     if samp_args.flow_matching:
         arg_name = "args-flow.pickle"
+        if samp_args.non_conservative:
+            arg_name = "args-flow-nonconservative.pickle"
     elif samp_args.transition_data_removed:
         arg_name = "args-transition-data-removed.pickle"
+
     else:
-        arg_name = "args.pickle"
+        if samp_args.non_conservative:
+            arg_name = "args-nonconservative.pickle"
+        else:
+            arg_name = "args.pickle"
     with open(
         join(
             samp_args.model_path,
@@ -348,6 +361,11 @@ def main(samp_args):
     samp_args.append_exp_name += transition_removed_append
     flow_append = "_flowmatching" if samp_args.flow_matching else ""
     samp_args.append_exp_name += flow_append
+
+    nonconservative_append = (
+        "_nonconservative" if samp_args.non_conservative else ""
+    )
+    samp_args.append_exp_name += nonconservative_append
 
     samp_args.original_append_exp_name = samp_args.append_exp_name
 
@@ -435,16 +453,30 @@ def main(samp_args):
 
     # Load weights into model
     if samp_args.flow_matching:
-        model_path = (
-            samp_args.model_path + f"/model-{samp_args.model_checkpoint}-flow.pt"
-        )
+        if samp_args.non_conservative:
+            model_path = (
+                samp_args.model_path
+                + f"/model-{samp_args.model_checkpoint}-flow-nonconservative.pt"
+            )
+        else:
+            model_path = (
+                samp_args.model_path + f"/model-{samp_args.model_checkpoint}-flow.pt"
+            )
     elif samp_args.transition_data_removed:
         model_path = (
             samp_args.model_path
             + f"/model-{samp_args.model_checkpoint}-transition-data-removed.pt"
         )
     else:
-        model_path = samp_args.model_path + f"/model-{samp_args.model_checkpoint}.pt"
+        if samp_args.non_conservative:
+            model_path = (
+                samp_args.model_path
+                + f"/model-{samp_args.model_checkpoint}-nonconservative.pt"
+            )
+        else:
+            model_path = (
+                samp_args.model_path + f"/model-{samp_args.model_checkpoint}.pt"
+            )
     if torch.cuda.is_available():
         data_dict = torch.load(model_path)
     else:
@@ -486,7 +518,11 @@ def generate_samples(
         iid_sample_path = Path(
             os.path.join(os.path.dirname(eval_folder), "main_eval_output_iid")
         )
-        protein_name = iid_sample_path.parts[-2].split("_")[0]
+        protein_name = iid_sample_path.parts[-2].split("_")
+        if len(protein_name) > 3:
+            protein_name = protein_name[0] + "_" + protein_name[1]  # trp_cage
+        else:
+            protein_name = protein_name[0]
     else:
         protein_name = "tetrapeptide"
 
@@ -498,12 +534,8 @@ def generate_samples(
         f"./datasets/folded_pdbs/{Molecules[protein_name.upper()].value}-0-{samp_args.atom_selection.value}.pdb"
     )
     bonds = None
-    # Extract bonds as a list of tuples (atom1_index, atom2_index)
     if samp_args.atom_selection == AtomSelection.PROTEIN:
         bonds = [(bond[0].index, bond[1].index) for bond in topology.bonds]
-
-        # Convert to a PyTorch tensor
-        # TODO: these bonds seem to be wrong, fix
         bonds = torch.tensor(bonds, dtype=torch.long)
 
     # adjust masses
@@ -691,32 +723,25 @@ def generate_samples(
                 gt_traj=gt_traj / 10,
             )
 
-            # TODO: This was code to figure out that there is some atom ordering discrepancy between the ground truth and the folded trajectory
-            folded = tic_evaluator.folded.xyz * 10
-            folded -= folded.mean(1, keepdims=True)
-            from rmsd import kabsch_rotate
-            from tqdm import tqdm
-            folded_pd = np.linalg.norm(folded[0][None] - folded[0][:, None], axis = -1)
-            closest_pd = np.linalg.norm(gt_traj[0][None] - gt_traj[0][:, None], axis = -1)
-            from scipy.optimize import linear_sum_assignment
-            # Find optimal permutation using Hungarian algorithm
-            row_ind, col_ind = linear_sum_assignment(np.abs(folded_pd - closest_pd))
-            import pdb; pdb.set_trace()
+            # This was code to figure out that there is some atom ordering discrepancy between the ground truth and the folded trajectory
+            # folded = tic_evaluator.folded.xyz * 10
+            # folded -= folded.mean(1, keepdims=True)
+            # from rmsd import kabsch_rotate
+            # from tqdm import tqdm
 
-            gt_traj = gt_traj[::100]
-            for i in tqdm(range(len(gt_traj))):
-                gt_traj[i] = torch.tensor(kabsch_rotate(gt_traj[i].cpu(), folded[0]))
-            dists = np.linalg.norm(gt_traj - folded, axis=(-2, -1))
-            closest = gt_traj[dists.argmin()]
-            import pdb; pdb.set_trace()
+            # gt_traj = gt_traj[::100, mae_to_pdb_atom_mapping(protein_name)]
+            # for i in tqdm(range(len(gt_traj))):
+            #     gt_traj[i] = torch.tensor(kabsch_rotate(gt_traj[i].cpu(), folded[0]))
+            # dists = np.linalg.norm(gt_traj - folded, axis=(-2, -1))
+            # closest = gt_traj[dists.argmin()]
 
-            concat = np.concatenate([closest[None], folded], axis=0)
-            
-            all_mol_traj = md.Trajectory(closest[None] / 10, topology=topology)
+            # concat = np.concatenate([closest[None], folded], axis=0)
+
+            # all_mol_traj = md.Trajectory(concat / 10, topology=topology)
 
             all_mol_traj.save_pdb("test.pdb")
 
-            save_ovito_traj(concat, "test.gsd", bonds=bonds)
+            # save_ovito_traj(torch.tensor(concat), "test.gsd", bonds=bonds, align = True)
             
 
             # assign cluster centers to the ground truth samples (only look at every 100th frame to save time)
@@ -970,7 +995,7 @@ def generate_samples(
 
     else:
         all_mol_traj = md.Trajectory(
-            torch.clamp(sampled_mol[0:1000], -1000, 1000).numpy() / 10,
+            torch.clamp(sampled_mol[0:1000], -1000, 1000)[:, mae_to_pdb_atom_mapping(protein_name)].numpy() / 10,
             topology=topology,
         )
 
@@ -983,7 +1008,7 @@ def generate_samples(
 
     # Also save as gsd
     save_ovito_traj(
-        sampled_mol,
+        sampled_mol[:, mae_to_pdb_atom_mapping(protein_name)],
         str(eval_folder) + f"/sample-{samp_args.gen_mode}.gsd",
         align=samp_args.gen_mode == "iid",
         all_backbone="tetrapeptide" in protein_name

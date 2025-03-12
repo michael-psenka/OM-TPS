@@ -26,7 +26,12 @@ from matplotlib.backend_bases import GraphicsContextBase, RendererBase
 import types
 import json
 import math
-from datasets.dataset_utils_empty import get_dataset, Molecules, AtlasProteins
+from datasets.dataset_utils_empty import (
+    get_dataset,
+    Molecules,
+    AtlasProteins,
+    mae_to_pdb_atom_mapping,
+)
 import pickle
 
 # OM Paper plotting stuff
@@ -434,6 +439,7 @@ class TicEvaluator:
             self.feat = coor.featurizer(folded_pdb)
             self.feat.add_backbone_torsions(cossin=True)
             self.feat.add_sidechain_torsions(cossin=True)
+            self.mae_to_pdb_mapping = mae_to_pdb_atom_mapping(mol_name)
 
         # Check if the computed objects are already saved
         if saved_ref == "none":
@@ -460,7 +466,7 @@ class TicEvaluator:
                     (
                         "gt_traj.pt"
                         if self.atom_selection == AtomSelection.A_CARBON
-                        else "gt_traj_all-atom.pt"
+                        else "gt_traj_all_atom.pt"
                     ),
                 )
                 if os.path.exists(gt_traj_path):
@@ -520,20 +526,23 @@ class TicEvaluator:
             self.bin_mids_x = (self.bin_edges_x[1:] + self.bin_edges_x[:-1]) / 2
             self.bin_mids_y = (self.bin_edges_y[1:] + self.bin_edges_y[:-1]) / 2
 
-            # Make a plot of the TIC samples
-            self.eval(sorted_data_xyz, "GT", plot_tic=True)
-
         self.bin_mids_x = (self.bin_edges_x[1:] + self.bin_edges_x[:-1]) / 2
         self.bin_mids_y = (self.bin_edges_y[1:] + self.bin_edges_y[:-1]) / 2
 
         self.folded_transform = self.tica.transform(
-            self.get_tic_features(torch.from_numpy(self.folded.xyz) * 10, self.folded)
+            self.get_tic_features(
+                torch.from_numpy(self.folded.xyz) * 10,
+                self.folded,
+                convert_to_pdb_ordering=False,
+            )
         )[0]
 
         self.bin_x_folded = np.argmin(abs(self.bin_mids_x - self.folded_transform[0]))
         self.bin_y_folded = np.argmin(abs(self.bin_mids_y - self.folded_transform[1]))
 
-    def get_tic_features(self, xyz, folded, separate=False):
+    def get_tic_features(
+        self, xyz, folded, separate=False, convert_to_pdb_ordering=True
+    ):
         """
         Calculate features for TIC analysis.
         For A_CARBON, we calculate dihedrals and pairwise distances.
@@ -555,6 +564,8 @@ class TicEvaluator:
                 return dihedrals, pwds
             return np.hstack((dihedrals, pwds))
         elif self.atom_selection == AtomSelection.PROTEIN:
+            if convert_to_pdb_ordering:
+                traj.xyz = traj.xyz[:, self.mae_to_pdb_mapping]
             # backbone and sidechain torsions
             feat = self.feat.transform(traj)
             return feat

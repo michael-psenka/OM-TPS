@@ -1,63 +1,61 @@
 #!/bin/bash
 #SBATCH --mail-type=BEGIN,END,FAIL  # Send email when job begins, ends, or fails
 #SBATCH --mail-user=sanjeevr@umich.edu  # Replace with your email
-#SBATCH --partition=long
-#SBATCH --qos=long
+#SBATCH --partition=scavenger
+#SBATCH --qos=scavenger
+#SBATCH --nodelist=germain
 #SBATCH --gpus=1
-#SBATCH --time=12:00:00
+#SBATCH --time=24:00:00
 
 source /home/sanjeevr/mambaforge/etc/profile.d/conda.sh
 conda activate alphaflow
-# python main_train.py \
-#     --mol chignolin \
-#     --conservative False \
-#     --data_folder /data/sanjeevr/Reference_MD_Sims \
-#     --eval_interval 10000 \
-#     --experiment_name chignolin_all_atom_weightdecay=1e-4_sgd_correctscale_nonconservative \
-#     --batch_size 48 \
-#     --atom_selection protein \
-#     --weight_decay 1e-4 \
-#     --num_samples 100 \
-#     --iterations_on_val 1
+cd /home/sanjeevr/om-diffusion/two-for-one-diffusion
 
-# conda activate om-diffusion
-# python main_train.py \
-#     --mol chignolin \
-#     --start_from_last_saved True \
-#     --data_folder /data/sanjeevr/Reference_MD_Sims \
-#     --eval_interval 10000 \
-#     --experiment_name chignolin_all_atom_weightdecay=1e-4_sgd_correctscale \
-#     --batch_size 48 \
-#     --atom_selection protein \
-#     --weight_decay 1e-4 \
-#     --num_samples 100 \
-#     --iterations_on_val 1 \
-#     --learning_rate 1e-5
-
-# python main_train.py \
-#     --mol chignolin \
-#     --flow_matching \
-#     --start_from_last_saved True \
-#     --data_folder /data/sanjeevr/Reference_MD_Sims \
-#     --eval_interval 10000 \
-#     --experiment_name chignolin_all_atom_flowmatching_weightdecay=1e-4_sgd_correctscale \
-#     --batch_size 48 \
-#     --learning_rate 1e-5 \
-#     --atom_selection protein \
-#     --weight_decay 1e-4 \
-#     --num_samples 100 \
-#     --iterations_on_val 1
-
-# conda init
-# conda activate alphaflow
 python main_train.py \
     --mol chignolin \
-    --conservative False \
     --flow_matching \
     --data_folder /data/sanjeevr/Reference_MD_Sims \
     --eval_interval 10000 \
-    --experiment_name chignolin_all_atom_flowmatching_weightdecay=1e-4_sgd_correctscale_nonconservative_atomnumbers \
+    --experiment_name chignolin_all_atom_flowmatching_weightdecay=1e-4_sgd_correctscale_atomnumbers_permuted \
     --batch_size 48 \
+    --atom_selection protein \
+    --weight_decay 1e-4 \
+    --num_samples 100 \
+    --iterations_on_val 1
+
+python main_train.py \
+    --mol chignolin \
+    --flow_matching \
+    --data_folder /data/sanjeevr/Reference_MD_Sims \
+    --num_layers_gnn 6 \
+    --hidden_features_gnn 256 \
+    --eval_interval 10000 \
+    --experiment_name chignolin_all_atom_flowmatching_weightdecay=1e-4_sgd_correctscale_atomnumbers_permuted_LARGE \
+    --batch_size 32 \
+    --atom_selection protein \
+    --weight_decay 1e-4 \
+    --num_samples 100 \
+    --iterations_on_val 1
+
+python main_train.py \
+    --mol chignolin \
+    --data_folder /data/sanjeevr/Reference_MD_Sims \
+    --eval_interval 10000 \
+    --experiment_name chignolin_all_atom_weightdecay=1e-4_sgd_correctscale_atomnumbers_permuted \
+    --batch_size 48 \
+    --atom_selection protein \
+    --weight_decay 1e-4 \
+    --num_samples 100 \
+    --iterations_on_val 1
+
+python main_train.py \
+    --mol chignolin \
+    --data_folder /data/sanjeevr/Reference_MD_Sims \
+    --num_layers_gnn 6 \
+    --hidden_features_gnn 256 \
+    --eval_interval 10000 \
+    --experiment_name chignolin_all_atom_weightdecay=1e-4_sgd_correctscale_atomnumbers_permuted_LARGE \
+    --batch_size 32 \
     --atom_selection protein \
     --weight_decay 1e-4 \
     --num_samples 100 \
