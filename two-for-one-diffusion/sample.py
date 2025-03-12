@@ -692,11 +692,11 @@ def generate_samples(
                 (
                     "gt_traj.pt"
                     if samp_args.atom_selection == AtomSelection.A_CARBON
-                    else "gt_traj_all_atom.pt"
+                    else "gt_traj_all_atom_temp.pt"
                 ),
             )
             if os.path.exists(gt_traj_path):
-                gt_traj = torch.load(gt_traj_path)
+                gt_traj = torch.tensor(torch.load(gt_traj_path)).to(device)
             else:
                 print("Loading ground truth trajectory")
                 dataset = DEShawDataset(
@@ -724,7 +724,7 @@ def generate_samples(
                 folded_pdb_folder="datasets/folded_pdbs",
                 bins=101,
                 evalset="testset",
-                gt_traj=gt_traj / 10,
+                gt_traj=gt_traj.cpu() / 10,
             )
 
             # This was code to figure out that there is some atom ordering discrepancy between the ground truth and the folded trajectory
@@ -749,7 +749,7 @@ def generate_samples(
 
             # assign cluster centers to the ground truth samples (only look at every 100th frame to save time)
             cluster_assignments, _ = discretize_trajectory(
-                gt_traj[::100], tic_evaluator, cluster_coords
+                gt_traj.cpu()[::100], tic_evaluator, cluster_coords
             )
 
             start_points = cluster_assignments == clusters[0]

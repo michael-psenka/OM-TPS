@@ -30,7 +30,7 @@ python sample.py \
     --om_dt 0.001 \
     --om_gamma 1 \
     --path_length 100 \
-    --force_batch_size 25 \
+    --force_batch_size 1 \
     --steps 10
 
 # python main_train.py \
