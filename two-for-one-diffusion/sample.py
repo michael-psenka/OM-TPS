@@ -362,9 +362,7 @@ def main(samp_args):
     flow_append = "_flowmatching" if samp_args.flow_matching else ""
     samp_args.append_exp_name += flow_append
 
-    nonconservative_append = (
-        "_nonconservative" if samp_args.non_conservative else ""
-    )
+    nonconservative_append = "_nonconservative" if samp_args.non_conservative else ""
     samp_args.append_exp_name += nonconservative_append
 
     samp_args.original_append_exp_name = samp_args.append_exp_name
@@ -742,7 +740,6 @@ def generate_samples(
             all_mol_traj.save_pdb("test.pdb")
 
             # save_ovito_traj(torch.tensor(concat), "test.gsd", bonds=bonds, align = True)
-            
 
             # assign cluster centers to the ground truth samples (only look at every 100th frame to save time)
             cluster_assignments, _ = discretize_trajectory(
@@ -995,7 +992,10 @@ def generate_samples(
 
     else:
         all_mol_traj = md.Trajectory(
-            torch.clamp(sampled_mol[0:1000], -1000, 1000)[:, mae_to_pdb_atom_mapping(protein_name)].numpy() / 10,
+            torch.clamp(sampled_mol[0:1000], -1000, 1000)[
+                :, mae_to_pdb_atom_mapping(protein_name)
+            ].numpy()
+            / 10,
             topology=topology,
         )
 

@@ -157,7 +157,9 @@ class Trainer(object):
             else None
         )
         # permute to match mae atom order
-        self.all_atom_protein_z = torch.tensor(self.all_atom_protein_z)[mae_to_pdb_atom_mapping(mol_name, forward = False)]
+        self.all_atom_protein_z = torch.tensor(self.all_atom_protein_z)[
+            mae_to_pdb_atom_mapping(mol_name, forward=False)
+        ]
         # Tensorboard writer
         tzinfo = dt.timezone(dt.timedelta(hours=2))  # timezone UTC+2
         now = dt.datetime.now(tzinfo)
