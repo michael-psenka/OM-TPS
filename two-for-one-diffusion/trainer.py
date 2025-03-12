@@ -21,7 +21,7 @@ from utils import (
     random_rotation,
 )
 
-from datasets.dataset_utils_empty import AtomSelection
+from datasets.dataset_utils_empty import AtomSelection, mae_to_pdb_atom_mapping
 
 from logging_utils import save_ovito_traj
 
@@ -156,7 +156,8 @@ class Trainer(object):
             if args.atom_selection == AtomSelection.PROTEIN
             else None
         )
-        self.all_atom_protein_z = torch.tensor(self.all_atom_protein_z)
+        # permute to match mae atom order
+        self.all_atom_protein_z = torch.tensor(self.all_atom_protein_z)[mae_to_pdb_atom_mapping(mol_name, forward = False)]
         # Tensorboard writer
         tzinfo = dt.timezone(dt.timedelta(hours=2))  # timezone UTC+2
         now = dt.datetime.now(tzinfo)

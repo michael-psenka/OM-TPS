@@ -363,7 +363,7 @@ def main(samp_args):
     samp_args.append_exp_name += flow_append
 
     nonconservative_append = (
-        "_nonconservative" if not samp_args.non_conservative else ""
+        "_nonconservative" if samp_args.non_conservative else ""
     )
     samp_args.append_exp_name += nonconservative_append
 
@@ -429,7 +429,7 @@ def main(samp_args):
     # Init model from args
     # TODO: hardcoded for now, fix
     if samp_args.atom_selection == AtomSelection.PROTEIN:
-        trainset.num_beads = 504
+        trainset.num_beads = 166
         trainset.bead_onehot = torch.eye(trainset.num_beads)
     model_nn = get_model(args, trainset, device)
     # print(model_nn)
@@ -534,12 +534,8 @@ def generate_samples(
         f"./datasets/folded_pdbs/{Molecules[protein_name.upper()].value}-0-{samp_args.atom_selection.value}.pdb"
     )
     bonds = None
-    # Extract bonds as a list of tuples (atom1_index, atom2_index)
     if samp_args.atom_selection == AtomSelection.PROTEIN:
         bonds = [(bond[0].index, bond[1].index) for bond in topology.bonds]
-
-        # Convert to a PyTorch tensor
-        # TODO: these bonds seem to be wrong, fix
         bonds = torch.tensor(bonds, dtype=torch.long)
 
     # adjust masses
@@ -727,28 +723,26 @@ def generate_samples(
                 gt_traj=gt_traj / 10,
             )
 
-            # TODO: This was code to figure out that there is some atom ordering discrepancy between the ground truth and the folded trajectory
-            folded = tic_evaluator.folded.xyz * 10
-            folded -= folded.mean(1, keepdims=True)
-            from rmsd import kabsch_rotate
-            from tqdm import tqdm
+            # This was code to figure out that there is some atom ordering discrepancy between the ground truth and the folded trajectory
+            # folded = tic_evaluator.folded.xyz * 10
+            # folded -= folded.mean(1, keepdims=True)
+            # from rmsd import kabsch_rotate
+            # from tqdm import tqdm
 
-            gt_traj = gt_traj[::100]
-            for i in tqdm(range(len(gt_traj))):
-                gt_traj[i] = torch.tensor(kabsch_rotate(gt_traj[i].cpu(), folded[0]))
-            dists = np.linalg.norm(gt_traj - folded, axis=(-2, -1))
-            closest = gt_traj[dists.argmin()]
+            # gt_traj = gt_traj[::100, mae_to_pdb_atom_mapping(protein_name)]
+            # for i in tqdm(range(len(gt_traj))):
+            #     gt_traj[i] = torch.tensor(kabsch_rotate(gt_traj[i].cpu(), folded[0]))
+            # dists = np.linalg.norm(gt_traj - folded, axis=(-2, -1))
+            # closest = gt_traj[dists.argmin()]
 
-            concat = np.concatenate([closest[None], folded], axis=0)
+            # concat = np.concatenate([closest[None], folded], axis=0)
 
-            all_mol_traj = md.Trajectory(concat / 10, topology=topology)
+            # all_mol_traj = md.Trajectory(concat / 10, topology=topology)
 
-            all_mol_traj.save_pdb("test.pdb")
+            # all_mol_traj.save_pdb("test.pdb")
 
-            save_ovito_traj(concat, "test.gsd", bonds=bonds)
-            import pdb
-
-            pdb.set_trace()
+            # save_ovito_traj(torch.tensor(concat), "test.gsd", bonds=bonds, align = True)
+            
 
             # assign cluster centers to the ground truth samples (only look at every 100th frame to save time)
             cluster_assignments, _ = discretize_trajectory(
@@ -1001,7 +995,7 @@ def generate_samples(
 
     else:
         all_mol_traj = md.Trajectory(
-            torch.clamp(sampled_mol[0:1000], -1000, 1000).numpy() / 10,
+            torch.clamp(sampled_mol[0:1000], -1000, 1000)[:, mae_to_pdb_atom_mapping(protein_name)].numpy() / 10,
             topology=topology,
         )
 
@@ -1014,7 +1008,7 @@ def generate_samples(
 
     # Also save as gsd
     save_ovito_traj(
-        sampled_mol,
+        sampled_mol[:, mae_to_pdb_atom_mapping(protein_name)],
         str(eval_folder) + f"/sample-{samp_args.gen_mode}.gsd",
         align=samp_args.gen_mode == "iid",
         all_backbone="tetrapeptide" in protein_name
