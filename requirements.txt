@@ -1,6 +1,6 @@
 torch
 torchvision
-pytorch - ignite
+pytorch-ignite
 tqdm
 argparse
 diffusers
