@@ -179,6 +179,9 @@ class GaussianDiffusion(nn.Module):
             t = torch.tensor([t], dtype=torch.long).repeat(x.shape[0]).to(self.device)
         if z is not None and len(z.shape) == 1:
             z = z.unsqueeze(0).repeat(x.shape[0], 1)
+        import pdb
+
+        pdb.set_trace()
         noise_pred = self.model(
             x,
             self.h,
