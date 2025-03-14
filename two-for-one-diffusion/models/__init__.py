@@ -16,6 +16,8 @@ def get_model(args, trainset, device):
             conservative=args.conservative,
             use_bead_identities=args.mol == "tetrapeptides"
             or args.atom_selection == AtomSelection.PROTEIN,
+            heads=args.heads,
+            dim_head=args.dim_head,
         )
     else:
         raise Exception(f"Network { args.backbone_network} not implemented")

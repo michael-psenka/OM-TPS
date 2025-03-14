@@ -385,7 +385,8 @@ class CGDataset(torch.utils.data.TensorDataset):
         shuffle=False,
     ):
         if dataset is not None:
-            dataset = torch.tensor(dataset)
+            if not isinstance(dataset, torch.Tensor):
+                dataset = torch.tensor(dataset)
         self.dataset = dataset
         self.mean0 = mean0
         self.atom_selection = atom_selection
@@ -624,7 +625,7 @@ class DEShawDataset(MDTrajectory):
         local_pdb_file = os.path.join(self.data_root, pdb_file)
 
         # Load the trajectory using mdtraj
-        traj = md.load(local_trajectory_files, top=local_pdb_file)
+        traj = md.load(local_trajectory_files[:2], top=local_pdb_file)
 
         super(DEShawDataset, self).__init__(
             traj=traj,

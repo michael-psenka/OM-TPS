@@ -106,11 +106,18 @@ parser.add_argument(
     "--hidden_features_gnn",
     type=int,
     default=64,
-    help="number of hidden features used in gnn",
+    help="number of hidden features used in graph transformer",
 )
 parser.add_argument(
-    "--num_layers_gnn", type=int, default=3, help="number of layers used in gnn"
+    "--num_layers_gnn", type=int, default=3, help="number of layers used in graph transformer"
 )
+parser.add_argument(
+    "--heads", type=int, default=8, help="number of heads used in graph transformer"
+)
+parser.add_argument(
+    "--dim_head", type=int, default=64, help="dimension of each head used in graph transformer"
+)
+
 parser.add_argument(
     "--use_layernorm",
     type=eval,
@@ -330,7 +337,6 @@ if "alanine_dipeptide" in args.mol.lower():
 else:
     args.shuffle_data_before_splitting = True
 
-print(args)
 
 if __name__ == "__main__":
 
@@ -379,7 +385,8 @@ if __name__ == "__main__":
     # GNN model
     # For in_node_nf, the features are:
     model = get_model(args, trainset, device)
-    print(model)
+    print(f"Initialized {type(model)} with {sum(p.numel() for p in model.parameters() if p.requires_grad)} trainable parameters")
+
 
     # Diffusion model
     if args.flow_matching:
