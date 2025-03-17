@@ -1,39 +1,39 @@
-python main_train.py \
-    --mol chignolin \
-    --conservative True \
-    --num_layers_gnn 4 \
-    --hidden_features_gnn 512 \
-    --heads 8 \
-    --dim_head 64 \
-    --data_folder /data/sanjeevr/Reference_MD_Sims \
-    --eval_interval 10000 \
-    --experiment_name test \
-    --batch_size 48 \
-    --atom_selection protein \
-    --weight_decay 1e-4 \
-    --num_samples 100 \
-    --iterations_on_val 1
-
-# python sample.py \
-#     --model_path saved_models/chignolin_all_atom \
-#     --gen_mode om_interpolate \
+# python main_train.py \
+#     --mol chignolin \
+#     --conservative True \
+#     --num_layers_gnn 4 \
+#     --hidden_features_gnn 512 \
+#     --heads 8 \
+#     --dim_head 64 \
+#     --data_folder /data/sanjeevr/Reference_MD_Sims \
+#     --eval_interval 10000 \
+#     --experiment_name test \
+#     --batch_size 48 \
 #     --atom_selection protein \
-#     --num_samples_eval 8 \
-#     --batch_size_gen 1 \
-#     --latent_time 20 \
-#     --initial_guess_level 10\
-#     --subsample_points_percent 1.0 \
-#     --subsample_dimensions_percent 1.0 \
-#     --no_encode_and_decode \
-#     --action truncated \
-#     --optimizer adam \
-#     --lr 2e-1 \
-#     --append_exp_name test \
-#     --om_dt 0.001 \
-#     --om_gamma 1 \
-#     --path_length 500 \
-#     --force_batch_size 20 \
-#     --steps 10
+#     --weight_decay 1e-4 \
+#     --num_samples 100 \
+#     --iterations_on_val 1
+
+python sample.py \
+    --model_path saved_models/chignolin_all_atom \
+    --gen_mode om_interpolate \
+    --atom_selection protein \
+    --num_samples_eval 8 \
+    --batch_size_gen 1 \
+    --latent_time 20 \
+    --initial_guess_level 250\
+    --subsample_points_percent 1.0 \
+    --subsample_dimensions_percent 1.0 \
+    --no_encode_and_decode \
+    --action truncated \
+    --optimizer adam \
+    --lr 2e-1 \
+    --append_exp_name test \
+    --om_dt 0.001 \
+    --om_gamma 1 \
+    --path_length 100 \
+    --force_batch_size 20 \
+    --steps 2000
 
 # python main_train.py \
 #     --mol chignolin \
