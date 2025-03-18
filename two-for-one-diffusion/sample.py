@@ -278,9 +278,9 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--force_batch_size",
+    "--path_batch_size",
     type=int,
-    help="Batch size in which to compute forces during OM optimization, -1 for full batch",
+    help="Batch size for path during OM optimization (number of points to process at once, also controls force computation batching), -1 for full path",
     default=-1,
 )
 
@@ -327,6 +327,9 @@ samp_args = parser.parse_args()
 
 
 def main(samp_args):
+    seed = 42  # or any number you want
+    np.random.seed(seed)
+    torch.manual_seed(seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Load args from training
@@ -523,10 +526,13 @@ def generate_samples(
             os.path.join(os.path.dirname(eval_folder), "main_eval_output_iid")
         )
         protein_name = iid_sample_path.parts[-2].split("_")
+        # protein_name = "test"
         if len(protein_name) > 3:
             protein_name = protein_name[0] + "_" + protein_name[1]  # trp_cage
         else:
             protein_name = protein_name[0]
+
+        # protein_name = "chignolin"
     else:
         protein_name = "tetrapeptide"
 
@@ -680,7 +686,7 @@ def generate_samples(
                 os.path.join(
                     "evaluate",
                     "saved_references",
-                    f"saved_cluster_centers_{protein_name.upper()}{all_atom_append}.npy",
+                    f"saved_cluster_centers_{protein_name.upper()}.npy",
                 )
             )
             cluster_coords = np.load(cluster_centers_path)
@@ -809,7 +815,7 @@ def generate_samples(
                     dt=samp_args.om_dt,
                     gamma=samp_args.om_gamma * torch.tensor(masses).to(device),
                     D=samp_args.om_d / (trainset.std if args.scale_data else 1.0) ** 2,
-                    force_batch_size=samp_args.force_batch_size,
+                    path_batch_size=samp_args.path_batch_size,
                     anneal=samp_args.anneal,
                     sample_latent_time=samp_args.sample_latent_time,
                     cosine_scheduler=samp_args.cosine_scheduler,
@@ -845,14 +851,16 @@ def generate_samples(
             parallel_batches = torch.cuda.device_count()
         else:
             parallel_batches = 1
+
         output = sample_interpolations_from_model(
             interpolator,
             endpoint_1_samples.to(device),
             endpoint_2_samples.to(device),
-            batch_size=samp_args.batch_size_gen // parallel_batches,
+            batch_size=max(samp_args.batch_size_gen // parallel_batches, 1),
             verbose=True,
             z=torch.tensor(z).to(device) if z is not None else None,
         )
+        print('done!')
         sampled_mol = output["sampled_mol"]
 
         if (
