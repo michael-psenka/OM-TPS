@@ -1,18 +1,42 @@
-python main_train.py \
-    --mol chignolin \
-    --conservative True \
-    --num_layers_gnn 4 \
-    --hidden_features_gnn 512 \
-    --heads 8 \
-    --dim_head 64 \
-    --data_folder /data/sanjeevr/Reference_MD_Sims \
-    --eval_interval 10000 \
-    --experiment_name test \
-    --batch_size 48 \
+#!/bin/bash
+#SBATCH --output=slurm/outputs/output_%j.log  # Standard output log
+#SBATCH --error=slurm/errors/error_%j.log    # Standard error log
+######SBATCH --mail-type=BEGIN,END,FAIL  # Send email when job begins, ends, or fails
+######SBATCH --mail-user=psenka@eecs.berkeley.edu  # Replace with your email
+#SBATCH --partition=scavenger
+#SBATCH --qos=scavenger
+#SBATCH --nodelist=escher
+#SBATCH --gpus=1
+#SBATCH --time=10:00:00
+#SBATCH --mem=50G
+
+
+source /home/mpsenka/miniconda3/etc/profile.d/conda.sh
+conda activate moldyn
+cd /home/mpsenka/repos/OMBasics/two-for-one-diffusion
+
+python sample.py \
+    --model_path /home/mpsenka/models \
+    --gen_mode om_interpolate \
+    --num_samples_eval 1 \
     --atom_selection protein \
-    --weight_decay 1e-4 \
-    --num_samples 100 \
-    --iterations_on_val 1
+    --num_samples_eval 4 \
+    --batch_size_gen 1 \
+    --latent_time 10 \
+    --initial_guess_level 250 \
+    --subsample_points_percent 1.0 \
+    --subsample_dimensions_percent 1.0 \
+    --no_encode_and_decode \
+    --action truncated \
+    --optimizer sgd \
+    --lr 1e-5 \
+    --append_exp_name chignolin_om_interpolate_test \
+    --om_dt 0.001 \
+    --om_gamma 1 \
+    --path_length 10 \
+    --path_batch_size 5 \
+    --om_d 1.0 \
+    --steps 1000
 
 # python sample.py \
 #     --model_path saved_models/chignolin_all_atom \
