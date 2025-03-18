@@ -866,7 +866,6 @@ class GaussianDiffusion(nn.Module):
                     optimizer.step()
                     if cosine_scheduler:
                         scheduler.step()
-                print(total_first_term, total_second_term, total_third_term)
 
                 all_noised_xs.append(noised_xs.clone().detach())
                 path_contribution = total_first_term / total_action if total_action != 0 else 0
