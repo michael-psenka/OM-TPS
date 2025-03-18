@@ -20,28 +20,13 @@ class TruncatedAction(torch.nn.Module):
     def forward(
         self,
         path: torch.Tensor,
-        forces: torch.Tensor = None,
-        chunks_of_two=False,
-        subsample_dimensions_percent=None,
+        forces: torch.Tensor,
     ):
         """
         Args: path of shape [P, *], forces of shape [P, *]
         """
-        if chunks_of_two:
-            # this is necessary if we subsampled points in the path
-            # need to make sure that path terms are computed only on adjacent points
-            if len(path.shape) == 2:
-                path = path.reshape(-1, 2, path.shape[-1])
-            else:
-                path = path.reshape(-1, 2, path.shape[-2], path.shape[-1])
-            path_term = torch.square((path[:, 1] - path[:, 0])) / (2 * self.dt)
-        else:
-            path_term = torch.square((path[1:] - path[:-1])) / (2 * self.dt)
-        if forces is not None:
-            f_n = forces[:-1]
-        else:
-            f_n = self.force_func(path[:-1])
-        force_term = torch.square(f_n) * (self.dt / (2 * self.gamma**2))
+        path_term = torch.square((path[:,1:] - path[:,:-1])) / (2 * self.dt)
+        force_term = torch.square(forces) * (self.dt / (2 * self.gamma**2))
         return path_term.sum(), force_term.sum(), torch.tensor(0).to(torch.float32)
 
 
