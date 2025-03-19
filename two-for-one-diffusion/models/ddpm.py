@@ -505,8 +505,6 @@ class GaussianDiffusion(nn.Module):
         force_batch_size = path_batch_size * num_paths
         latent_time = int(latent_time)
 
-        
-
         for i in range(num_paths):
             # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
             x2[i] = torch.tensor(kabsch_rotate(x2[i].cpu(), x1[i].cpu())).to(x2.device)
@@ -559,7 +557,7 @@ class GaussianDiffusion(nn.Module):
                 batch_size_actual = end_idx - start_idx
 
                 noised_xs_batch = self.p_sample_loop(
-                    noised_xs[start_idx:end_idx].reshape(-1, n_atoms, 3),
+                    noised_xs.reshape(-1, n_atoms, 3)[start_idx:end_idx],
                     initial_guess_level,
                     z=(
                         z.unsqueeze(0).repeat(batch_size_actual, 1)
@@ -694,7 +692,7 @@ class GaussianDiffusion(nn.Module):
                         diff_time,
                         z=z,
                     )
-                    
+
                     # Subsample points
                     num_points = path_length
                     # TODO: fix this - subsampling yields shape errors for tetrapeptide interpolations
@@ -756,7 +754,7 @@ class GaussianDiffusion(nn.Module):
                     else:
                         noised_xs_input = noised_xs
                         noised_xs_input_unique = noised_xs
-                
+
                 # Initialize gradient accumulator
                 optimizer.zero_grad()
                 grads_accumulator = torch.zeros_like(noised_xs)
@@ -765,22 +763,25 @@ class GaussianDiffusion(nn.Module):
                 total_second_term = 0.0
                 total_third_term = 0.0
 
-                
                 # Batch through path length
-                
+
                 for p in range(0, path_length, path_batch_size):
                     start_idx = p
                     # Ensure we have overlapping points between batches for path term calculation
                     # That's why we use path_batch_size - 1 in the range step and +1 in end_idx
                     end_idx = min(start_idx + path_batch_size, path_length - 1)
-                    
+
                     # Create a temporary detached tensor requiring gradients
-                    path_batch = noised_xs[:, start_idx:end_idx+1].detach().requires_grad_(True)
+                    path_batch = (
+                        noised_xs[:, start_idx : end_idx + 1]
+                        .detach()
+                        .requires_grad_(True)
+                    )
 
                     # For action computation, we need to consider:
                     # 1. For path term - need pairs of adjacent points
                     # 2. For force term - need points to compute forces
-                    
+
                     # Get forces for this batch
                     if action_cls == HutchinsonAction:
                         # Handle Hutchinson action separately
@@ -789,14 +790,21 @@ class GaussianDiffusion(nn.Module):
                         # Get corresponding segment of pre-computed forces
                         batch_forces = [force[start_idx:end_idx] for force in forces]
                     else:
-                        
+
                         # Compute forces for this batch
                         # first flatten the first two dimension into each other
-                        path_batch_force_flattened = path_batch[:,:-1].reshape(-1, self.num_atoms, 3)
+                        path_batch_force_flattened = path_batch[:, :-1].reshape(
+                            -1, self.num_atoms, 3
+                        )
                         batch_forces = force_func(path_batch_force_flattened)
                         # then reshape back to the original shape
-                        batch_forces = batch_forces.reshape(path_batch.shape[0], path_batch.shape[1]-1, self.num_atoms, 3)
-                    
+                        batch_forces = batch_forces.reshape(
+                            path_batch.shape[0],
+                            path_batch.shape[1] - 1,
+                            self.num_atoms,
+                            3,
+                        )
+
                     # Create action function
                     action_func = action_cls(
                         force_func=force_func,
@@ -804,30 +812,32 @@ class GaussianDiffusion(nn.Module):
                         gamma=gamma,
                         D=D,
                     )
-                    
+
                     # Compute action term for this batch
                     batch_first_term, batch_second_term, batch_third_term = action_func(
                         path_batch,
                         batch_forces,
                     )
-                    
+
                     # Take mean across batch dimension
                     batch_first_term = batch_first_term.mean()
                     batch_second_term = batch_second_term.mean()
                     batch_third_term = batch_third_term.mean()
-                    
-                    batch_action = batch_first_term + batch_second_term - batch_third_term
-                    
+
+                    batch_action = (
+                        batch_first_term + batch_second_term - batch_third_term
+                    )
+
                     # Compute gradients for this batch and accumulate
                     batch_grads = torch.autograd.grad(batch_action, path_batch)[0]
-                    grads_accumulator[:, start_idx:end_idx+1] += batch_grads
-                    
+                    grads_accumulator[:, start_idx : end_idx + 1] += batch_grads
+
                     # Accumulate action values for logging
                     total_action += batch_action.item()
                     total_first_term += batch_first_term.item()
                     total_second_term += batch_second_term.item()
                     total_third_term += batch_third_term.item()
-                    
+
                     # Free memory
                     del path_batch, batch_forces, batch_action, batch_grads
                     torch.cuda.empty_cache()
@@ -837,11 +847,11 @@ class GaussianDiffusion(nn.Module):
                 path_terms.append(total_first_term)
                 force_terms.append(total_second_term)
                 laplace_terms.append(total_third_term)
-                
+
                 with torch.no_grad():
                     # Zero out gradients for endpoints (they should be fixed)
                     grads_accumulator[:, 0], grads_accumulator[:, -1] = 0, 0
-                    
+
                     if add_noise:
                         # Add noise to gradients
                         _t = (
@@ -859,7 +869,10 @@ class GaussianDiffusion(nn.Module):
                         path_noise = (
                             (0.5 * model_log_variance).exp() * noise * temperature
                         )
-                        grads_accumulator = grads_accumulator + path_noise.reshape(grads_accumulator.shape) / lr
+                        grads_accumulator = (
+                            grads_accumulator
+                            + path_noise.reshape(grads_accumulator.shape) / lr
+                        )
 
                     # Apply gradients and update
                     noised_xs.grad = grads_accumulator
@@ -868,9 +881,15 @@ class GaussianDiffusion(nn.Module):
                         scheduler.step()
 
                 all_noised_xs.append(noised_xs.clone().detach())
-                path_contribution = total_first_term / total_action if total_action != 0 else 0
-                force_contribution = total_second_term / total_action if total_action != 0 else 0
-                laplace_contribution = total_third_term / total_action if total_action != 0 else 0
+                path_contribution = (
+                    total_first_term / total_action if total_action != 0 else 0
+                )
+                force_contribution = (
+                    total_second_term / total_action if total_action != 0 else 0
+                )
+                laplace_contribution = (
+                    total_third_term / total_action if total_action != 0 else 0
+                )
                 pbar.set_description(
                     f"OM Action: {total_action}, Path Contribution: {round(path_contribution*100, 3)}%, Force Contribution: {round(force_contribution * 100, 3)}%, Laplace Contribution: {round(laplace_contribution * 100, 3)}%"
                 )
@@ -904,7 +923,7 @@ class GaussianDiffusion(nn.Module):
                     batch_size_actual = end_idx - start_idx
 
                     denoised_path_batch = self.p_sample_loop(
-                        path[start_idx:end_idx].reshape(-1, n_atoms, 3),
+                        paths.reshape(-1, n_atoms, 3)[start_idx:end_idx],
                         initial_guess_level,
                         z=(
                             z.unsqueeze(0).repeat(batch_size_actual, 1)

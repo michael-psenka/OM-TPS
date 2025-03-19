@@ -126,7 +126,9 @@ def assert_center_zero(x, eps=1e-3):
     """
     assert len(x.shape) == 3 and x.shape[-1] == 3, "Dimensionality error"
     abs_mean = x.mean(dim=1).abs()
+
     center_max = abs_mean.max().item()
+
     if center_max >= eps:
         max_ind = (abs_mean == abs_mean.max()).nonzero()[0]
         x_max = x[max_ind[0]]

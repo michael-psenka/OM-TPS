@@ -23,9 +23,9 @@ class TruncatedAction(torch.nn.Module):
         forces: torch.Tensor,
     ):
         """
-        Args: path of shape [P, *], forces of shape [P, *]
+        Args: path of shape [B, P, N, 3], forces of shape [B, P, N, 3]
         """
-        path_term = torch.square((path[:,1:] - path[:,:-1])) / (2 * self.dt)
+        path_term = torch.square((path[:, 1:] - path[:, :-1])) / (2 * self.dt)
         force_term = torch.square(forces) * (self.dt / (2 * self.gamma**2))
         return path_term.sum(), force_term.sum(), torch.tensor(0).to(torch.float32)
 
@@ -51,8 +51,9 @@ class S2Action(torch.nn.Module):
 
     def forward(self, path: torch.Tensor):
         """
-        Args: path of shape [P, N, 3]
+        Args: path of shape [B, P, N, 3] (@Michael is this the shape?) If so we should fix the path term
         """
+
         first_term = torch.square((path[1:] - path[:-1])) / (2 * self.dt)
         second_term = torch.square(self.force_func(path[:-1])) * (
             self.dt / (2 * self.gamma**2)

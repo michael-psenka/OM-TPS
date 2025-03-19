@@ -109,13 +109,19 @@ parser.add_argument(
     help="number of hidden features used in graph transformer",
 )
 parser.add_argument(
-    "--num_layers_gnn", type=int, default=3, help="number of layers used in graph transformer"
+    "--num_layers_gnn",
+    type=int,
+    default=3,
+    help="number of layers used in graph transformer",
 )
 parser.add_argument(
     "--heads", type=int, default=8, help="number of heads used in graph transformer"
 )
 parser.add_argument(
-    "--dim_head", type=int, default=64, help="dimension of each head used in graph transformer"
+    "--dim_head",
+    type=int,
+    default=64,
+    help="dimension of each head used in graph transformer",
 )
 
 parser.add_argument(
@@ -385,8 +391,9 @@ if __name__ == "__main__":
     # GNN model
     # For in_node_nf, the features are:
     model = get_model(args, trainset, device)
-    print(f"Initialized {type(model)} with {sum(p.numel() for p in model.parameters() if p.requires_grad)} trainable parameters")
-
+    print(
+        f"Initialized {type(model)} with {sum(p.numel() for p in model.parameters() if p.requires_grad)} trainable parameters"
+    )
 
     # Diffusion model
     if args.flow_matching:

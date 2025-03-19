@@ -421,6 +421,8 @@ def main(samp_args):
     else:
         raise Exception("Invalid atom selection, must be 'protein' or 'c-alpha'")
 
+    args.atom_selection = samp_args.atom_selection
+
     # Load dataset from args
     trainset, valset, testset = get_dataset(
         args.mol,
@@ -860,7 +862,7 @@ def generate_samples(
             verbose=True,
             z=torch.tensor(z).to(device) if z is not None else None,
         )
-        print('done!')
+        print("done!")
         sampled_mol = output["sampled_mol"]
 
         if (
@@ -1006,11 +1008,14 @@ def generate_samples(
         json.dump(metadata, open(f"{eval_folder}/{name}_metadata.json", "w"))
 
     else:
+        traj = torch.clamp(sampled_mol[:1000], -1000, 1000)
+
+        if samp_args.atom_selection == AtomSelection.PROTEIN:
+            # reorder atoms to match pdb
+            traj = traj[:, mae_to_pdb_atom_mapping(protein_name)]
+
         all_mol_traj = md.Trajectory(
-            torch.clamp(sampled_mol[0:1000], -1000, 1000)[
-                :, mae_to_pdb_atom_mapping(protein_name)
-            ].numpy()
-            / 10,
+            traj.cpu().numpy() / 10,  # convert to nm
             topology=topology,
         )
 
@@ -1023,7 +1028,11 @@ def generate_samples(
 
     # Also save as gsd
     save_ovito_traj(
-        sampled_mol[:, mae_to_pdb_atom_mapping(protein_name)],
+        (
+            sampled_mol[:, mae_to_pdb_atom_mapping(protein_name)]
+            if samp_args.atom_selection == AtomSelection.PROTEIN
+            else sampled_mol
+        ),
         str(eval_folder) + f"/sample-{samp_args.gen_mode}.gsd",
         align=samp_args.gen_mode == "iid",
         all_backbone="tetrapeptide" in protein_name
