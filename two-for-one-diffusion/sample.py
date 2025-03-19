@@ -686,7 +686,7 @@ def generate_samples(
                 os.path.join(
                     "evaluate",
                     "saved_references",
-                    f"saved_cluster_centers_{protein_name.upper()}.npy",
+                    f"saved_cluster_centers_{protein_name.upper()}{all_atom_append}.npy",
                 )
             )
             cluster_coords = np.load(cluster_centers_path)
