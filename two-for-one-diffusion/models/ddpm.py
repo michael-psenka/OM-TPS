@@ -785,7 +785,7 @@ class GaussianDiffusion(nn.Module):
                     # Get forces for this batch
                     if action_cls == HutchinsonAction:
                         # Handle Hutchinson action separately
-                        batch_forces = [None] * len(path_batch)
+                        batch_forces = None
                     elif truncated_gradient:
                         # Get corresponding segment of pre-computed forces
                         batch_forces = [force[start_idx:end_idx] for force in forces]
