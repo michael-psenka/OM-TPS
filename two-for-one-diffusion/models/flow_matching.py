@@ -16,6 +16,8 @@ from rmsd import kabsch_rotate, kabsch_rmsd
 from actions import S2Action, TruncatedAction, HutchinsonAction
 from dynamics.langevin import ForcesWrapper, temp_dict
 
+import matplotlib.pyplot as plt
+
 from utils import (
     default,
     extract,
@@ -417,7 +419,7 @@ class FlowMatching(nn.Module):
         dt=0.1,
         gamma=10,
         D=0.01,
-        force_batch_size=-1,
+        path_batch_size=-1,
         anneal=False,
         sample_latent_time=False,
         cosine_scheduler=False,
@@ -460,6 +462,11 @@ class FlowMatching(nn.Module):
         )
 
         num_paths, n_atoms = x1.shape[0], x1.shape[1]
+        if path_batch_size == -1:
+            path_batch_size = path_length  # Process full path at once
+        # Set force_batch_size based on path_batch_size
+        force_batch_size = path_batch_size * num_paths
+        latent_time = int(latent_time)
 
         for i in range(num_paths):
             # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
@@ -533,8 +540,8 @@ class FlowMatching(nn.Module):
                     ]
                 ).to(self.device)
 
-        if initial_guess_level != 0 and not initiate_with_iid:
-            # denoise to data space before optimization (batched)
+        if initial_guess_level != 0:
+            # denoise to data space before optimization (in batched fashion)
             num_samples = path_length * num_paths
             num_batches = (
                 num_samples + force_batch_size - 1
@@ -547,7 +554,7 @@ class FlowMatching(nn.Module):
                 batch_size_actual = end_idx - start_idx
 
                 noised_xs_batch = self.p_sample_loop(
-                    noised_xs[start_idx:end_idx].reshape(-1, n_atoms, 3),
+                    noised_xs.reshape(-1, n_atoms, 3)[start_idx:end_idx],
                     initial_guess_level,
                     z=(
                         z.unsqueeze(0).repeat(batch_size_actual, 1)
@@ -623,7 +630,6 @@ class FlowMatching(nn.Module):
                     .detach()
                     .cpu()
                 )
-            import matplotlib.pyplot as plt
 
             # Find the t value where cosine similarity peaks
             cosine_sims = np.array(cosine_sims)
@@ -772,80 +778,105 @@ class FlowMatching(nn.Module):
                         noised_xs_input = noised_xs
                         noised_xs_input_unique = noised_xs
 
-                    # compute the forces (fully vectorized for speed)
-                    if action_cls == HutchinsonAction:
-                        forces = [None] * len(noised_xs)
-                    else:
-                        # batched force computation to save memory (useful for all atom)
-                        forces = compute_batched_forces(
-                            noised_xs_input_unique,
-                            force_func,
-                            force_batch_size,
-                        )
-
-                    # Subsample dimensions
-                    if (
-                        subsample_dimensions_percent is not None
-                        and action_cls != HutchinsonAction
-                    ):
-                        num_dims = int(
-                            subsample_dimensions_percent * 3 * self.num_atoms
-                        )
-                        indices = (
-                            torch.stack(
-                                [
-                                    torch.randperm(3 * self.num_atoms)[:num_dims]
-                                    for _ in range(num_paths)
-                                ]
-                            )
-                            .unsqueeze(1)
-                            .to(self.device)
-                        )
-
-                        forces = forces.reshape(num_paths, forces.shape[1], -1).gather(
-                            -1, indices.expand(-1, forces.shape[1], -1)
-                        )
-                        noised_xs_input = noised_xs_input.reshape(
-                            num_paths, noised_xs_input.shape[1], -1
-                        ).gather(-1, indices.expand(-1, noised_xs_input.shape[1], -1))
-
-                action_func = action_cls(
-                    force_func=force_func,
-                    dt=dt,
-                    gamma=gamma,
-                    D=D,
-                )  # (D is only used for HessianAction)
-
-                # TODO: vmap over batch dimension
-                # (currently not possible because of calling requires_grad on x in GraphTransformer)
-                terms = [
-                    action_func(
-                        x,
-                        force,
-                        chunks_of_two=subsample_points_percent is not None,
-                        subsample_dimensions_percent=subsample_dimensions_percent,
-                    )
-                    for x, force in zip(noised_xs_input, forces)
-                ]
-                first_term = torch.cat([term[0].unsqueeze(0) for term in terms]).mean()
-                second_term = torch.cat([term[1].unsqueeze(0) for term in terms]).mean()
-                third_term = torch.cat([term[2].unsqueeze(0) for term in terms]).mean()
-
-                action = torch.cat(
-                    [(term[0] + term[1] - term[2]).unsqueeze(0) for term in terms]
-                ).mean()
-
-                actions.append(action.item())
-                path_terms.append(first_term.item())
-                force_terms.append(second_term.item())
-                laplace_terms.append(third_term.item())
-
+                    # Initialize gradient accumulator
                 optimizer.zero_grad()
-                (grads,) = torch.autograd.grad(action, noised_xs)
+                grads_accumulator = torch.zeros_like(noised_xs)
+                total_action = 0.0
+                total_first_term = 0.0
+                total_second_term = 0.0
+                total_third_term = 0.0
 
-                if add_noise:
-                    # add noise to gradients, since adding directly to path yields optimization problems with Adam
-                    with torch.no_grad():
+                # Batch through path length
+
+                for p in range(0, path_length, path_batch_size):
+                    start_idx = p
+                    # Ensure we have overlapping points between batches for path term calculation
+                    # That's why we use path_batch_size - 1 in the range step and +1 in end_idx
+                    end_idx = min(start_idx + path_batch_size, path_length - 1)
+
+                    # Create a temporary detached tensor requiring gradients
+                    path_batch = (
+                        noised_xs[:, start_idx : end_idx + 1]
+                        .detach()
+                        .requires_grad_(True)
+                    )
+
+                    # For action computation, we need to consider:
+                    # 1. For path term - need pairs of adjacent points
+                    # 2. For force term - need points to compute forces
+
+                    # Get forces for this batch
+                    if action_cls == HutchinsonAction:
+                        # Handle Hutchinson action separately
+                        batch_forces = None
+                    elif truncated_gradient:
+                        # Get corresponding segment of pre-computed forces
+                        batch_forces = [force[start_idx:end_idx] for force in forces]
+                    else:
+
+                        # Compute forces for this batch
+                        # first flatten the first two dimension into each other
+                        path_batch_force_flattened = path_batch[:, :-1].reshape(
+                            -1, self.num_atoms, 3
+                        )
+                        batch_forces = force_func(path_batch_force_flattened)
+                        # then reshape back to the original shape
+                        batch_forces = batch_forces.reshape(
+                            path_batch.shape[0],
+                            path_batch.shape[1] - 1,
+                            self.num_atoms,
+                            3,
+                        )
+
+                    # Create action function
+                    action_func = action_cls(
+                        force_func=force_func,
+                        dt=dt,
+                        gamma=gamma,
+                        D=D,
+                    )
+
+                    # Compute action term for this batch
+                    batch_first_term, batch_second_term, batch_third_term = action_func(
+                        path_batch,
+                        batch_forces,
+                    )
+
+                    # Take mean across batch dimension
+                    batch_first_term = batch_first_term.mean()
+                    batch_second_term = batch_second_term.mean()
+                    batch_third_term = batch_third_term.mean()
+
+                    batch_action = (
+                        batch_first_term + batch_second_term - batch_third_term
+                    )
+
+                    # Compute gradients for this batch and accumulate
+                    batch_grads = torch.autograd.grad(batch_action, path_batch)[0]
+                    grads_accumulator[:, start_idx : end_idx + 1] += batch_grads
+
+                    # Accumulate action values for logging
+                    total_action += batch_action.item()
+                    total_first_term += batch_first_term.item()
+                    total_second_term += batch_second_term.item()
+                    total_third_term += batch_third_term.item()
+
+                    # Free memory
+                    del path_batch, batch_forces, batch_action, batch_grads
+                    torch.cuda.empty_cache()
+
+                # Log the action values
+                actions.append(total_action)
+                path_terms.append(total_first_term)
+                force_terms.append(total_second_term)
+                laplace_terms.append(total_third_term)
+
+                with torch.no_grad():
+                    # Zero out gradients for endpoints (they should be fixed)
+                    grads_accumulator[:, 0], grads_accumulator[:, -1] = 0, 0
+
+                    if add_noise:
+                        # Add noise to gradients
                         _t = (
                             torch.tensor([max(1000 - i - 1, diff_time)])
                             .repeat(noised_xs.shape[0] * noised_xs.shape[1])
@@ -861,23 +892,28 @@ class FlowMatching(nn.Module):
                         path_noise = (
                             (0.5 * model_log_variance).exp() * noise * temperature
                         )
+                        grads_accumulator = (
+                            grads_accumulator
+                            + path_noise.reshape(grads_accumulator.shape) / lr
+                        )
 
-                    grads = grads + path_noise.reshape(grads.shape) / lr
-
-                with torch.no_grad():
-                    grads[:, 0], grads[:, -1] = 0, 0  # reset the endpoints
-
-                    noised_xs.grad = grads
+                    # Apply gradients and update
+                    noised_xs.grad = grads_accumulator
                     optimizer.step()
                     if cosine_scheduler:
                         scheduler.step()
 
-                all_noised_xs.append(noised_xs.clone().detach())
-                path_contribution = first_term.item() / action.item()
-                force_contribution = second_term.item() / action.item()
-                laplace_contribution = third_term.item() / action.item()
+                path_contribution = (
+                    total_first_term / total_action if total_action != 0 else 0
+                )
+                force_contribution = (
+                    total_second_term / total_action if total_action != 0 else 0
+                )
+                laplace_contribution = (
+                    total_third_term / total_action if total_action != 0 else 0
+                )
                 pbar.set_description(
-                    f"OM Action: {action.item()}, Path Contribution: {round(path_contribution*100, 3)}%, Force Contribution: {round(force_contribution * 100, 3)}%, Laplace Contribution: {round(laplace_contribution * 100, 3)}%"
+                    f"OM Action: {total_action}, Path Contribution: {round(path_contribution*100, 3)}%, Force Contribution: {round(force_contribution * 100, 3)}%, Laplace Contribution: {round(laplace_contribution * 100, 3)}%"
                 )
 
                 # if path_contribution > 0.99 and i > 50 and not changed:
@@ -896,9 +932,9 @@ class FlowMatching(nn.Module):
                 if self.log:
                     wandb.log(
                         {
-                            "OM Action": action.item(),
-                            "Path Norm": first_term.item(),
-                            "Force Norm": second_term.item(),
+                            "OM Action": total_action,
+                            "Path Norm": total_first_term,
+                            "Force Norm": total_second_term,
                             "Path Contribution": path_contribution,
                             "Force Contribution": force_contribution,
                             "Laplace Contribution": laplace_contribution,
@@ -922,7 +958,7 @@ class FlowMatching(nn.Module):
                     batch_size_actual = end_idx - start_idx
 
                     denoised_path_batch = self.p_sample_loop(
-                        path[start_idx:end_idx].reshape(-1, n_atoms, 3),
+                        path.reshape(-1, n_atoms, 3)[start_idx:end_idx],
                         initial_guess_level,
                         z=(
                             z.unsqueeze(0).repeat(batch_size_actual, 1)
