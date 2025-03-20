@@ -430,7 +430,7 @@ class TicEvaluator:
         else:
             protid = AtlasProteins[mol_name.upper()].value
 
-        folded_pdb = f"{folded_pdb_folder}/{protid}-0-protein.pdb"
+        folded_pdb = f"{folded_pdb_folder}/{protid}-0-{atom_selection.value}.pdb"
         if self.atom_selection == AtomSelection.A_CARBON:
             # Only keep alpha carbons
             self.folded = process_pdb(folded_pdb, mol_name)
@@ -529,16 +529,17 @@ class TicEvaluator:
         self.bin_mids_x = (self.bin_edges_x[1:] + self.bin_edges_x[:-1]) / 2
         self.bin_mids_y = (self.bin_edges_y[1:] + self.bin_edges_y[:-1]) / 2
 
-        self.folded_transform = self.tica.transform(
-            self.get_tic_features(
-                torch.from_numpy(self.folded.xyz) * 10,
-                self.folded,
-                convert_to_pdb_ordering=False,
-            )
-        )[0]
+        if "protein_g" != mol_name.lower():
+            self.folded_transform = self.tica.transform(
+                self.get_tic_features(
+                    torch.from_numpy(self.folded.xyz) * 10,
+                    self.folded,
+                    convert_to_pdb_ordering=False,
+                )
+            )[0]
 
-        self.bin_x_folded = np.argmin(abs(self.bin_mids_x - self.folded_transform[0]))
-        self.bin_y_folded = np.argmin(abs(self.bin_mids_y - self.folded_transform[1]))
+            self.bin_x_folded = np.argmin(abs(self.bin_mids_x - self.folded_transform[0]))
+            self.bin_y_folded = np.argmin(abs(self.bin_mids_y - self.folded_transform[1]))
 
     def get_tic_features(
         self, xyz, folded, separate=False, convert_to_pdb_ordering=True
@@ -1229,8 +1230,8 @@ def process_pdb(pdb_path, mol_name):
     ind_CA = np.array(
         [i for i, m in enumerate(folded.topology.atoms) if "CA" in str(m)]
     )
-    if mol_name.upper() == "PROTEIN_G":
-        ind_CA = ind_CA[5:61]
+    # if mol_name.upper() == "PROTEIN_G":
+    #     ind_CA = ind_CA[5:61]
     return folded.atom_slice(ind_CA)
 
 

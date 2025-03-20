@@ -15,9 +15,9 @@
 #     --iterations_on_val 1
 
 python sample.py \
-    --model_path saved_models/chignolin_all_atom \
+    --model_path saved_models/protein_g \
     --gen_mode om_interpolate \
-    --atom_selection protein \
+    --atom_selection c-alpha \
     --num_samples_eval 8 \
     --batch_size_gen 1 \
     --latent_time 20 \

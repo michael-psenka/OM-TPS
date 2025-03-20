@@ -418,6 +418,8 @@ def main(samp_args):
     else:
         raise Exception("Invalid atom selection, must be 'protein' or 'c-alpha'")
 
+    args.atom_selection = samp_args.atom_selection
+
     # Load dataset from args
     trainset, valset, testset = get_dataset(
         args.mol,
@@ -523,7 +525,7 @@ def generate_samples(
             os.path.join(os.path.dirname(eval_folder), "main_eval_output_iid")
         )
         protein_name = iid_sample_path.parts[-2].split("_")
-        if len(protein_name) > 3:
+        if 'trp' in protein_name or "protein" in protein_name:
             protein_name = protein_name[0] + "_" + protein_name[1]  # trp_cage
         else:
             protein_name = protein_name[0]
@@ -727,26 +729,6 @@ def generate_samples(
                 gt_traj=gt_traj.cpu() / 10,
             )
 
-            # This was code to figure out that there is some atom ordering discrepancy between the ground truth and the folded trajectory
-            # folded = tic_evaluator.folded.xyz * 10
-            # folded -= folded.mean(1, keepdims=True)
-            # from rmsd import kabsch_rotate
-            # from tqdm import tqdm
-
-            # gt_traj = gt_traj[::100, mae_to_pdb_atom_mapping(protein_name)]
-            # for i in tqdm(range(len(gt_traj))):
-            #     gt_traj[i] = torch.tensor(kabsch_rotate(gt_traj[i].cpu(), folded[0]))
-            # dists = np.linalg.norm(gt_traj - folded, axis=(-2, -1))
-            # closest = gt_traj[dists.argmin()]
-
-            # concat = np.concatenate([closest[None], folded], axis=0)
-
-            # all_mol_traj = md.Trajectory(concat / 10, topology=topology)
-
-            # all_mol_traj.save_pdb("test.pdb")
-
-            # save_ovito_traj(torch.tensor(concat), "test.gsd", bonds=bonds, align = True)
-
             # assign cluster centers to the ground truth samples (only look at every 100th frame to save time)
             cluster_assignments, _ = discretize_trajectory(
                 gt_traj.cpu()[::100], tic_evaluator, cluster_coords
@@ -766,6 +748,12 @@ def generate_samples(
             endpoint_2_samples = endpoint_2.repeat(
                 samp_args.num_samples_eval // len(endpoint_2) + 1, 1, 1
             )[: samp_args.num_samples_eval]
+            
+
+            traj = md.Trajectory(torch.clamp(endpoint_1_samples[0].unsqueeze(0), -1000, 1000).cpu().numpy() / 10,topology=topology)
+            traj.save_pdb(f"{protein_name}_endpoint1.pdb")
+            traj = md.Trajectory(torch.clamp(endpoint_2_samples[0].unsqueeze(0), -1000, 1000).cpu().numpy() / 10,topology=topology)
+            traj.save_pdb(f"{protein_name}_endpoint2.pdb")
 
         if "om" in samp_args.gen_mode:
             if samp_args.action == "hessian":
