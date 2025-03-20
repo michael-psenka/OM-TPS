@@ -881,14 +881,16 @@ class GaussianDiffusion(nn.Module):
                         scheduler.step()
 
                 all_noised_xs.append(noised_xs.clone().detach())
+                # account for sign ambiguity of third term
+                total_abs = total_first_term + total_second_term + abs(total_third_term)
                 path_contribution = (
-                    total_first_term / total_action if total_action != 0 else 0
+                    total_first_term / total_abs if total_abs != 0 else 0
                 )
                 force_contribution = (
-                    total_second_term / total_action if total_action != 0 else 0
+                    total_second_term / total_abs if total_abs != 0 else 0
                 )
                 laplace_contribution = (
-                    total_third_term / total_action if total_action != 0 else 0
+                    abs(total_third_term) / total_abs if total_abs != 0 else 0
                 )
                 pbar.set_description(
                     f"OM Action: {total_action}, Path Contribution: {round(path_contribution*100, 3)}%, Force Contribution: {round(force_contribution * 100, 3)}%, Laplace Contribution: {round(laplace_contribution * 100, 3)}%"
