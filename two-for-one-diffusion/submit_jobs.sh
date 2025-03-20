@@ -11,6 +11,27 @@ source /home/sanjeevr/mambaforge/etc/profile.d/conda.sh
 conda activate alphaflow
 cd /home/sanjeevr/om-diffusion/two-for-one-diffusion
 
+# python sample.py \
+#     --model_path saved_models/chignolin_all_atom \
+#     --gen_mode om_interpolate \
+#     --atom_selection protein \
+#     --num_samples_eval 8 \
+#     --batch_size_gen 1 \
+#     --latent_time 20 \
+#     --initial_guess_level 250\
+#     --subsample_points_percent 1.0 \
+#     --subsample_dimensions_percent 1.0 \
+#     --no_encode_and_decode \
+#     --action truncated \
+#     --optimizer adam \
+#     --lr 2e-1 \
+#     --append_exp_name test_initial_latent_time=250_pl90_dt0005 \
+#     --om_dt 0.0005 \
+#     --om_gamma 1 \
+#     --path_length 90 \
+#     --force_batch_size 20 \
+#     --steps 2000
+
 # python main_train.py \
 #     --mol chignolin \
 #     --flow_matching \
@@ -90,7 +111,7 @@ python main_train.py \
     --atom_selection protein \
     --start_from_last_saved True \
     --weight_decay 1e-4 \
-    --learning_rate 1e-4 \
+    --learning_rate 7e-5 \
     --num_samples 100 \
     --iterations_on_val 1
 
