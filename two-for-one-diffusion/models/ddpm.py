@@ -923,7 +923,7 @@ class GaussianDiffusion(nn.Module):
                     batch_size_actual = end_idx - start_idx
 
                     denoised_path_batch = self.p_sample_loop(
-                        paths.reshape(-1, n_atoms, 3)[start_idx:end_idx],
+                        path.reshape(-1, n_atoms, 3)[start_idx:end_idx],
                         initial_guess_level,
                         z=(
                             z.unsqueeze(0).repeat(batch_size_actual, 1)
