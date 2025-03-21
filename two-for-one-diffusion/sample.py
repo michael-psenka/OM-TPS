@@ -321,6 +321,11 @@ parser.add_argument(
     action="store_true",
     help="Use a pretrained machine learning force field (MLFF) to compute forces instead of the diffusion model",
 )
+parser.add_argument(
+    "--cg_prior",
+    action="store_true",
+    help="Use TorchMD CG prior to compute forces instead of the diffusion model (only for coarse-grained models)",
+)
 
 
 samp_args = parser.parse_args()
@@ -528,8 +533,8 @@ def generate_samples(
             os.path.join(os.path.dirname(eval_folder), "main_eval_output_iid")
         )
         protein_name = iid_sample_path.parts[-2].split("_")
-        
-        if 'trp' in protein_name or "protein" in protein_name:
+
+        if "trp" in protein_name or "protein" in protein_name:
             protein_name = protein_name[0] + "_" + protein_name[1]  # trp_cage
         else:
             protein_name = protein_name[0]
@@ -754,11 +759,22 @@ def generate_samples(
             endpoint_2_samples = endpoint_2.repeat(
                 samp_args.num_samples_eval // len(endpoint_2) + 1, 1, 1
             )[: samp_args.num_samples_eval]
-            
 
-            traj = md.Trajectory(torch.clamp(endpoint_1_samples[0].unsqueeze(0), -1000, 1000).cpu().numpy() / 10,topology=topology)
+            traj = md.Trajectory(
+                torch.clamp(endpoint_1_samples[0].unsqueeze(0), -1000, 1000)
+                .cpu()
+                .numpy()
+                / 10,
+                topology=topology,
+            )
             traj.save_pdb(f"{protein_name}_endpoint1.pdb")
-            traj = md.Trajectory(torch.clamp(endpoint_2_samples[0].unsqueeze(0), -1000, 1000).cpu().numpy() / 10,topology=topology)
+            traj = md.Trajectory(
+                torch.clamp(endpoint_2_samples[0].unsqueeze(0), -1000, 1000)
+                .cpu()
+                .numpy()
+                / 10,
+                topology=topology,
+            )
             traj.save_pdb(f"{protein_name}_endpoint2.pdb")
 
         if "om" in samp_args.gen_mode:
@@ -796,6 +812,7 @@ def generate_samples(
                     ),
                     initial_guess_level=samp_args.initial_guess_level,
                     mlff=samp_args.mlff,
+                    cg_prior=samp_args.cg_prior,
                     action_cls=action_cls,
                     om_steps=samp_args.steps,
                     optimizer=optimizer,

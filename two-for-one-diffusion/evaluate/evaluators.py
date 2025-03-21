@@ -538,8 +538,12 @@ class TicEvaluator:
                 )
             )[0]
 
-            self.bin_x_folded = np.argmin(abs(self.bin_mids_x - self.folded_transform[0]))
-            self.bin_y_folded = np.argmin(abs(self.bin_mids_y - self.folded_transform[1]))
+            self.bin_x_folded = np.argmin(
+                abs(self.bin_mids_x - self.folded_transform[0])
+            )
+            self.bin_y_folded = np.argmin(
+                abs(self.bin_mids_y - self.folded_transform[1])
+            )
 
     def get_tic_features(
         self, xyz, folded, separate=False, convert_to_pdb_ordering=True

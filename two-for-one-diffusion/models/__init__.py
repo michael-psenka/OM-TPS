@@ -4,7 +4,7 @@ from datasets.dataset_utils_empty import AtomSelection
 
 
 def get_model(args, trainset, device):
-    
+
     if args.backbone_network == "graph-transformer":
         model = GraphTransformer(
             trainset.num_beads,

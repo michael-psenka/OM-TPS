@@ -27,7 +27,7 @@ from utils import (
     slerp,
     NUM_RESIDUES_TO_PROTEIN,
     compute_batched_forces,
-    TorchMD_CGProteinPriorForces
+    TorchMD_CGProteinPriorForces,
 )
 
 # from torchmdnet.models.model import load_model as load_mlff_model
@@ -180,7 +180,7 @@ class GaussianDiffusion(nn.Module):
         if not isinstance(t, torch.Tensor):
             t = torch.tensor([t], dtype=torch.long).repeat(x.shape[0]).to(self.device)
         if z is not None and len(z.shape) == 1:
-            z = z.unsqueeze(0).repeat(x.shape[0], 1)     
+            z = z.unsqueeze(0).repeat(x.shape[0], 1)
 
         noise_pred = self.model(
             x,
@@ -454,6 +454,7 @@ class GaussianDiffusion(nn.Module):
         latent_time,
         encode_and_decode=True,
         mlff=False,
+        cg_prior=False,
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
         initial_guess_level=0,
@@ -647,11 +648,13 @@ class GaussianDiffusion(nn.Module):
 
         elif cg_prior:
             # CG protein prior forces
-            protein_prior = TorchMD_CGProteinPriorForces(yaml_file = 
+            protein_prior = TorchMD_CGProteinPriorForces(
+                yaml_file="./dynamics/cg_prior_force_field.yaml",
+                topology_file=f"./datasets/folded_pdbs/cg_{self.protein}.psf",
             )
 
             def get_force_from_cg_prior(x):
-                return protein_prior(x)
+                return protein_prior(x * self.norm_factor)
 
         anneal_schedule = torch.linspace(200, latent_time, om_steps // 4)
         # add a bunch latent times to the anneal schedule
@@ -696,6 +699,8 @@ class GaussianDiffusion(nn.Module):
                 elif mlff:
                     force_func = get_force_from_mlff
                     forces = [None] * len(noised_xs)
+                elif cg_prior:
+                    force_func = torch.vmap(get_force_from_cg_prior)
                 else:
                     force_func = lambda x: self.force_func(
                         center_zero(x),

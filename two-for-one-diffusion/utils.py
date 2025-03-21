@@ -373,6 +373,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         latent_time,
         encode_and_decode=True,
         mlff=False,
+        cg_prior=False,
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
         initial_guess_level=0,
@@ -400,6 +401,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
         self.latent_time = latent_time
         self.encode_and_decode = encode_and_decode
         self.mlff = mlff
+        self.cg_prior = cg_prior
         self.action_cls = action_cls
         self.initial_guess_fn = initial_guess_fn
         self.initial_guess_level = initial_guess_level
@@ -428,6 +430,7 @@ class OMInterpolatorWrapper(torch.nn.Module):
             encode_and_decode=self.encode_and_decode,
             latent_time=self.latent_time,
             mlff=self.mlff,
+            cg_prior=self.cg_prior,
             action_cls=self.action_cls,
             initial_guess_fn=self.initial_guess_fn,
             initial_guess_level=self.initial_guess_level,
@@ -455,8 +458,6 @@ def save_samples(sampled_mol, eval_folder, topology, milestone):
     all_mol_traj.save_pdb(str(eval_folder + f"/sample-{milestone}.pdb"))
 
 
-
-
 class TorchMD_CGProteinPriorForces(torch.nn.Module):
     def __init__(
         self,
@@ -465,7 +466,7 @@ class TorchMD_CGProteinPriorForces(torch.nn.Module):
         forceterms=["Bonds", "RepulsionCG", "Dihedrals"],
     ):
         super(TorchMD_CGProteinPriorForces, self).__init__()
-        mol = Molecule(topology_path)
+        mol = Molecule(topology_file)
         exclusions = "bonds"
 
         ff = ForceField.create(mol, yaml_file)
@@ -473,17 +474,26 @@ class TorchMD_CGProteinPriorForces(torch.nn.Module):
         parameters = Parameters(ff, mol, forceterms, device=self.device)
         parameters.A, parameters.B = parameters.get_AB()
         self.parameters = parameters
-        self.bond_params = {k: torch.tensor(v).to(self.device) for k, v in parameters.bond_params.items()}
-        self.dihedral_params = {k: torch.tensor(v).to(self.device) for k, v in parameters.dihedral_params.items()}
-        self.mapped_atom_types = torch.tensor(parameters.mapped_atom_types).to(self.device)
-        self.A, self.B = torch.tensor(parameters.A).to(self.device), torch.tensor(parameters.B).to(self.device)
+        self.bond_params = {
+            k: torch.tensor(v).to(self.device)
+            for k, v in parameters.bond_params.items()
+        }
+        self.dihedral_params = {
+            k: torch.tensor(v).to(self.device)
+            for k, v in parameters.dihedral_params.items()
+        }
+        self.mapped_atom_types = torch.tensor(parameters.mapped_atom_types).to(
+            self.device
+        )
+        self.A, self.B = torch.tensor(parameters.A).to(self.device), torch.tensor(
+            parameters.B
+        ).to(self.device)
         self.box = torch.tensor([50.0, 50.0, 50.0]).to(self.device)
-        self.explicit_forces = explicit_forces
+        self.explicit_forces = True
         self.natoms = len(self.parameters.masses)
         self.ava_idx = make_indices(
-                self.natoms, parameters.get_exclusions("bonds"), parameters.device
-            ).to(self.device)
-            
+            self.natoms, parameters.get_exclusions("bonds"), parameters.device
+        ).to(self.device)
 
     def forward(self, x):
         # Assume x is in angstroms
@@ -496,16 +506,15 @@ class TorchMD_CGProteinPriorForces(torch.nn.Module):
         bond_dist, bond_unitvec, _ = calculate_distances(x, pairs, self.box)
 
         bond_params = self.bond_params["params"][param_idx]
-        
+
         E, force_coeff = evaluate_bonds(bond_dist, bond_params, self.explicit_forces)
-        
+
         pot += E.sum()
         if self.explicit_forces:
-            forcevec = bond_unitvec * force_coeff[:, None] 
+            forcevec = bond_unitvec * force_coeff[:, None]
             forces.index_add_(0, pairs[:, 0], -forcevec)
-            forces.index_add_(0, pairs[:, 1], forcevec) 
+            forces.index_add_(0, pairs[:, 1], forcevec)
 
-        
         # Dihedral stuff
         dihed_idx = self.dihedral_params["idx"]
         param_idx = self.dihedral_params["map"][:, 1]
@@ -520,7 +529,7 @@ class TorchMD_CGProteinPriorForces(torch.nn.Module):
             self.dihedral_params["params"][param_idx],
             self.explicit_forces,
         )
-        
+
         pot += E.sum()
         if self.explicit_forces:
             forces.index_add_(0, dihed_idx[:, 0], dihedral_forces[0])
@@ -531,7 +540,7 @@ class TorchMD_CGProteinPriorForces(torch.nn.Module):
         # Repulsion stuff
         nb_dist, nb_unitvec, _ = calculate_distances(x, self.ava_idx, self.box)
         ava_idx = self.ava_idx
-    
+
         E, force_coeff = evaluate_repulsion_CG(
             nb_dist,
             ava_idx,
@@ -539,11 +548,11 @@ class TorchMD_CGProteinPriorForces(torch.nn.Module):
             self.B,
             self.explicit_forces,
         )
-        
+
         pot += E.sum()
 
         if self.explicit_forces:
-            forcevec = bond_unitvec * force_coeff[:, None]
+            forcevec = nb_unitvec * force_coeff[:, None]
             forces.index_add_(0, ava_idx[:, 0], -forcevec)
             forces.index_add_(0, ava_idx[:, 1], forcevec)
 
@@ -557,7 +566,8 @@ def wrap_dist(dist, box):
     else:
         wdist = dist - box.unsqueeze(0) * torch.round(dist / box.unsqueeze(0))
     return wdist
-    
+
+
 def calculate_distances(atom_pos, atom_idx, box):
     direction_vec = wrap_dist(atom_pos[atom_idx[:, 0]] - atom_pos[atom_idx[:, 1]], box)
     dist = torch.norm(direction_vec, dim=1)
@@ -575,6 +585,7 @@ def evaluate_bonds(dist, bond_params, explicit_forces=True):
     if explicit_forces:
         force = 2 * k0 * x
     return pot, force
+
 
 def evaluate_torsion(r12, r23, r34, dih_idx, torsion_params, explicit_forces=True):
     # Calculate dihedral angles from vectors
@@ -604,7 +615,9 @@ def evaluate_torsion(r12, r23, r34, dih_idx, torsion_params, explicit_forces=Tru
         angleDiff = per * phi[dih_idx] - phi0
         pot = torch.scatter_add(pot, 0, dih_idx, k0 * (1 + torch.cos(angleDiff)))
         if explicit_forces:
-            coeff = torch.scatter_add(coeff, 0, dih_idx, -per * k0 * torch.sin(angleDiff))
+            coeff = torch.scatter_add(
+                coeff, 0, dih_idx, -per * k0 * torch.sin(angleDiff)
+            )
     else:  # CHARMM torsions
         angleDiff = phi[dih_idx] - phi0
         angleDiff[angleDiff < -pi] = angleDiff[angleDiff < -pi] + 2 * pi
@@ -639,12 +652,13 @@ def evaluate_torsion(r12, r23, r34, dih_idx, torsion_params, explicit_forces=Tru
 
     return pot, (force0, force1, force2, force3)
 
+
 def make_indices(natoms, excludepairs, device):
     fullmat = torch.full((natoms, natoms), True, dtype=bool)
     if len(excludepairs):
         excludepairs = torch.tensor(excludepairs)
-        fullmat = fullmat.at[excludepairs[:, 0], excludepairs[:, 1]].set(False)
-        fullmat = fullmat.at[excludepairs[:, 1], excludepairs[:, 0]].set(False)
+        fullmat[excludepairs[:, 0], excludepairs[:, 1]] = False
+        fullmat[excludepairs[:, 1], excludepairs[:, 0]] = False
     fullmat = torch.triu(fullmat, +1)
     allvsall_indices = torch.vstack(torch.where(fullmat)).T
     return allvsall_indices
@@ -665,7 +679,3 @@ def evaluate_repulsion_CG(
     if explicit_forces:
         force = (-6 * coef * rinv6) * rinv1 / scale
     return pot, force
-
-
-
-
