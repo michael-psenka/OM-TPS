@@ -466,7 +466,6 @@ class FlowMatching(nn.Module):
             path_batch_size = path_length  # Process full path at once
         # Set force_batch_size based on path_batch_size
         force_batch_size = path_batch_size * num_paths
-        latent_time = int(latent_time)
 
         for i in range(num_paths):
             # Crucial: rotate x2 to match x1 (since TIC operates on rotationally invariant features)
@@ -902,7 +901,6 @@ class FlowMatching(nn.Module):
                     optimizer.step()
                     if cosine_scheduler:
                         scheduler.step()
-
                 path_contribution = (
                     total_first_term / total_action if total_action != 0 else 0
                 )

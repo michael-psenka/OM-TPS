@@ -21,13 +21,14 @@
 
 
 python sample.py \
-    --model_path saved_models/chignolin \
+    --model_path saved_models/trp_cage \
     --gen_mode om_interpolate \
+    --flow_matching \
     --atom_selection c-alpha \
     --num_samples_eval 4 \
     --batch_size_gen 4 \
-    --latent_time 20 \
-    --initial_guess_level 250\
+    --latent_time 0.5 \
+    --initial_guess_level 7\
     --subsample_points_percent 1.0 \
     --subsample_dimensions_percent 1.0 \
     --no_encode_and_decode \
@@ -37,7 +38,7 @@ python sample.py \
     --append_exp_name test_pathbatching \
     --om_dt 0.001 \
     --om_gamma 1 \
-    --path_length 100 \
+    --path_length 1000 \
     --path_batch_size 100 \
     --steps 500
 
