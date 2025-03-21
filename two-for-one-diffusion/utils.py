@@ -10,6 +10,9 @@ from git import Repo
 from actions import TruncatedAction
 from rmsd import kabsch_rmsd, kabsch_rotate
 from scipy.linalg import svd
+from torchmd.parameters import Parameters
+from torchmd.forcefields.forcefield import ForceField
+from moleculekit.molecule import Molecule
 
 NUM_RESIDUES_TO_PROTEIN = {
     10: "chignolin",
@@ -450,3 +453,219 @@ def save_samples(sampled_mol, eval_folder, topology, milestone):
     torch.save(sampled_mol, str(eval_folder + f"/sample-{milestone}.pt"))
     all_mol_traj = md.Trajectory(sampled_mol[0:100].numpy() / 10, topology=topology)
     all_mol_traj.save_pdb(str(eval_folder + f"/sample-{milestone}.pdb"))
+
+
+
+
+class TorchMD_CGProteinPriorForces(torch.nn.Module):
+    def __init__(
+        self,
+        yaml_file,
+        topology_file,
+        forceterms=["Bonds", "RepulsionCG", "Dihedrals"],
+    ):
+        super(TorchMD_CGProteinPriorForces, self).__init__()
+        mol = Molecule(topology_path)
+        exclusions = "bonds"
+
+        ff = ForceField.create(mol, yaml_file)
+        self.device = torch.device(torch.cuda.current_device())
+        parameters = Parameters(ff, mol, forceterms, device=self.device)
+        parameters.A, parameters.B = parameters.get_AB()
+        self.parameters = parameters
+        self.bond_params = {k: torch.tensor(v).to(self.device) for k, v in parameters.bond_params.items()}
+        self.dihedral_params = {k: torch.tensor(v).to(self.device) for k, v in parameters.dihedral_params.items()}
+        self.mapped_atom_types = torch.tensor(parameters.mapped_atom_types).to(self.device)
+        self.A, self.B = torch.tensor(parameters.A).to(self.device), torch.tensor(parameters.B).to(self.device)
+        self.box = torch.tensor([50.0, 50.0, 50.0]).to(self.device)
+        self.explicit_forces = explicit_forces
+        self.natoms = len(self.parameters.masses)
+        self.ava_idx = make_indices(
+                self.natoms, parameters.get_exclusions("bonds"), parameters.device
+            ).to(self.device)
+            
+
+    def forward(self, x):
+        # Assume x is in angstroms
+        pot = 0
+        forces = torch.zeros_like(x)
+
+        # Bond stuff
+        pairs = self.bond_params["idx"]
+        param_idx = self.bond_params["map"][:, 1]
+        bond_dist, bond_unitvec, _ = calculate_distances(x, pairs, self.box)
+
+        bond_params = self.bond_params["params"][param_idx]
+        
+        E, force_coeff = evaluate_bonds(bond_dist, bond_params, self.explicit_forces)
+        
+        pot += E.sum()
+        if self.explicit_forces:
+            forcevec = bond_unitvec * force_coeff[:, None] 
+            forces.index_add_(0, pairs[:, 0], -forcevec)
+            forces.index_add_(0, pairs[:, 1], forcevec) 
+
+        
+        # Dihedral stuff
+        dihed_idx = self.dihedral_params["idx"]
+        param_idx = self.dihedral_params["map"][:, 1]
+        _, _, r12 = calculate_distances(x, dihed_idx[:, [0, 1]], self.box)
+        _, _, r23 = calculate_distances(x, dihed_idx[:, [1, 2]], self.box)
+        _, _, r34 = calculate_distances(x, dihed_idx[:, [2, 3]], self.box)
+        E, dihedral_forces = evaluate_torsion(
+            r12,
+            r23,
+            r34,
+            self.dihedral_params["map"][:, 0],
+            self.dihedral_params["params"][param_idx],
+            self.explicit_forces,
+        )
+        
+        pot += E.sum()
+        if self.explicit_forces:
+            forces.index_add_(0, dihed_idx[:, 0], dihedral_forces[0])
+            forces.index_add_(0, dihed_idx[:, 1], dihedral_forces[1])
+            forces.index_add_(0, dihed_idx[:, 2], dihedral_forces[2])
+            forces.index_add_(0, dihed_idx[:, 3], dihedral_forces[3])
+
+        # Repulsion stuff
+        nb_dist, nb_unitvec, _ = calculate_distances(x, self.ava_idx, self.box)
+        ava_idx = self.ava_idx
+    
+        E, force_coeff = evaluate_repulsion_CG(
+            nb_dist,
+            ava_idx,
+            self.mapped_atom_types,
+            self.B,
+            self.explicit_forces,
+        )
+        
+        pot += E.sum()
+
+        if self.explicit_forces:
+            forcevec = bond_unitvec * force_coeff[:, None]
+            forces.index_add_(0, ava_idx[:, 0], -forcevec)
+            forces.index_add_(0, ava_idx[:, 1], forcevec)
+
+        return forces
+
+
+# Utility Functions
+def wrap_dist(dist, box):
+    if box is None or torch.all(box == 0):
+        wdist = dist
+    else:
+        wdist = dist - box.unsqueeze(0) * torch.round(dist / box.unsqueeze(0))
+    return wdist
+    
+def calculate_distances(atom_pos, atom_idx, box):
+    direction_vec = wrap_dist(atom_pos[atom_idx[:, 0]] - atom_pos[atom_idx[:, 1]], box)
+    dist = torch.norm(direction_vec, dim=1)
+    direction_unitvec = direction_vec / dist.unsqueeze(1)
+    return dist, direction_unitvec, direction_vec
+
+
+def evaluate_bonds(dist, bond_params, explicit_forces=True):
+    force = None
+
+    k0 = bond_params[:, 0]
+    d0 = bond_params[:, 1]
+    x = dist - d0
+    pot = k0 * (x**2)
+    if explicit_forces:
+        force = 2 * k0 * x
+    return pot, force
+
+def evaluate_torsion(r12, r23, r34, dih_idx, torsion_params, explicit_forces=True):
+    # Calculate dihedral angles from vectors
+    crossA = torch.cross(r12, r23, dim=1)
+    crossB = torch.cross(r23, r34, dim=1)
+    crossC = torch.cross(r23, crossA, dim=1)
+    normA = torch.norm(crossA, dim=1)
+    normB = torch.norm(crossB, dim=1)
+    normC = torch.norm(crossC, dim=1)
+    normcrossB = crossB / normB.unsqueeze(1)
+    cosPhi = torch.sum(crossA * normcrossB, dim=1) / normA
+    sinPhi = torch.sum(crossC * normcrossB, dim=1) / normC
+    phi = -torch.atan2(sinPhi, cosPhi)
+
+    ntorsions = r12.shape[0]
+    pot = torch.zeros(ntorsions, dtype=r12.dtype, layout=r12.layout, device=r12.device)
+    if explicit_forces:
+        coeff = torch.zeros(
+            ntorsions, dtype=r12.dtype, layout=r12.layout, device=r12.device
+        )
+
+    k0 = torsion_params[:, 0]
+    phi0 = torsion_params[:, 1]
+    per = torsion_params[:, 2]
+
+    if torch.all(per > 0):  # AMBER torsions
+        angleDiff = per * phi[dih_idx] - phi0
+        pot = torch.scatter_add(pot, 0, dih_idx, k0 * (1 + torch.cos(angleDiff)))
+        if explicit_forces:
+            coeff = torch.scatter_add(coeff, 0, dih_idx, -per * k0 * torch.sin(angleDiff))
+    else:  # CHARMM torsions
+        angleDiff = phi[dih_idx] - phi0
+        angleDiff[angleDiff < -pi] = angleDiff[angleDiff < -pi] + 2 * pi
+        angleDiff[angleDiff > pi] = angleDiff[angleDiff > pi] - 2 * pi
+        pot = torch.scatter_add(pot, 0, dih_idx, k0 * angleDiff**2)
+        if explicit_forces:
+            coeff = torch.scatter_add(coeff, 0, dih_idx, 2 * k0 * angleDiff)
+
+    # coeff.unsqueeze_(1)
+
+    force0, force1, force2, force3 = None, None, None, None
+    if explicit_forces:
+        # Taken from OpenMM
+        normDelta2 = torch.norm(r23, dim=1)
+        norm2Delta2 = normDelta2**2
+        forceFactor0 = (-coeff * normDelta2) / (normA**2)
+        forceFactor1 = torch.sum(r12 * r23, dim=1) / norm2Delta2
+        forceFactor2 = torch.sum(r34 * r23, dim=1) / norm2Delta2
+        forceFactor3 = (coeff * normDelta2) / (normB**2)
+
+        force0vec = forceFactor0.unsqueeze(1) * crossA
+        force3vec = forceFactor3.unsqueeze(1) * crossB
+        s = (
+            forceFactor1.unsqueeze(1) * force0vec
+            - forceFactor2.unsqueeze(1) * force3vec
+        )
+
+        force0 = -force0vec
+        force1 = force0vec + s
+        force2 = force3vec - s
+        force3 = -force3vec
+
+    return pot, (force0, force1, force2, force3)
+
+def make_indices(natoms, excludepairs, device):
+    fullmat = torch.full((natoms, natoms), True, dtype=bool)
+    if len(excludepairs):
+        excludepairs = torch.tensor(excludepairs)
+        fullmat = fullmat.at[excludepairs[:, 0], excludepairs[:, 1]].set(False)
+        fullmat = fullmat.at[excludepairs[:, 1], excludepairs[:, 0]].set(False)
+    fullmat = torch.triu(fullmat, +1)
+    allvsall_indices = torch.vstack(torch.where(fullmat)).T
+    return allvsall_indices
+
+
+def evaluate_repulsion_CG(
+    dist, pair_indeces, atom_types, B, scale=1, explicit_forces=True
+):  # Repulsion like from CGNet
+    force = None
+
+    atomtype_indices = atom_types[pair_indeces]
+    coef = B[atomtype_indices[:, 0], atomtype_indices[:, 1]]
+
+    rinv1 = 1 / dist
+    rinv6 = rinv1**6
+
+    pot = (coef * rinv6) / scale
+    if explicit_forces:
+        force = (-6 * coef * rinv6) * rinv1 / scale
+    return pot, force
+
+
+
+

@@ -27,6 +27,7 @@ from utils import (
     slerp,
     NUM_RESIDUES_TO_PROTEIN,
     compute_batched_forces,
+    TorchMD_CGProteinPriorForces
 )
 
 # from torchmdnet.models.model import load_model as load_mlff_model
@@ -643,6 +644,14 @@ class GaussianDiffusion(nn.Module):
             )
             plt.savefig(f"cosine_similarity_diffusion_{self.protein}.png")
             exit()
+
+        elif cg_prior:
+            # CG protein prior forces
+            protein_prior = TorchMD_CGProteinPriorForces(yaml_file = 
+            )
+
+            def get_force_from_cg_prior(x):
+                return protein_prior(x)
 
         anneal_schedule = torch.linspace(200, latent_time, om_steps // 4)
         # add a bunch latent times to the anneal schedule
