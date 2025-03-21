@@ -42,28 +42,43 @@
 #     --path_batch_size 200 \
 #     --steps 2000
 
+python main_train.py \
+    --mol chignolin \
+    --data_folder /data/sanjeevr/Reference_MD_Sims \
+    --eval_interval 1000 \
+    --experiment_name chignolin_all_atom_weightdecay=0_warmup_bs768_correctscale \
+    --batch_size 96 \
+    --gradient_accumulate_every 8\
+    --train_iter 50000 \
+    --atom_selection protein \
+    --weight_decay 0 \
+    --learning_rate 4e-4 \
+    --min_lr_cosine_anneal 0 \
+    --num_samples 100 \
+    --iterations_on_val 1
 
-python sample.py \
-    --model_path saved_models/villin \
-    --gen_mode om_interpolate \
-    --atom_selection c-alpha \
-    --num_samples_eval 4 \
-    --batch_size_gen 2 \
-    --cg_prior \
-    --latent_time 20 \
-    --initial_guess_level 250\
-    --subsample_points_percent 1.0 \
-    --subsample_dimensions_percent 1.0 \
-    --no_encode_and_decode \
-    --action truncated \
-    --optimizer adam \
-    --lr 1e-3 \
-    --append_exp_name test_cg_prior_dt=0.001 \
-    --om_dt 0.001 \
-    --om_gamma 1 \
-    --path_length 1000 \
-    --path_batch_size 200 \
-    --steps 2000
+
+# python sample.py \
+#     --model_path saved_models/chignolin \
+#     --gen_mode om_interpolate \
+#     --atom_selection c-alpha \
+#     --num_samples_eval 4 \
+#     --batch_size_gen 2 \
+#     --cg_prior \
+#     --latent_time 20 \
+#     --initial_guess_level 10\
+#     --subsample_points_percent 1.0 \
+#     --subsample_dimensions_percent 1.0 \
+#     --no_encode_and_decode \
+#     --action truncated \
+#     --optimizer adam \
+#     --lr 1e-3 \
+#     --append_exp_name test \
+#     --om_dt 0.001 \
+#     --om_gamma 1 \
+#     --path_length 1000 \
+#     --path_batch_size 200 \
+#     --steps 2000
 # python sample.py \
 #     --model_path /home/mpsenka/models \
 #     --gen_mode om_interpolate \

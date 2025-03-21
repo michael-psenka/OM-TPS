@@ -162,6 +162,11 @@ parser.add_argument(
 parser.add_argument(
     "--weight_decay", type=float, default=1e-12, help="weight decay in the optimizer"
 )
+
+parser.add_argument(
+    "--warmup_proportion", type=float, default=0.05, help="fraction of steps to warm up learning rate"
+)
+
 parser.add_argument(
     "--gradient_norm_threshold",
     type=int,
@@ -443,6 +448,7 @@ if __name__ == "__main__":
         log_tensorboard_interval=args.log_tensorboard_interval,
         num_samples_final_eval=args.num_samples_final_eval,
         min_lr_cosine_anneal=args.min_lr_cosine_anneal,
+        warmup_proportion=args.warmup_proportion,
         eval_langevin=args.eval_langevin,
         langevin_timesteps=args.langevin_timesteps,
         langevin_stepsize=args.langevin_stepsize,

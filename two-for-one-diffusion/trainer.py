@@ -57,6 +57,7 @@ class Trainer(object):
         log_tensorboard_interval: int = 1,
         num_samples_final_eval=100,
         min_lr_cosine_anneal=None,
+        warmup_proportion=0.05,
         eval_langevin=False,
         langevin_timesteps=1000000,
         langevin_stepsize=2e-3,  # picoseconds
@@ -134,15 +135,28 @@ class Trainer(object):
         # self.val_iters = 1000
         self.dl_val = cycle(self.dl_val)
 
-        # self.opt = AdamW(
-        #     self.model.parameters(), lr=train_lr, weight_decay=weight_decay
-        # )
-        self.opt = SGD(self.model.parameters(), lr=train_lr, weight_decay=weight_decay)
+        self.opt = AdamW(
+            self.model.parameters(), lr=train_lr, weight_decay=weight_decay
+        )
+        # self.opt = SGD(self.model.parameters(), lr=train_lr, weight_decay=weight_decay)
 
         if min_lr_cosine_anneal is not None:
-            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                self.opt, train_num_steps, eta_min=min_lr_cosine_anneal
+            warmup_steps = int(train_num_steps * warmup_proportion)
+            # Create the warmup scheduler
+            warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+                self.opt, start_factor=min_lr_cosine_anneal+1e-8, end_factor=1.0, total_iters=warmup_steps
             )
+            # Create the cosine annealing scheduler
+            cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                self.opt, T_max=train_num_steps - warmup_steps, eta_min=min_lr_cosine_anneal
+            )
+            # Combine them in a SequentialLR
+            self.scheduler = torch.optim.lr_scheduler.SequentialLR(
+                self.opt,
+                schedulers=[warmup_scheduler, cosine_scheduler],
+                milestones=[warmup_steps]
+            )
+            
         self.data_aug = data_aug
         self.step = 0
 

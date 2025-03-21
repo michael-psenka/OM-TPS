@@ -11,26 +11,26 @@ source /home/sanjeevr/mambaforge/etc/profile.d/conda.sh
 conda activate alphaflow
 cd /home/sanjeevr/om-diffusion/two-for-one-diffusion
 
-python sample.py \
-    --model_path saved_models/chignolin_all_atom \
-    --gen_mode om_interpolate \
-    --atom_selection protein \
-    --num_samples_eval 1 \
-    --batch_size_gen 1 \
-    --latent_time 20 \
-    --initial_guess_level 100\
-    --subsample_points_percent 1.0 \
-    --subsample_dimensions_percent 1.0 \
-    --no_encode_and_decode \
-    --action truncated \
-    --optimizer adam \
-    --lr 2e-1 \
-    --append_exp_name test_initial_latent_time=0_lt=20_pl1000 \
-    --om_dt 0.001 \
-    --om_gamma 1 \
-    --path_length 1000 \
-    --path_batch_size 50 \
-    --steps 500
+# python sample.py \
+#     --model_path saved_models/chignolin_all_atom \
+#     --gen_mode om_interpolate \
+#     --atom_selection protein \
+#     --num_samples_eval 1 \
+#     --batch_size_gen 1 \
+#     --latent_time 20 \
+#     --initial_guess_level 100\
+#     --subsample_points_percent 1.0 \
+#     --subsample_dimensions_percent 1.0 \
+#     --no_encode_and_decode \
+#     --action truncated \
+#     --optimizer adam \
+#     --lr 2e-1 \
+#     --append_exp_name test_initial_latent_time=0_lt=20_pl1000 \
+#     --om_dt 0.001 \
+#     --om_gamma 1 \
+#     --path_length 1000 \
+#     --path_batch_size 50 \
+#     --steps 500
 
 # python sample.py \
 #     --model_path saved_models/chignolin_all_atom \
@@ -142,20 +142,19 @@ python sample.py \
 #     --iterations_on_val 1
 
 
-
-
-# python main_train.py \
-#     --mol chignolin \
-#     --data_folder /data/sanjeevr/Reference_MD_Sims \
-#     --eval_interval 10000 \
-#     --experiment_name chignolin_all_atom_weightdecay=1e-4_sgd_correctscale \
-#     --batch_size 56 \
-#     --atom_selection protein \
-#     --start_from_last_saved True \
-#     --weight_decay 1e-4 \
-#     --learning_rate 7e-5 \
-#     --num_samples 100 \
-#     --iterations_on_val 1
+python main_train.py \
+    --mol chignolin \
+    --data_folder /data/sanjeevr/Reference_MD_Sims \
+    --eval_interval 10000 \
+    --experiment_name chignolin_all_atom_weightdecay=0_warmup_bs768_correctscale \
+    --batch_size 48 \
+    --gradient_accumulate_every 16\
+    --atom_selection protein \
+    --weight_decay 0 \
+    --learning_rate 4e-4 \
+    --min_lr_cosine_anneal 0 \
+    --num_samples 100 \
+    --iterations_on_val 1
 
 # BBA
 

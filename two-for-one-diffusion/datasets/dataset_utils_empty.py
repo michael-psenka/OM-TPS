@@ -326,9 +326,9 @@ def get_dataset(
             mean0=mean0,
             shuffle=shuffle_before_splitting,
         )
-
         if dataset.dataset is not None:
-            valratio, testratio = 0.1, 0.2
+            print(f"Creating dataset splits")
+            valratio, testratio = 0.1, 0.001
             num_val = math.floor(valratio * dataset.__len__())
             num_test = math.floor(testratio * dataset.__len__())
             num_train = dataset.__len__() - num_val - num_test
