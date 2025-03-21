@@ -80,7 +80,7 @@ class GraphTransformer(nn.Module):
 
         self.graphtransformer = GraphTransformerLucid(
             dim=hidden_nf,
-            dim_head = dim_head,
+            dim_head=dim_head,
             depth=n_layers,
             edge_dim=hidden_nf,  # optional - if left out, edge dimensions is assumed to be the same as the node dimensions above
             with_feedforwards=True,  # whether to add a feedforward after each attention layer, suggested by literature to be needed
@@ -247,7 +247,7 @@ class Attention(nn.Module):
     def __init__(self, dim, pos_emb=None, dim_head=64, heads=8, edge_dim=None):
         super().__init__()
         edge_dim = default(edge_dim, dim)
-    
+
         inner_dim = dim_head * heads
         self.heads = heads
         self.scale = dim_head**-0.5

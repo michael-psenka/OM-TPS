@@ -20,35 +20,20 @@ class TruncatedAction(torch.nn.Module):
     def forward(
         self,
         path: torch.Tensor,
-        forces: torch.Tensor = None,
-        chunks_of_two=False,
-        subsample_dimensions_percent=None,
+        forces: torch.Tensor,
     ):
         """
-        Args: path of shape [P, *], forces of shape [P, *]
+        Args: path of shape [B, P, N, 3], forces of shape [B, P, N, 3]
         """
-        if chunks_of_two:
-            # this is necessary if we subsampled points in the path
-            # need to make sure that path terms are computed only on adjacent points
-            if len(path.shape) == 2:
-                path = path.reshape(-1, 2, path.shape[-1])
-            else:
-                path = path.reshape(-1, 2, path.shape[-2], path.shape[-1])
-            path_term = torch.square((path[:, 1] - path[:, 0])) / (2 * self.dt)
-        else:
-            path_term = torch.square((path[1:] - path[:-1])) / (2 * self.dt)
-        if forces is not None:
-            f_n = forces[:-1]
-        else:
-            f_n = self.force_func(path[:-1])
-        force_term = torch.square(f_n) * (self.dt / (2 * self.gamma**2))
+        path_term = torch.square((path[:, 1:] - path[:, :-1])) / (2 * self.dt)
+        force_term = torch.square(forces) * (self.dt / (2 * self.gamma**2))
         return path_term.sum(), force_term.sum(), torch.tensor(0).to(torch.float32)
 
 
 class S2Action(torch.nn.Module):
     """Action with Hessian"""
 
-    def __init__(self, force_func, laplace_func, dt, gamma, D):
+    def __init__(self, force_func, dt, gamma, laplace_func, D=None):
         """
         Args:
             force_func: Force function
@@ -66,16 +51,20 @@ class S2Action(torch.nn.Module):
 
     def forward(self, path: torch.Tensor):
         """
-        Args: path of shape [P, N, 3]
+        Args: path of shape [B, P, N, 3]
         """
-        first_term = torch.square((path[1:] - path[:-1])) / (2 * self.dt)
-        second_term = torch.square(self.force_func(path[:-1])) * (
+
+        first_term = torch.square((path[:, 1:] - path[:, :-1])) / (2 * self.dt)
+        second_term = torch.square(self.force_func(path[:, :-1])) * (
             self.dt / (2 * self.gamma**2)
         )
-        third_term = self.laplace_func(path[:-1]) * self.dt * self.D / self.gamma
-        result = torch.sum(first_term + second_term + third_term)
+        third_term = self.laplace_func(path[:, :-1]) * self.dt * self.D / self.gamma
         # return result
-        return first_term.sum(), (second_term + third_term).sum()
+        return (
+            first_term.sum(),
+            second_term.sum(),
+            third_term.sum(),
+        )  # @Sanjeev: how come we summed 2&3 into second slot before?
 
 
 class HutchinsonAction(torch.nn.Module):
@@ -97,11 +86,16 @@ class HutchinsonAction(torch.nn.Module):
             x: torch.tensor, forces: torch.tensor = None, subsample_dimensions=None
         ):
             result = 0
-
             if forces is None:
-                forces = self.force_func(x)
-            else:
-                forces = forces[:-1]
+                path_batch_flattened = x.reshape(-1, x.shape[-2], x.shape[-1])
+                batch_forces = self.force_func(path_batch_flattened)
+                # then reshape back to the original shape
+                forces = batch_forces.reshape(
+                    x.shape[0],
+                    x.shape[1],
+                    x.shape[2],
+                    x.shape[3],
+                )
 
             if subsample_dimensions is not None:
                 forces = forces.reshape(forces.shape[0], -1).gather(
@@ -132,11 +126,10 @@ class HutchinsonAction(torch.nn.Module):
         self,
         path: torch.Tensor,
         forces: torch.Tensor = None,
-        chunks_of_two=False,
         subsample_dimensions_percent=None,
     ):
         """
-        Args: path of shape [P, N, 3], forces of shape [P, N, 3]
+        Args: path of shape [B, P, N, 3], forces of shape [B, P, N, 3]
         """
         num_atoms = path.shape[-2]
         subsample_dimensions = None
@@ -147,7 +140,7 @@ class HutchinsonAction(torch.nn.Module):
             )
 
         f_n, laplace = self.force_and_laplace(
-            path[: int(path.shape[0] / 2) - 1] if chunks_of_two else path[:-1],
+            path[:, :-1],
             forces,
             subsample_dimensions,
         )
@@ -158,17 +151,7 @@ class HutchinsonAction(torch.nn.Module):
                 -1, subsample_dimensions.expand(path.shape[0], -1)
             )
 
-        # Make sure the terms are [batch, 1] as is the third term
-        if chunks_of_two:
-            # this is necessary if we subsampled points in the path
-            # need to make sure that path terms are computed only on adjacent points
-            if len(path.shape) == 2:
-                path = path.reshape(-1, 2, path.shape[-1])
-            else:
-                path = path.reshape(-1, 2, path.shape[-2], path.shape[-1])
-            first_term = torch.square((path[:, 1] - path[:, 0])) / (2 * self.dt)
-        else:
-            first_term = torch.square((path[1:] - path[:-1])) / (2 * self.dt)
+        first_term = torch.square((path[:, 1:] - path[:, :-1])) / (2 * self.dt)
 
         second_term = torch.square(f_n) * (self.dt / (2 * self.gamma**2))
 
