@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --mail-type=BEGIN,END,FAIL  # Send email when job begins, ends, or fails
 #SBATCH --mail-user=sanjeevr@umich.edu  # Replace with your email
-#SBATCH --partition=scavenger
-#SBATCH --qos=scavenger
+#SBATCH --partition=long
+#SBATCH --qos=long
 #SBATCH --nodelist=germain
-#SBATCH --gpus=1
-#SBATCH --time=6:00:00
+#SBATCH --gpus=2
+#SBATCH --time=72:00:00
 
 source /home/sanjeevr/mambaforge/etc/profile.d/conda.sh
 conda activate alphaflow
@@ -145,10 +145,11 @@ cd /home/sanjeevr/om-diffusion/two-for-one-diffusion
 python main_train.py \
     --mol chignolin \
     --data_folder /data/sanjeevr/Reference_MD_Sims \
-    --eval_interval 10000 \
+    --eval_interval 1000 \
     --experiment_name chignolin_all_atom_weightdecay=0_warmup_bs768_correctscale \
-    --batch_size 48 \
-    --gradient_accumulate_every 16\
+    --batch_size 96 \
+    --gradient_accumulate_every 8\
+    --train_iter 50000 \
     --atom_selection protein \
     --weight_decay 0 \
     --learning_rate 4e-4 \
