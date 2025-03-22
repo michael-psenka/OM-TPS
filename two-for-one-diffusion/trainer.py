@@ -327,12 +327,15 @@ class Trainer(object):
                 grad_norm = clip_grad_norm_(
                     self.model_dp.parameters(), max_norm=float("inf")
                 )
-
+                if self.step % 50 == 0:
+                    print(f"Gradient norm {grad_norm}")
                 if grad_norm <= self.args.gradient_norm_threshold:
+                    # Clip gradient norms to 1
+                    clip_grad_norm_(self.model_dp.parameters(), max_norm=1.0)
                     self.scaler.step(self.opt)
                     self.scaler.update()
-
                 else:
+                    # skip the step if the gradient norm is too large
                     print(f"Gradient norm {grad_norm} too large, skipping step")
 
                 self.opt.zero_grad()

@@ -46,6 +46,7 @@ python main_train.py \
     --mol chignolin \
     --data_folder /data/sanjeevr/Reference_MD_Sims \
     --eval_interval 1000 \
+    --start_from_last_saved True \
     --experiment_name chignolin_all_atom_weightdecay=0_warmup_bs768_correctscale \
     --batch_size 96 \
     --gradient_accumulate_every 8\
