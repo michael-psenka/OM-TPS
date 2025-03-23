@@ -144,19 +144,24 @@ class Trainer(object):
             warmup_steps = int(train_num_steps * warmup_proportion)
             # Create the warmup scheduler
             warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
-                self.opt, start_factor=min_lr_cosine_anneal+1e-8, end_factor=1.0, total_iters=warmup_steps
+                self.opt,
+                start_factor=min_lr_cosine_anneal + 1e-8,
+                end_factor=1.0,
+                total_iters=warmup_steps,
             )
             # Create the cosine annealing scheduler
             cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                self.opt, T_max=train_num_steps - warmup_steps, eta_min=min_lr_cosine_anneal
+                self.opt,
+                T_max=train_num_steps - warmup_steps,
+                eta_min=min_lr_cosine_anneal,
             )
             # Combine them in a SequentialLR
             self.scheduler = torch.optim.lr_scheduler.SequentialLR(
                 self.opt,
                 schedulers=[warmup_scheduler, cosine_scheduler],
-                milestones=[warmup_steps]
+                milestones=[warmup_steps],
             )
-            
+
         self.data_aug = data_aug
         self.step = 0
 
@@ -331,7 +336,7 @@ class Trainer(object):
                     print(f"Gradient norm {grad_norm}")
                 if grad_norm <= self.args.gradient_norm_threshold:
                     # Clip gradient norms to 1
-                    clip_grad_norm_(self.model_dp.parameters(), max_norm=1.0)
+                    clip_grad_norm_(self.model_dp.parameters(), max_norm=10.0)
                     self.scaler.step(self.opt)
                     self.scaler.update()
                 else:

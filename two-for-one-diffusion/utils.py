@@ -119,6 +119,7 @@ def center_zero(x):
     """
     if isinstance(x, tuple):
         x = x[0]
+    # x = torch.tensor(x)
     assert len(x.shape) == 3 and x.shape[-1] == 3, "Dimensionality error"
     return x - x.mean(dim=1, keepdim=True)
 
