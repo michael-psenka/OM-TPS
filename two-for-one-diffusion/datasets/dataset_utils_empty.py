@@ -684,6 +684,7 @@ class MDGenDataset(torch.utils.data.Dataset):
         )
 
         # arr should be in ANGSTROMS
+        # pick a random frame in the trajectory
         t_idx = np.random.randint(0, arr.shape[0])
         frame = torch.tensor(arr[t_idx], dtype=torch.float32)
 
@@ -706,7 +707,6 @@ class MDGenDataset(torch.utils.data.Dataset):
                 for c in seqres
             ]
             # find num atoms per residue that are not ''
-
             num_atoms_per_residue = [
                 len([a for a in atom if a != ""]) for atom in atom_names
             ]
@@ -719,5 +719,4 @@ class MDGenDataset(torch.utils.data.Dataset):
             ).long()
 
         frame = frame.reshape(-1, 3)
-
         return frame, atom_types

@@ -12,7 +12,6 @@ from torch.optim import AdamW, SGD
 from ema_pytorch import EMA
 import pickle
 from evaluate.evaluators import Evaluator, sample_from_model
-from models.ddpm import GaussianDiffusion
 from dynamics.langevin import temp_dict, temp_dict_pt, LangevinDiffusion
 import utils
 import time
@@ -22,8 +21,9 @@ from utils import (
     random_rotation,
 )
 
+from datasets.dataset_utils_empty import AtomSelection#, mae_to_pdb_atom_mapping
+
 from logging_utils import save_ovito_traj
-from mdgen.mdgen.residue_constants import restype_order
 
 
 class Trainer(object):
@@ -58,6 +58,7 @@ class Trainer(object):
         log_tensorboard_interval: int = 1,
         num_samples_final_eval=100,
         min_lr_cosine_anneal=None,
+        warmup_proportion=0.05,
         eval_langevin=False,
         langevin_timesteps=1000000,
         langevin_stepsize=2e-3,  # picoseconds
@@ -132,21 +133,36 @@ class Trainer(object):
         )
 
         self.val_iters = iterations_on_val * len(self.dl_val)
+        # self.val_iters = 1000
         self.dl_val = cycle(self.dl_val)
 
         self.opt = AdamW(
             self.model.parameters(), lr=train_lr, weight_decay=weight_decay
         )
-        # self.opt = SGD(
-        #     self.model.parameters(),
-        #     lr=train_lr,
-        #     weight_decay=weight_decay,
-        # )
+        # self.opt = SGD(self.model.parameters(), lr=train_lr, weight_decay=weight_decay)
 
         if min_lr_cosine_anneal is not None:
-            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                self.opt, train_num_steps, eta_min=min_lr_cosine_anneal
+            warmup_steps = int(train_num_steps * warmup_proportion)
+            # Create the warmup scheduler
+            warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+                self.opt,
+                start_factor=min_lr_cosine_anneal + 1e-8,
+                end_factor=1.0,
+                total_iters=warmup_steps,
             )
+            # Create the cosine annealing scheduler
+            cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                self.opt,
+                T_max=train_num_steps - warmup_steps,
+                eta_min=min_lr_cosine_anneal,
+            )
+            # Combine them in a SequentialLR
+            self.scheduler = torch.optim.lr_scheduler.SequentialLR(
+                self.opt,
+                schedulers=[warmup_scheduler, cosine_scheduler],
+                milestones=[warmup_steps],
+            )
+
         self.data_aug = data_aug
         self.step = 0
 
@@ -155,7 +171,16 @@ class Trainer(object):
         self.num_saved_samples = num_saved_samples
         self.num_samples_final_eval = num_samples_final_eval
         self.topology = topology
-
+        if "tetrapeptides" not in self.mol_name:
+            self.all_atom_protein_z = (
+                [atom.element.number for atom in list(self.topology.atoms)]
+                if args.atom_selection == AtomSelection.PROTEIN
+                else None
+            )
+            # permute to match mae atom order
+            self.all_atom_protein_z = torch.tensor(self.all_atom_protein_z)[
+                mae_to_pdb_atom_mapping(mol_name, forward=False)
+            ]
         # Tensorboard writer
         tzinfo = dt.timezone(dt.timedelta(hours=2))  # timezone UTC+2
         now = dt.datetime.now(tzinfo)
@@ -163,35 +188,6 @@ class Trainer(object):
             experiment_name += "_"
         experiment_name = experiment_name  # + now.strftime("%Y-%m-%d_%X_%Z")
         self.writer = SummaryWriter(tb_folder + "/" + experiment_name + "_trn")
-        # log hyperparameters
-        hparam_dict = {
-            "lr": train_lr,
-            "batch_size": train_batch_size,
-            "num_steps": train_num_steps,
-            "gradient_accumulate_every": gradient_accumulate_every,
-            "ema_decay": ema_decay,
-            "weight_decay": weight_decay,
-            "num_atoms": self.num_atoms,
-            "data_aug": data_aug,
-            "amp": amp,
-            "step_start_ema": step_start_ema,
-            "ema_update_every": ema_update_every,
-            "save_and_sample_every": save_and_sample_every,
-            "num_saved_samples": num_saved_samples,
-            "log_tensorboard_interval": log_tensorboard_interval,
-            "num_samples_final_eval": num_samples_final_eval,
-            "min_lr_cosine_anneal": min_lr_cosine_anneal,
-            "eval_langevin": eval_langevin,
-            "langevin_timesteps": langevin_timesteps,
-            "langevin_stepsize": langevin_stepsize,
-            "pick_checkpoint": pick_checkpoint,
-            "start_from_last_saved": start_from_last_saved,
-            "iterations_on_val": iterations_on_val,
-            "t_diff_interval": t_diff_interval,
-            "save_all_checkpoints": save_all_checkpoints,
-        }
-        self.writer.add_hparams(hparam_dict, {})
-
         # self.writer_val = SummaryWriter(tb_folder + "/" + experiment_name + "_val")
 
         # Results folder from the new folder name
@@ -205,6 +201,7 @@ class Trainer(object):
                 mol_name=mol_name,
                 eval_folder=str(self.results_folder),
                 data_folder=args.data_folder,
+                atom_selection=args.atom_selection,
             )
             self.evaluator_test = Evaluator(
                 self.test_data,
@@ -212,6 +209,7 @@ class Trainer(object):
                 mol_name=mol_name,
                 eval_folder=str(self.results_folder),
                 data_folder=args.data_folder,
+                atom_selection=args.atom_selection,
             )
 
             # Plot the TIC of training data as a reference
@@ -227,6 +225,7 @@ class Trainer(object):
         if start_from_last_saved:
             self.load()
             print("Settings loaded from last checkpoint")
+            
 
     def save(self, milestone: dict, save_best: bool = False):
         """
@@ -266,6 +265,11 @@ class Trainer(object):
         self.model.load_state_dict(data_dict["model"])
         self.ema.load_state_dict(data_dict["ema"])
         self.scaler.load_state_dict(data_dict["scaler"])
+        for param_group in self.opt.param_groups:
+            if self.args.learning_rate != 4e-4:
+                print(f"Overwriting learning rate with {self.args.learning_rate}")
+                param_group["lr"] = self.args.learning_rate
+
         self.opt.load_state_dict(data_dict["opt"])
         self.scheduler.load_state_dict(data_dict["scheduler"])
 
@@ -273,14 +277,17 @@ class Trainer(object):
         print(f"val iters {val_iters}")
         self.model_ema_dp.eval()
         with torch.no_grad():
-            iter_num = 0
             loss = 0
-            while iter_num < val_iters:
+            val_iters = int(val_iters)
+            for iter_num in tqdm(range(val_iters)):
                 val_data = next(dl)
                 mol = val_data[0].to(self.device)
-                z = val_data[1].to(self.device) if len(val_data) == 2 else None
+                z = (
+                    val_data[1].to(self.device)
+                    if len(val_data) == 2
+                    else self.all_atom_protein_z.to(self.device)
+                )
                 loss += self.model_ema_dp(mol, z=z, t_diff_range=t_diff_range).mean()
-                iter_num += 1
             loss /= val_iters
             self.writer.add_scalar(f"Loss {partition_name}", loss.item(), self.step)
             print(f"Loss {partition_name} \t {loss.item()}")
@@ -298,7 +305,11 @@ class Trainer(object):
                 for i in range(self.gradient_accumulate_every):
                     input = next(self.dl_train)
                     mol = input[0].to(self.device)
-                    z = input[1].to(self.device) if len(input) == 2 else None
+                    z = (
+                        input[1].to(self.device)
+                        if len(input) == 2
+                        else self.all_atom_protein_z.to(self.device)
+                    )
                     if self.data_aug:
                         mol = random_rotation(mol)
 
@@ -308,19 +319,8 @@ class Trainer(object):
                         ).mean()
                         scaled_loss = loss / self.gradient_accumulate_every
                         self.scaler.scale(scaled_loss).backward()
-                        # check for blowup
-                        # if self.step > 500 and isinstance(
-                        #     self.model_dp, GaussianDiffusion
-                        # ):
-                        #     if loss.item() - old_loss > 0.3:
-                        #         print(f"Loss blowup at step {self.step}")
-                        #         torch.save(old_mol, f"blowup_mol_step={self.step}.pt")
-                        #         torch.save(old_z, f"blowup_z_step={self.step}.pt")
 
                     pbar.set_description(f"loss: {loss.item():.4f}")
-                    old_loss = loss.item()
-                    old_mol = mol
-                    old_z = z
 
                     if self.step % self.log_tensorboard_interval == 0:
                         self.writer.add_scalar("Loss", loss.item(), self.step)
@@ -332,13 +332,15 @@ class Trainer(object):
                 grad_norm = clip_grad_norm_(
                     self.model_dp.parameters(), max_norm=float("inf")
                 )
-
+                if self.step % 50 == 0:
+                    print(f"Gradient norm {grad_norm}")
                 if grad_norm <= self.args.gradient_norm_threshold:
-                    clip_grad_norm_(self.model_dp.parameters(), max_norm=100)
+                    # Clip gradient norms to 10
+                    # clip_grad_norm_(self.model_dp.parameters(), max_norm=10.0)
                     self.scaler.step(self.opt)
                     self.scaler.update()
-
                 else:
+                    # skip the step if the gradient norm is too large
                     print(f"Gradient norm {grad_norm} too large, skipping step")
 
                 self.opt.zero_grad()
@@ -351,6 +353,7 @@ class Trainer(object):
                     val_loss_ff = self.eval_loss(
                         self.dl_val, self.val_iters, partition_name="val"
                     )
+                    print(f"Val loss {val_loss_ff.item()}")
 
                     bool_new_best = val_loss_ff.item() < self.best_val_loss
                     self.best_val_loss = (
@@ -362,7 +365,7 @@ class Trainer(object):
                     z = (
                         next(self.dl_val)[1].to(self.device)
                         if "tetrapeptide" in self.mol_name
-                        else None
+                        else self.all_atom_protein_z.to(self.device)
                     )
                     # Evaluate i.i.d.
                     sampled_mol = sample_from_model(
@@ -371,6 +374,7 @@ class Trainer(object):
                         self.batch_size // self.parallel_batches,
                         z=z,
                     )
+
                     # Save as gsd
                     save_ovito_traj(
                         sampled_mol,
@@ -378,7 +382,7 @@ class Trainer(object):
                         align=True,
                         all_backbone="tetrapeptides" in self.mol_name
                         and self.train_data.atom_selection == "backbone",
-                        create_bonds="tetrapeptides" not in self.mol_name,
+                        create_bonds="tetrapeptides" not in self.mol_name
                     )
 
                     if "tetrapeptides" not in self.mol_name:
@@ -431,6 +435,7 @@ class Trainer(object):
             results_test_dict = self.evaluator_test.eval(
                 sampled_mol, milestone="final_iid_test", save_plots=False
             )
+            pass
 
         # Write metrics to Tensorboard
         for key in results_val_dict:

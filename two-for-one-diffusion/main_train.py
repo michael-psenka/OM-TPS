@@ -28,7 +28,7 @@ parser.add_argument(
 parser.add_argument(
     "--atom_selection",
     type=str,
-    default="backbone",
+    default="all-atom",
     help=f"Choose from: all-atom, c-alpha, backbone",
 )
 parser.add_argument(
@@ -134,12 +134,22 @@ parser.add_argument(
     default=512,
     help="batch size used in training and validation",
 )
+parser.add_argument(
+    "--gradient_accumulate_every",
+    type=int,
+    default=1,
+    help="gradient accumulation frequency (effective batch size = batch_size * gradient_accumulate_every)",
+)
 
 parser.add_argument(
     "--learning_rate", type=float, default=4e-4, help="learning rate for Adam"
 )
+
 parser.add_argument(
     "--weight_decay", type=float, default=1e-12, help="weight decay in the optimizer"
+)
+parser.add_argument(
+    "--warmup_proportion", type=float, default=0.05, help="fraction of steps to warm up learning rate"
 )
 parser.add_argument(
     "--gradient_norm_threshold",
@@ -392,7 +402,7 @@ if __name__ == "__main__":
         train_batch_size=args.batch_size,
         train_lr=args.learning_rate,
         train_num_steps=args.train_iter,
-        gradient_accumulate_every=1,
+        gradient_accumulate_every=args.gradient_accumulate_every,
         ema_decay=args.ema_decay,
         save_and_sample_every=args.eval_interval,
         num_saved_samples=args.num_samples,
@@ -405,6 +415,7 @@ if __name__ == "__main__":
         log_tensorboard_interval=args.log_tensorboard_interval,
         num_samples_final_eval=args.num_samples_final_eval,
         min_lr_cosine_anneal=args.min_lr_cosine_anneal,
+        warmup_proportion=args.warmup_proportion,
         eval_langevin=args.eval_langevin,
         langevin_timesteps=args.langevin_timesteps,
         langevin_stepsize=args.langevin_stepsize,

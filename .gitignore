@@ -10,8 +10,12 @@ data
 *.png
 *.pyc
 *.gsd
+*.pdf
+*.txt
+*.out
 *.pickle
 *ipynb_checkpoints/
+Variational-Doob/
 wandb/
 guided_diffusion/
 mnist/
