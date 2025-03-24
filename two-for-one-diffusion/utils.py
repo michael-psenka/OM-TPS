@@ -463,6 +463,7 @@ class TorchMD_CGProteinPriorForces(torch.nn.Module):
         self,
         yaml_file,
         topology_file,
+        device,
         forceterms=["Bonds", "RepulsionCG", "Dihedrals"],
     ):
         super(TorchMD_CGProteinPriorForces, self).__init__()
@@ -470,7 +471,7 @@ class TorchMD_CGProteinPriorForces(torch.nn.Module):
         exclusions = "bonds"
 
         ff = ForceField.create(mol, yaml_file)
-        self.device = torch.device(torch.cuda.current_device())
+        self.device = device
         parameters = Parameters(ff, mol, forceterms, device=self.device)
         parameters.A, parameters.B = parameters.get_AB()
         self.parameters = parameters
@@ -556,7 +557,7 @@ class TorchMD_CGProteinPriorForces(torch.nn.Module):
             forces.index_add_(0, ava_idx[:, 0], -forcevec)
             forces.index_add_(0, ava_idx[:, 1], forcevec)
 
-        return forces
+        return pot, forces
 
 
 # Utility Functions

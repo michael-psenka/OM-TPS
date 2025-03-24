@@ -18,44 +18,45 @@
 # conda activate moldyn
 # cd /home/mpsenka/repos/OMBasics/two-for-one-diffusion
 
-# python sample.py \
-#     --model_path saved_models/chignolin_all_atom \
-#     --gen_mode om_interpolate \
-#     --atom_selection protein \
-#     --num_samples_eval 1 \
-#     --batch_size_gen 1 \
-#     --latent_time 20 \
-#     --initial_guess_level 0\
-#     --subsample_points_percent 1.0 \
-#     --subsample_dimensions_percent 1.0 \
-#     --no_encode_and_decode \
-#     --action truncated \
-#     --optimizer adam \
-#     --lr 2e-1 \
-#     --append_exp_name test \
-#     --om_dt 0.001 \
-#     --om_gamma 1 \
-#     --path_length 100 \
-#     --path_batch_size 50 \
-#     --steps 500
+python sample.py \
+    --model_path saved_models/chignolin \
+    --gen_mode om_interpolate \
+    --atom_selection c-alpha \
+    --num_samples_eval 1 \
+    --batch_size_gen 1 \
+    --latent_time 20 \
+    --initial_guess_level 999\
+    --subsample_points_percent 1.0 \
+    --subsample_dimensions_percent 1.0 \
+    --no_encode_and_decode \
+    --action truncated \
+    --optimizer adam \
+    --cg_prior \
+    --lr 1e-3 \
+    --append_exp_name test_cg_prior \
+    --om_dt 0.001 \
+    --om_gamma 1 \
+    --path_length 200 \
+    --path_batch_size 200 \
+    --steps 1000
 
-python main_train.py \
-    --mol trp_cage \
-    --data_folder /data/sanjeevr/Reference_MD_Sims \
-    --eval_interval 1000 \
-    --experiment_name test \
-    --hidden_features_gnn 64 \
-    --heads 8 \
-    --dim_head 64 \
-    --batch_size 40 \
-    --gradient_accumulate_every 19\
-    --train_iter 50000 \
-    --atom_selection protein \
-    --weight_decay 0 \
-    --learning_rate 4e-4 \
-    --min_lr_cosine_anneal 0 \
-    --num_samples 10 \
-    --iterations_on_val 1
+# python main_train.py \
+#     --mol trp_cage \
+#     --data_folder /data/sanjeevr/Reference_MD_Sims \
+#     --eval_interval 1000 \
+#     --experiment_name test \
+#     --hidden_features_gnn 64 \
+#     --heads 8 \
+#     --dim_head 64 \
+#     --batch_size 40 \
+#     --gradient_accumulate_every 19\
+#     --train_iter 50000 \
+#     --atom_selection protein \
+#     --weight_decay 0 \
+#     --learning_rate 4e-4 \
+#     --min_lr_cosine_anneal 0 \
+#     --num_samples 10 \
+#     --iterations_on_val 1
 
 
 

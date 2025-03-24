@@ -651,10 +651,11 @@ class GaussianDiffusion(nn.Module):
             protein_prior = TorchMD_CGProteinPriorForces(
                 yaml_file="./dynamics/cg_prior_force_field.yaml",
                 topology_file=f"./datasets/folded_pdbs/cg_{self.protein}.psf",
+                device=self.device,
             )
 
             def get_force_from_cg_prior(x):
-                return protein_prior(x * self.norm_factor)
+                return protein_prior(x * self.norm_factor)[1]
 
         anneal_schedule = torch.linspace(200, latent_time, om_steps // 4)
         # add a bunch latent times to the anneal schedule
