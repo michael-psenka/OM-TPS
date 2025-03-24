@@ -21,7 +21,7 @@ python main_train.py \
     --batch_size 3072 \
     --gradient_accumulate_every 1 \
     --start_from_last_saved False \
-    --train_iter 50000 \
+    --train_iter 100000 \
     --weight_decay 0 \
     --learning_rate 4e-4 \
     --min_lr_cosine_anneal 0 \
