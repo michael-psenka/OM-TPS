@@ -15,17 +15,17 @@ cd /home/sanjeevr/om-diffusion/two-for-one-diffusion
 python main_train.py \
     --mol tetrapeptides \
     --atom_selection all-atom \
-    --flow_matching \
     --data_folder /data/sanjeevr/4AA_data  \
     --eval_interval 1000 \
     --warmup_proportion 0.05 \
-    --batch_size 192 \
-    --gradient_accumulate_every 16 \
+    --batch_size 3072 \
+    --gradient_accumulate_every 1 \
+    --start_from_last_saved True \
     --train_iter 20000 \
     --weight_decay 0 \
     --learning_rate 4e-4 \
     --min_lr_cosine_anneal 0 \
-    --experiment_name tetra_all_atom_flowmatching_bs=3072_weightdecay=0 \
+    --experiment_name tetra_all_atom_bs=3072_weightdecay=0 \
     --scale_data False \
     --batch_size 256 \
     --gradient_norm_threshold 1000000 \
