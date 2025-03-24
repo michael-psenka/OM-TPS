@@ -28,6 +28,6 @@ python main_train.py \
     --experiment_name tetra_all_atom_bs=3072_weightdecay=0_trainlonger \
     --scale_data False \
     --batch_size 256 \
-    --gradient_norm_threshold 1000000 \
+    --gradient_norm_threshold 10 \
     --num_samples 100
 
