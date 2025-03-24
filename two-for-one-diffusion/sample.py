@@ -798,7 +798,6 @@ def generate_samples(
                     masses = [12.8] * trainset.num_beads
                 else:
                     masses = [12.0] * trainset.num_beads
-
             interpolator = (
                 OMInterpolatorWrapper(
                     model.ema_model,
