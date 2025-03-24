@@ -369,7 +369,7 @@ if __name__ == "__main__":
             val_data=None,
             mol_name=args.mol,
             eval_folder=f"./saved_models/{args.mol}",
-            data_folder="./datasets",
+            data_folder="/data/sanjeevr/Reference_MD_Sims",
             folded_pdb_folder="./datasets/folded_pdbs",
             bins=101,
             evalset="testset",
@@ -390,7 +390,7 @@ if __name__ == "__main__":
     )
 
     # temp hard coding
-    norm_factor = 3.6533  # trainset.std if args.scale_data else 1.0  # 3.6533
+    norm_factor = 3.6533  if args.mol == "chignolin" else 5.094 # trainset.std if args.scale_data else 1.0  # 3.6533
 
     # Set device
     # Note: Code does not work for cpu in current form
