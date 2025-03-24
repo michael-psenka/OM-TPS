@@ -20,12 +20,12 @@ python main_train.py \
     --warmup_proportion 0.05 \
     --batch_size 3072 \
     --gradient_accumulate_every 1 \
-    --start_from_last_saved True \
-    --train_iter 20000 \
+    --start_from_last_saved False \
+    --train_iter 50000 \
     --weight_decay 0 \
     --learning_rate 4e-4 \
     --min_lr_cosine_anneal 0 \
-    --experiment_name tetra_all_atom_bs=3072_weightdecay=0 \
+    --experiment_name tetra_all_atom_bs=3072_weightdecay=0_trainlonger \
     --scale_data False \
     --batch_size 256 \
     --gradient_norm_threshold 1000000 \
