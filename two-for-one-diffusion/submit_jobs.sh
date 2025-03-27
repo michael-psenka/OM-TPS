@@ -3,9 +3,9 @@
 #SBATCH --mail-user=sanjeevr@umich.edu  # Replace with your email
 #SBATCH --partition=long
 #SBATCH --qos=long
-#SBATCH --nodelist=germain
+#SBATCH --nodelist=escher
 #SBATCH --gpus=2
-#SBATCH --time=72:00:00
+#SBATCH --time=48:00:00
 
 source /home/sanjeevr/mambaforge/etc/profile.d/conda.sh
 conda activate alphaflow
@@ -17,6 +17,7 @@ python main_train.py \
     --eval_interval 1000 \
     --experiment_name trp_cage_all_atom_weightdecay=0_warmup_bs768_correctscale \
     --hidden_features_gnn 64 \
+    --start_from_last_saved True \
     --heads 8 \
     --dim_head 64 \
     --batch_size 40 \
