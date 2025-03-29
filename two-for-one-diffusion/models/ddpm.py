@@ -333,7 +333,7 @@ class GaussianDiffusion(nn.Module):
         )
         return (
             self.p_sample_loop(
-                mol_t=starting_mol, t=self.num_timesteps, z=z, temperature=temperature
+                mol_t=starting_mol, t=self.num_timesteps-1, z=z, temperature=temperature
             )
             * self.norm_factor
         )

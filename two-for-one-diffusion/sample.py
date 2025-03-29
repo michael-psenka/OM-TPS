@@ -842,8 +842,8 @@ def generate_samples(
     else:
         raise Exception("Wrong argument 'gen_mode'")
 
-    # if "tetrapeptide" in protein_name and sidechains and :
-    #     sampled_mol = sampled_mol[:, z != 0]  # remove padding atoms
+    if "tetrapeptide" in protein_name and sidechains:
+        sampled_mol = sampled_mol[:, z != 0]  # remove padding atoms
 
     # Save generated samples
     append_name = "_" + name if name is not None else ""
