@@ -251,9 +251,6 @@ def evaluate_tetrapeptide(
     except:
         Warning("Could not estimate MSM for generated transition path")
 
-    import pdb
-
-    pdb.set_trace()
     if plot:
         os.makedirs(out_dir, exist_ok=True)
         fig.savefig(f"{out_dir}/{name}.pdf")
