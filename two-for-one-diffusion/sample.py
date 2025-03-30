@@ -458,9 +458,9 @@ def main(samp_args):
                 name,
                 samp_args.sidechains,
             )
-            except:
-                print(f"Failed to generate samples for {name}")
-                continue
+        except:
+            print(f"Failed to generate samples for {name}")
+            continue
 
     # writer.flush()
     # writer.close()
@@ -519,8 +519,10 @@ def generate_samples(
         if "tetrapeptide" in protein_name:
             for root, dirs, files in os.walk(args.model_path):
                 for file in files:
-                    if file.endswith(f"{name}_metadata.pkl") and root != str(eval_folder):
-                        
+                    if file.endswith(f"{name}_metadata.pkl") and root != str(
+                        eval_folder
+                    ):
+
                         shutil.copy(f"{root}/{name}_metadata.pkl", eval_folder)
                         break
 
@@ -848,9 +850,13 @@ def generate_samples(
     )
 
     # Also save as gsd
-    
+
     save_ovito_traj(
-        sampled_mol[:, z != 0]  if "tetrapeptide" in protein_name and sidechains else sampled_mol,
+        (
+            sampled_mol[:, z != 0]
+            if "tetrapeptide" in protein_name and sidechains
+            else sampled_mol
+        ),
         str(eval_folder) + f"/sample-{samp_args.gen_mode}{append_name}.gsd",
         align=samp_args.gen_mode == "iid",
         all_backbone="tetrapeptide" in protein_name and not sidechains,

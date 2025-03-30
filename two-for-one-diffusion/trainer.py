@@ -21,7 +21,7 @@ from utils import (
     random_rotation,
 )
 
-from datasets.dataset_utils_empty import AtomSelection#, mae_to_pdb_atom_mapping
+from datasets.dataset_utils_empty import AtomSelection  # , mae_to_pdb_atom_mapping
 
 from logging_utils import save_ovito_traj
 
@@ -225,7 +225,6 @@ class Trainer(object):
         if start_from_last_saved:
             self.load()
             print("Settings loaded from last checkpoint")
-            
 
     def save(self, milestone: dict, save_best: bool = False):
         """
@@ -382,7 +381,7 @@ class Trainer(object):
                         align=True,
                         all_backbone="tetrapeptides" in self.mol_name
                         and self.train_data.atom_selection == "backbone",
-                        create_bonds="tetrapeptides" not in self.mol_name
+                        create_bonds="tetrapeptides" not in self.mol_name,
                     )
 
                     if "tetrapeptides" not in self.mol_name:
