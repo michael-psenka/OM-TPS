@@ -16,6 +16,7 @@ python main_train.py \
     --data_folder /data/sanjeevr/Reference_MD_Sims \
     --eval_interval 1000 \
     --experiment_name trp_cage_all_atom_weightdecay=0_warmup_bs768_correctscale \
+    --start_from_last_saved True \
     --hidden_features_gnn 64 \
     --start_from_last_saved True \
     --heads 8 \
