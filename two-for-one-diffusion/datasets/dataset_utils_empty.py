@@ -186,19 +186,19 @@ def get_dataset(
         trainset = MDGenDataset(
             data_folder,
             suffix="_i100",
-            split="./mdgen/splits/4AA_train_small.csv",
+            split="./mdgen/splits/4AA_train.csv",
             atom_selection=tetra_atom_selection,
         )
         valset = MDGenDataset(
             data_folder,
             suffix="_i100",
-            split="./mdgen/splits/4AA_val_small.csv",
+            split="./mdgen/splits/4AA_val.csv",
             atom_selection=tetra_atom_selection,
         )
         testset = MDGenDataset(
             data_folder,
             suffix="_i100",
-            split="./mdgen/splits/4AA_test_small.csv",
+            split="./mdgen/splits/4AA_test.csv",
             atom_selection=tetra_atom_selection,
         )
 
@@ -633,6 +633,7 @@ class MDGenDataset(torch.utils.data.Dataset):
         atom_selection="all-atom",
     ):
         super().__init__()
+
         self.df = pd.read_csv(split, index_col="name")
         self.repeat = repeat
         if atom_selection == "c-alpha":
