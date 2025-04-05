@@ -4,7 +4,7 @@
 #SBATCH --partition=long
 #SBATCH --qos=long
 #SBATCH --nodelist=germain
-#SBATCH --gpus=2
+#SBATCH --gpus=1
 #SBATCH --time=48:00:00
 
 source /home/sanjeevr/mambaforge/etc/profile.d/conda.sh
@@ -16,9 +16,9 @@ python main_train.py \
     --mol tetrapeptides \
     --atom_selection all-atom \
     --data_folder /data/sanjeevr/4AA_data  \
-    --eval_interval 1000 \
+    --eval_interval 10 \
     --warmup_proportion 0.05 \
-    --batch_size 768 \
+    --batch_size 300 \
     --gradient_accumulate_every 1 \
     --train_iter 250000 \
     --weight_decay 0 \
@@ -26,7 +26,7 @@ python main_train.py \
     --min_lr_cosine_anneal 0 \
     --experiment_name tetra_all_atom_bs=768_weightdecay=0_trainlonger_fulldataset \
     --scale_data False \
-    --gradient_norm_threshold 10 \
+    --gradient_norm_threshold 2 \
     --num_samples 100 \
     --start_from_last_saved True \
 

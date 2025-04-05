@@ -446,21 +446,21 @@ def main(samp_args):
         else pd.read_csv(samp_args.split, index_col="name").index
     )
     for name in names:
-        try:
-            generate_samples(
-                model,
-                trainset,
-                samp_args.noise_level,
-                args,
-                device,
-                eval_folder,
-                testset,
-                name,
-                samp_args.sidechains,
-            )
-        except:
-            print(f"Failed to generate samples for {name}")
-            continue
+        # try:
+        generate_samples(
+            model,
+            trainset,
+            samp_args.noise_level,
+            args,
+            device,
+            eval_folder,
+            testset,
+            name,
+            samp_args.sidechains,
+        )
+        # except:
+        #     print(f"Failed to generate samples for {name}")
+        #     continue
 
     # writer.flush()
     # writer.close()
@@ -479,6 +479,7 @@ def generate_samples(
     sidechains=False,
 ):
     # Generate samples from diffusion model
+    bonds = None
     if name is None or name == "":
         iid_sample_path = Path(
             os.path.join(os.path.dirname(eval_folder), "main_eval_output_iid")
@@ -486,6 +487,9 @@ def generate_samples(
 
         protein_name = iid_sample_path.parts[-2]
     else:
+        topology = md.load_topology(f"/data/sanjeevr/4AA_sim/{name}/{name}.pdb")
+        bonds = [(bond[0].index, bond[1].index) for bond in topology.bonds]
+        bonds = torch.tensor(bonds, dtype=torch.long)
         protein_name = "tetrapeptide"
 
     if samp_args.gen_mode == "iid":
@@ -502,6 +506,12 @@ def generate_samples(
             if "tetrapeptide" in protein_name
             else None
         )
+        if z is not None:
+            n_atoms = (z != 0).count_nonzero().item()
+            # remove any rows of bonds which are greater than n_atoms (have to do this because of missing OXT atoms)
+            bonds = bonds[bonds[:, 0] < n_atoms]
+            bonds = bonds[bonds[:, 1] < n_atoms]
+
         sampled_mol = sample_from_model(
             sampler,
             samp_args.num_samples_eval // parallel_batches,
@@ -850,7 +860,6 @@ def generate_samples(
     )
 
     # Also save as gsd
-
     save_ovito_traj(
         (
             sampled_mol[:, z != 0]
@@ -860,7 +869,8 @@ def generate_samples(
         str(eval_folder) + f"/sample-{samp_args.gen_mode}{append_name}.gsd",
         align=samp_args.gen_mode == "iid",
         all_backbone="tetrapeptide" in protein_name and not sidechains,
-        create_bonds=not ("tetrapeptide" in protein_name and sidechains),
+        create_bonds=True,
+        bonds=bonds,
     )
 
     # Save subset as pdb - convert from angstrom to nm
