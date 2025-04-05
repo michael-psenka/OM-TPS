@@ -24,9 +24,9 @@ python sample.py \
     --sidechains \
     --gen_mode iid \
     --data_folder /data/sanjeevr/4AA_sim \
-    --split mdgen/splits/4AA_test.csv \
-    --num_samples_eval 10  \
-    --batch_size_gen 10 \
+    --split mdgen/splits/4AA_test_small.csv \
+    --num_samples_eval 25  \
+    --batch_size_gen 25 \
     --latent_time 0 \
     --initial_guess_level 100 \
     --subsample_points_percent 1.0 \
@@ -39,7 +39,7 @@ python sample.py \
     --path_length 100 \
     --om_dt 1 \
     --om_d 0.01 \
-    --steps 250 \
+    --steps 25 \
 
 # python main_train.py \
 #     --mol tetrapeptides \
