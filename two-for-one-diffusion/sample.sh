@@ -2,19 +2,21 @@ python main_train.py \
     --mol tetrapeptides \
     --atom_selection all-atom \
     --data_folder /data/sanjeevr/4AA_data  \
-    --eval_interval 1000 \
+    --eval_interval 1 \
     --warmup_proportion 0.05 \
-    --batch_size 192 \
-    --gradient_accumulate_every 16 \
-    --train_iter 20000 \
+    --batch_size 256 \
+    --gradient_accumulate_every 1 \
+    --train_iter 250000 \
     --weight_decay 0 \
     --learning_rate 4e-4 \
     --min_lr_cosine_anneal 0 \
-    --experiment_name tetra_all_atom_bs=3072_weightdecay=0 \
+    --experiment_name tetra_all_atom_bs=512_weightdecay=0_trainlonger_LARGER \
     --scale_data False \
-    --batch_size 256 \
-    --gradient_norm_threshold 1000000 \
-    --num_samples 100
+    --gradient_norm_threshold 100000 \
+    --num_samples 100 \
+    --start_from_last_saved True \
+    --num_layers_gnn 4 \
+    --hidden_features_gnn 256 \
 
 # python sample.py \
 #     --model_path saved_models/tetrapeptides_all_atom \

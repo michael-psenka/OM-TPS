@@ -336,7 +336,7 @@ class Trainer(object):
                     print(f"Gradient norm {grad_norm}")
                 if grad_norm <= self.args.gradient_norm_threshold:
                     # Clip gradient norms to 100
-                    clip_grad_norm_(self.model_dp.parameters(), max_norm=100.0)
+                    clip_grad_norm_(self.model_dp.parameters(), max_norm=1.0)
                     self.scaler.step(self.opt)
                     self.scaler.update()
                 else:
@@ -368,13 +368,15 @@ class Trainer(object):
                         else self.all_atom_protein_z.to(self.device)
                     )
                     # Evaluate i.i.d.
+
+                   
+                    # currently only works for single GPU, since z is an input to the model
                     sampled_mol = sample_from_model(
                         self.sampler_ema_dp,
                         self.num_saved_samples // self.parallel_batches,
                         self.batch_size // self.parallel_batches,
                         z=z,
                     )
-
                     # Save as gsd
                     save_ovito_traj(
                         sampled_mol,
@@ -394,6 +396,7 @@ class Trainer(object):
                         # Write metrics to Tensorboard
                         for key in results_dict:
                             self.writer.add_scalar(key, results_dict[key], self.step)
+                    
 
                     self.model.train()
                     self.model_dp.train()
