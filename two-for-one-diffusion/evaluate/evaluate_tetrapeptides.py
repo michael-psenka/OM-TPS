@@ -64,12 +64,9 @@ def evaluate_tetrapeptide(
         fig, axs = plt.subplots(3, 4, figsize=(20, 20))
     else:
         fig, axs = plt.subplots(1, 2, figsize=(20, 10))
-    import pdb
-
-    pdb.set_trace()
-    transformed_samples = tica.transform(gen_traj_cat)[:, :2].T
+    
     pyemma.plots.plot_free_energy(
-        transformed_samples,
+        *tica.transform(gen_traj_cat)[:, :2].T,
         ax=axs[0, 0] if "interpolate" in gen_mode else axs[1],
         cbar=False,
     )

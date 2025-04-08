@@ -22,11 +22,12 @@
 python sample.py \
     --model_path saved_models/tetrapeptides_all_atom \
     --sidechains \
+    --flow_matching \
     --gen_mode iid \
     --data_folder /data/sanjeevr/4AA_sim \
     --split mdgen/splits/4AA_test_small.csv \
-    --num_samples_eval 25  \
-    --batch_size_gen 25 \
+    --num_samples_eval 10000  \
+    --batch_size_gen 500 \
     --latent_time 0 \
     --initial_guess_level 100 \
     --subsample_points_percent 1.0 \
@@ -35,7 +36,7 @@ python sample.py \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
-    --append_exp_name test_march25_model \
+    --append_exp_name test_april8_model \
     --path_length 100 \
     --om_dt 1 \
     --om_d 0.01 \
