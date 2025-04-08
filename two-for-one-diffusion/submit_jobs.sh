@@ -4,7 +4,7 @@
 #SBATCH --partition=scavenger
 #SBATCH --qos=scavenger
 #SBATCH --nodelist=escher
-#SBATCH --gpus=2
+#SBATCH --gpus=1
 #SBATCH --time=48:00:00
 
 source /home/sanjeevr/mambaforge/etc/profile.d/conda.sh
@@ -19,17 +19,15 @@ python main_train.py \
     --flow_matching \
     --eval_interval 1000 \
     --warmup_proportion 0.15 \
-    --batch_size 512 \
+    --batch_size 384 \
     --gradient_accumulate_every 1 \
     --train_iter 250000 \
     --weight_decay 0 \
     --learning_rate 4e-4 \
     --min_lr_cosine_anneal 0 \
-    --experiment_name tetra_all_atom_flowmatching_bs=512_weightdecay=0_trainlonger_LARGER \
+    --experiment_name tetra_all_atom_flowmatching_bs=384_weightdecay=0_trainlonger_fulldataset \
     --scale_data False \
     --gradient_norm_threshold 100000 \
     --num_samples 100 \
     --start_from_last_saved False \
-    --num_layers_gnn 4 \
-    --hidden_features_gnn 256 \
 
