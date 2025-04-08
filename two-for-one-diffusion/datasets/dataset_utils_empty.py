@@ -186,19 +186,19 @@ def get_dataset(
         trainset = MDGenDataset(
             data_folder,
             suffix="_i100",
-            split="./mdgen/splits/4AA_train.csv",
+            split="./mdgen/splits/4AA_train_small.csv",
             atom_selection=tetra_atom_selection,
         )
         valset = MDGenDataset(
             data_folder,
             suffix="_i100",
-            split="./mdgen/splits/4AA_val.csv",
+            split="./mdgen/splits/4AA_val_small.csv",
             atom_selection=tetra_atom_selection,
         )
         testset = MDGenDataset(
             data_folder,
             suffix="_i100",
-            split="./mdgen/splits/4AA_test.csv",
+            split="./mdgen/splits/4AA_test_small.csv",
             atom_selection=tetra_atom_selection,
         )
 
