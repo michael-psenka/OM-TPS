@@ -1,6 +1,6 @@
 """
 Code provided by Yaoyi Chen, shared first author of:
-Köhler, Jonas, et al. "Flow-matching: Efficient coarse-graining of molecular dynamics without forces." 
+Köhler, Jonas, et al. "Flow-matching: Efficient coarse-graining of molecular dynamics without forces."
 Journal of Chemical Theory and Computation 19.3 (2023): 942-952.
 """
 

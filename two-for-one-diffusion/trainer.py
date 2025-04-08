@@ -375,7 +375,6 @@ class Trainer(object):
                             z=z,
                         )
 
-                   
                         # currently only works for single GPU, since z is an input to the model
                         sampled_mol = sample_from_model(
                             self.sampler_ema_dp,
@@ -390,7 +389,7 @@ class Trainer(object):
                             align=True,
                             all_backbone="tetrapeptides" in self.mol_name
                             and self.train_data.atom_selection == "backbone",
-                            create_bonds="tetrapeptides" not in self.mol_name
+                            create_bonds="tetrapeptides" not in self.mol_name,
                         )
 
                         if "tetrapeptides" not in self.mol_name:
@@ -401,12 +400,9 @@ class Trainer(object):
                             )
                         # Write metrics to Tensorboard
                         for key in results_dict:
-                            self.writer.add_scalar(
-                                key, results_dict[key], self.step
-                        )
+                            self.writer.add_scalar(key, results_dict[key], self.step)
                     except:
                         pass
-                        
 
                     self.model.train()
                     self.model_dp.train()
