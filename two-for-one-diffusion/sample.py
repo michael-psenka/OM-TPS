@@ -479,6 +479,7 @@ def generate_samples(
     sidechains=False,
 ):
     # Generate samples from diffusion model
+    bonds = None
     if name is None or name == "":
         iid_sample_path = Path(
             os.path.join(os.path.dirname(eval_folder), "main_eval_output_iid")
@@ -486,6 +487,9 @@ def generate_samples(
 
         protein_name = iid_sample_path.parts[-2]
     else:
+        topology = md.load_topology(f"/data/sanjeevr/4AA_sim/{name}/{name}.pdb")
+        bonds = [(bond[0].index, bond[1].index) for bond in topology.bonds]
+        bonds = torch.tensor(bonds, dtype=torch.long)
         protein_name = "tetrapeptide"
 
     if samp_args.gen_mode == "iid":
@@ -502,6 +506,12 @@ def generate_samples(
             if "tetrapeptide" in protein_name
             else None
         )
+        if z is not None:
+            n_atoms = (z != 0).count_nonzero().item()
+            # remove any rows of bonds which are greater than n_atoms (have to do this because of missing OXT atoms)
+            bonds = bonds[bonds[:, 0] < n_atoms]
+            bonds = bonds[bonds[:, 1] < n_atoms]
+
         sampled_mol = sample_from_model(
             sampler,
             samp_args.num_samples_eval // parallel_batches,
@@ -522,7 +532,7 @@ def generate_samples(
                     if file.endswith(f"{name}_metadata.pkl") and root != str(
                         eval_folder
                     ):
-                        # copy the metadata file to the eval_folder
+
                         shutil.copy(f"{root}/{name}_metadata.pkl", eval_folder)
                         break
 
@@ -558,7 +568,6 @@ def generate_samples(
                     },
                     open(f"{eval_folder}/{name}_metadata.pkl", "wb"),
                 )
-
             flux_mat = cmsm.transition_matrix * cmsm.pi[None, :]
             flux_mat[flux_mat < 0.0000001] = (
                 np.inf
@@ -566,7 +575,9 @@ def generate_samples(
             start_state, end_state = np.unravel_index(
                 np.argmin(flux_mat, axis=None), flux_mat.shape
             )
-            ref_discrete = msm.metastable_assignments[ref_kmeans]
+            ref_discrete = msm.metastable_assignments[
+                ref_kmeans[::100]
+            ]  # underlying data for training generative model is saved every 100 steps
             start_idxs = np.where(ref_discrete == start_state)[0]
             end_idxs = np.where(ref_discrete == end_state)[0]
             if (ref_discrete == start_state).sum() == 0 or (
@@ -575,7 +586,7 @@ def generate_samples(
                 RuntimeError("No start or end state found for ", name, "skipping...")
 
             # Now get start and end samples
-            arr = np.lib.format.open_memmap(f"{args.data_folder}/{name}.npy", "r")
+            arr = np.lib.format.open_memmap(f"{args.data_folder}/{name}_i100.npy", "r")
             (
                 endpoint_1_samples,
                 endpoint_2_samples,
@@ -842,9 +853,6 @@ def generate_samples(
     else:
         raise Exception("Wrong argument 'gen_mode'")
 
-    # if "tetrapeptide" in protein_name and sidechains and :
-    #     sampled_mol = sampled_mol[:, z != 0]  # remove padding atoms
-
     # Save generated samples
     append_name = "_" + name if name is not None else ""
     torch.save(
@@ -854,37 +862,47 @@ def generate_samples(
 
     # Also save as gsd
     save_ovito_traj(
-        sampled_mol,
+        (
+            sampled_mol[:, z != 0]
+            if "tetrapeptide" in protein_name and sidechains
+            else sampled_mol
+        ),
         str(eval_folder) + f"/sample-{samp_args.gen_mode}{append_name}.gsd",
         align=samp_args.gen_mode == "iid",
         all_backbone="tetrapeptide" in protein_name and not sidechains,
-        create_bonds=not ("tetrapeptide" in protein_name and sidechains),
+        create_bonds=True,
+        bonds=bonds,
     )
 
     # Save subset as pdb - convert from angstrom to nm
     if "tetrapeptide" in protein_name:
-        if "interpolate" in samp_args.gen_mode:
-            path = os.path.join(eval_folder, f"{name}_0.pdb")
-            if sidechains:
-                new_mol = sampled_mol.reshape(sampled_mol.shape[0], 4, 14, 3)
-            else:
-                mol = sampled_mol.reshape(sampled_mol.shape[0], 4, 3, 3)
-                new_mol = torch.zeros(mol.shape[0], 4, 14, 3)
-                new_mol[:, :, 0:3, :] = mol
-            metadata = []
-            # save pdb files of each sample separately
-            for i, batch in enumerate(new_mol.chunk(samp_args.num_samples_eval)):
-                atom14_to_pdb(
-                    batch.cpu().numpy(),
-                    np.array([restype_order[c] for c in name]),
-                    path,
-                )
 
-                traj = mdtraj.load(path)
-                traj.superpose(traj)
-                traj.save(os.path.join(eval_folder, f"{name}_{i}.xtc"))
-                traj[0].save(os.path.join(eval_folder, f"{name}_{i}.pdb"))
+        path = os.path.join(eval_folder, f"{name}_0.pdb")
+        if sidechains:
+            new_mol = sampled_mol.reshape(sampled_mol.shape[0], 4, 14, 3)
+        else:
+            mol = sampled_mol.reshape(sampled_mol.shape[0], 4, 3, 3)
+            new_mol = torch.zeros(mol.shape[0], 4, 14, 3)
+            new_mol[:, :, 0:3, :] = mol
+        metadata = []
+        # save pdb files of each sample separately
+        for i, batch in enumerate(
+            new_mol.chunk(samp_args.num_samples_eval)
+            if "interpolate" in samp_args.gen_mode
+            else [new_mol]
+        ):
+            atom14_to_pdb(
+                batch.cpu().numpy(),
+                np.array([restype_order[c] for c in name]),
+                path,
+            )
 
+            traj = mdtraj.load(path)
+            traj.superpose(traj)
+            traj.save(os.path.join(eval_folder, f"{name}_{i}.xtc"))
+            traj[0].save(os.path.join(eval_folder, f"{name}_{i}.pdb"))
+
+            if "interpolate" in samp_args.gen_mode:
                 metadata.append(
                     {
                         "name": name,
@@ -895,6 +913,13 @@ def generate_samples(
                         "path": path,
                     }
                 )
+            else:  # for non interpolation, just dummy dict
+                metadata.append(
+                    {
+                        "name": name,
+                    }
+                )
+
             json.dump(metadata, open(f"{eval_folder}/{name}_metadata.json", "w"))
 
     else:
@@ -907,17 +932,18 @@ def generate_samples(
 
     # Perform final evaluations (producing plots, GIFs, etc.)
     if "tetrapeptide" in protein_name:
-        if "interpolate" in samp_args.gen_mode:
-            evaluate_tetrapeptide(
-                name,
-                args.data_folder,
-                eval_folder,
-                eval_folder,
-                args.data_folder,
-                sidechains=sidechains,
-                save=True,
-                plot=True,
-            )
+
+        evaluate_tetrapeptide(
+            name,
+            samp_args.gen_mode,
+            args.data_folder,
+            eval_folder,
+            eval_folder,
+            args.data_folder,
+            sidechains=sidechains,
+            save=True,
+            plot=True,
+        )
 
     else:
         evaluate_fastfolders(

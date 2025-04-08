@@ -633,6 +633,7 @@ class MDGenDataset(torch.utils.data.Dataset):
         atom_selection="all-atom",
     ):
         super().__init__()
+
         self.df = pd.read_csv(split, index_col="name")
         self.repeat = repeat
         if atom_selection == "c-alpha":

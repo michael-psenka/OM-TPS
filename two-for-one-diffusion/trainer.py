@@ -21,7 +21,7 @@ from utils import (
     random_rotation,
 )
 
-from datasets.dataset_utils_empty import AtomSelection#, mae_to_pdb_atom_mapping
+from datasets.dataset_utils_empty import AtomSelection  # , mae_to_pdb_atom_mapping
 
 from logging_utils import save_ovito_traj
 
@@ -225,7 +225,6 @@ class Trainer(object):
         if start_from_last_saved:
             self.load()
             print("Settings loaded from last checkpoint")
-            
 
     def save(self, milestone: dict, save_best: bool = False):
         """
@@ -368,35 +367,46 @@ class Trainer(object):
                         else self.all_atom_protein_z.to(self.device)
                     )
                     # Evaluate i.i.d.
+                    try:
+                        sampled_mol = sample_from_model(
+                            self.sampler_ema_dp,
+                            self.num_saved_samples // self.parallel_batches,
+                            self.batch_size // self.parallel_batches,
+                            z=z,
+                        )
 
                    
-                    # currently only works for single GPU, since z is an input to the model
-                    sampled_mol = sample_from_model(
-                        self.sampler_ema_dp,
-                        self.num_saved_samples // self.parallel_batches,
-                        self.batch_size // self.parallel_batches,
-                        z=z,
-                    )
-                    # Save as gsd
-                    save_ovito_traj(
-                        sampled_mol,
-                        str(self.results_folder) + f"/samples.gsd",
-                        align=True,
-                        all_backbone="tetrapeptides" in self.mol_name
-                        and self.train_data.atom_selection == "backbone",
-                        create_bonds="tetrapeptides" not in self.mol_name
-                    )
-
-                    if "tetrapeptides" not in self.mol_name:
-                        results_dict = self.evaluator_val.eval(
-                            sampled_mol,
-                            milestone=str(milestone) + "_iid",
-                            save_plots=True,
+                        # currently only works for single GPU, since z is an input to the model
+                        sampled_mol = sample_from_model(
+                            self.sampler_ema_dp,
+                            self.num_saved_samples // self.parallel_batches,
+                            self.batch_size // self.parallel_batches,
+                            z=z,
                         )
+                        # Save as gsd
+                        save_ovito_traj(
+                            sampled_mol,
+                            str(self.results_folder) + f"/samples.gsd",
+                            align=True,
+                            all_backbone="tetrapeptides" in self.mol_name
+                            and self.train_data.atom_selection == "backbone",
+                            create_bonds="tetrapeptides" not in self.mol_name
+                        )
+
+                        if "tetrapeptides" not in self.mol_name:
+                            results_dict = self.evaluator_val.eval(
+                                sampled_mol,
+                                milestone=str(milestone) + "_iid",
+                                save_plots=True,
+                            )
                         # Write metrics to Tensorboard
                         for key in results_dict:
-                            self.writer.add_scalar(key, results_dict[key], self.step)
-                    
+                            self.writer.add_scalar(
+                                key, results_dict[key], self.step
+                        )
+                    except:
+                        pass
+                        
 
                     self.model.train()
                     self.model_dp.train()
@@ -407,7 +417,6 @@ class Trainer(object):
                         early_stopping_counter = 0
                     # if early_stopping_counter > 9:
                     #     break
-
                 pbar.update(1)
                 if hasattr(self, "scheduler"):
                     self.scheduler.step()
