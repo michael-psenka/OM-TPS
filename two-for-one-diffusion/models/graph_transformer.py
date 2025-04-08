@@ -116,9 +116,14 @@ class GraphTransformer(nn.Module):
                 z = z.to(self.device)
                 if len(z.shape) == 1:
                     z = z.unsqueeze(0).repeat(bs, 1)
+
+                if z.shape[0] != h.shape[0]: # multi-GPU issue
+                    z = z.repeat(h.shape[0] // z.shape[0], 1)
                 # find padding indices
                 padding_idx = z == 0
+                
                 z = self.bead_embedding(z)
+            
                 h = torch.cat((h, z), dim=2)
 
             # Concatenate node inputs
