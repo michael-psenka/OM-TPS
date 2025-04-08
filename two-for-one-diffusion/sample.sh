@@ -1,64 +1,22 @@
-# python main_train.py \
-#     --mol tetrapeptides \
-#     --atom_selection all-atom \
-#     --data_folder /data/sanjeevr/4AA_data  \
-#     --eval_interval 10 \
-#     --warmup_proportion 0.05 \
-#     --batch_size 3072 \
-#     --gradient_accumulate_every 1 \
-#     --train_iter 500000 \
-#     --weight_decay 0 \
-#     --learning_rate 4e-4 \
-#     --min_lr_cosine_anneal 0 \
-#     --experiment_name tetra_all_atom_bs=3072_weightdecay=0_fulldataset \
-#     --scale_data False \
-#     --batch_size 256 \
-#     --gradient_norm_threshold 100000 \
-#     --num_samples 100 \
-    # --start_from_last_saved True \
-
-
-
-python sample.py \
-    --model_path saved_models/tetrapeptides_all_atom \
-    --sidechains \
-    --flow_matching \
-    --gen_mode iid \
-    --data_folder /data/sanjeevr/4AA_sim \
-    --split mdgen/splits/4AA_test_small.csv \
-    --num_samples_eval 10000  \
-    --batch_size_gen 500 \
-    --latent_time 0 \
-    --initial_guess_level 100 \
-    --subsample_points_percent 1.0 \
-    --subsample_dimensions_percent 1.0 \
-    --no_encode_and_decode \
-    --action truncated \
-    --optimizer adam \
-    --lr 2e-1 \
-    --append_exp_name test_april8_model \
-    --path_length 100 \
-    --om_dt 1 \
-    --om_d 0.01 \
-    --steps 25 \
-
-# python main_train.py \
-#     --mol tetrapeptides \
-#     --atom_selection all-atom \
-#     --data_folder /data/sanjeevr/4AA_data  \
-#     --eval_interval 1000 \
-#     --warmup_proportion 0.05 \
-#     --batch_size 192 \
-#     --gradient_accumulate_every 16 \
-#     --train_iter 20000 \
-#     --weight_decay 0 \
-#     --learning_rate 4e-4 \
-#     --min_lr_cosine_anneal 0 \
-#     --experiment_name tetra_all_atom_bs=3072_weightdecay=0 \
-#     --scale_data False \
-#     --batch_size 256 \
-#     --gradient_norm_threshold 1000000 \
-#     --num_samples 100
+python main_train.py \
+    --mol tetrapeptides \
+    --atom_selection all-atom \
+    --data_folder /data/sanjeevr/4AA_data  \
+    --eval_interval 1 \
+    --warmup_proportion 0.05 \
+    --batch_size 256 \
+    --gradient_accumulate_every 1 \
+    --train_iter 250000 \
+    --weight_decay 0 \
+    --learning_rate 4e-4 \
+    --min_lr_cosine_anneal 0 \
+    --experiment_name tetra_all_atom_bs=512_weightdecay=0_trainlonger_LARGER \
+    --scale_data False \
+    --gradient_norm_threshold 100000 \
+    --num_samples 100 \
+    --start_from_last_saved True \
+    --num_layers_gnn 4 \
+    --hidden_features_gnn 256 \
 
 # python sample.py \
 #     --model_path saved_models/tetrapeptides_all_atom \
@@ -83,15 +41,15 @@ python sample.py \
 #     --om_d 0.01 \
 #     --steps 250 \
 
-
+# rerun with backbone only model
 # python sample.py \
 #     --model_path saved_models/tetrapeptides_all_atom \
 #     --sidechains \
 #     --gen_mode iid \
 #     --data_folder /data/sanjeevr/4AA_sim \
 #     --split mdgen/splits/4AA_test_small.csv \
-#     --num_samples_eval 5  \
-#     --batch_size_gen 5 \
+#     --num_samples_eval 1  \
+#     --batch_size_gen 1 \
 #     --latent_time 0 \
 #     --initial_guess_level 100 \
 #     --subsample_points_percent 1.0 \
@@ -100,7 +58,7 @@ python sample.py \
 #     --action truncated \
 #     --optimizer adam \
 #     --lr 2e-1 \
-#     --append_exp_name test_bettermodel \
+#     --append_exp_name test \
 #     --path_length 100 \
 #     --om_dt 1 \
 #     --om_d 0.01 \
@@ -112,7 +70,7 @@ python sample.py \
 #     --sidechains \
 #     --gen_mode om_interpolate \
 #     --data_folder /data/sanjeevr/4AA_sim \
-#     --split mdgen/splits/4AA_test_small.csv \
+#     --split mdgen/splits/4AA_val_small.csv \
 #     --num_samples_eval 4  \
 #     --batch_size_gen 2 \
 #     --latent_time 0 \
@@ -123,7 +81,7 @@ python sample.py \
 #     --action truncated \
 #     --optimizer adam \
 #     --lr 2e-1 \
-#     --append_exp_name initial_guess_level=100 \
+#     --append_exp_name initial_guess_level=100_valset \
 #     --path_length 100 \
 #     --om_dt 1 \
 #     --om_d 0.01 \
