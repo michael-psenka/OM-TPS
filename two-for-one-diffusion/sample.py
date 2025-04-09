@@ -446,21 +446,21 @@ def main(samp_args):
         else pd.read_csv(samp_args.split, index_col="name").index
     )
     for name in names:
-        try:
-            generate_samples(
-                model,
-                trainset,
-                samp_args.noise_level,
-                args,
-                device,
-                eval_folder,
-                testset,
-                name,
-                samp_args.sidechains,
-            )
-        except:
-            print(f"Failed to generate samples for {name}")
-            continue
+        # try:
+        generate_samples(
+            model,
+            trainset,
+            samp_args.noise_level,
+            args,
+            device,
+            eval_folder,
+            testset,
+            name,
+            samp_args.sidechains,
+        )
+        # except:
+        #     print(f"Failed to generate samples for {name}")
+        #     continue
 
     # writer.flush()
     # writer.close()
@@ -877,7 +877,6 @@ def generate_samples(
     # Save subset as pdb - convert from angstrom to nm
     if "tetrapeptide" in protein_name:
 
-        path = os.path.join(eval_folder, f"{name}_0.pdb")
         if sidechains:
             new_mol = sampled_mol.reshape(sampled_mol.shape[0], 4, 14, 3)
         else:
@@ -891,6 +890,7 @@ def generate_samples(
             if "interpolate" in samp_args.gen_mode
             else [new_mol]
         ):
+            path = os.path.join(eval_folder, f"{name}_{i}.pdb")
             atom14_to_pdb(
                 batch.cpu().numpy(),
                 np.array([restype_order[c] for c in name]),
@@ -900,7 +900,6 @@ def generate_samples(
             traj = mdtraj.load(path)
             traj.superpose(traj)
             traj.save(os.path.join(eval_folder, f"{name}_{i}.xtc"))
-            traj[0].save(os.path.join(eval_folder, f"{name}_{i}.pdb"))
 
             if "interpolate" in samp_args.gen_mode:
                 metadata.append(
