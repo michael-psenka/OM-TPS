@@ -6,7 +6,7 @@ import numpy as np
 import mdtraj as md
 import random
 from git import Repo
-from actions import SimpleAction, TruncatedAction
+from actions import TruncatedAction
 from rmsd import kabsch_rmsd, kabsch_rotate
 from scipy.linalg import svd
 

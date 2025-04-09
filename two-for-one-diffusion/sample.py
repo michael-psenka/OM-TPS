@@ -41,7 +41,7 @@ from utils import (
     cycle,
 )
 from logging_utils import save_ovito_traj
-from actions import SimpleAction, TruncatedAction, S2Action, HutchinsonAction
+from actions import TruncatedAction, S2Action, HutchinsonAction
 
 from dynamics.langevin import temp_dict
 import mdtraj as md
@@ -272,7 +272,7 @@ parser.add_argument(
 parser.add_argument(
     "--action",
     type=str,
-    help="Which action to use. Options: hessian, truncated, simple, or hutch",
+    help="Which action to use. Options: hessian, truncated, or hutch",
     default="truncated",
 )
 
@@ -485,17 +485,26 @@ def generate_samples(
         )
 
         protein_name = iid_sample_path.parts[-2]
+        z = None
     else:
         topology = md.load_topology(f"/data/sanjeevr/4AA_sim/{name}/{name}.pdb")
         bonds = [(bond[0].index, bond[1].index) for bond in topology.bonds]
         bonds = torch.tensor(bonds, dtype=torch.long)
         protein_name = "tetrapeptide"
 
-    z = (
-        get_bead_types(name, atom_selection="all-atom" if sidechains else "backbone")
-        if "tetrapeptide" in protein_name
-        else None
-    )
+        samp_args.masses = [atom.element.mass for atom in list(topology.atoms)]
+        z = get_bead_types(
+            name, atom_selection="all-atom" if sidechains else "backbone"
+        )
+        masses = torch.ones_like(z, dtype=torch.float32)
+        count = 0
+        # Account for the padding
+        for i in range(len(z)):
+            if z[i] != 0:
+                masses[i] = samp_args.masses[count]
+                count += 1
+            else:
+                masses[i] = 0
 
     if z is not None:
         n_atoms = (z != 0).count_nonzero().item()
@@ -672,8 +681,6 @@ def generate_samples(
                 action_cls = S2Action
             elif samp_args.action == "truncated":
                 action_cls = TruncatedAction
-            elif samp_args.action == "simple":
-                action_cls = SimpleAction
             elif samp_args.action == "hutch":
                 action_cls = HutchinsonAction
 
@@ -701,8 +708,9 @@ def generate_samples(
                     optimizer=optimizer,
                     lr=samp_args.lr,
                     dt=samp_args.om_dt,
-                    gamma=samp_args.om_gamma,
-                    D=samp_args.om_d,
+                    gamma=samp_args.om_gamma
+                    * torch.tensor(masses).unsqueeze(-1).to(device),
+                    D=samp_args.om_d / (trainset.std if args.scale_data else 1.0) ** 2,
                     anneal=samp_args.anneal,
                     sample_latent_time=samp_args.sample_latent_time,
                     cosine_scheduler=samp_args.cosine_scheduler,
@@ -827,7 +835,6 @@ def generate_samples(
         )
         # init_mol = torch.load("endpoint_1_samples_bba.pt")
 
-        masses = samp_args.masses
         if masses is None:
             if "alanine" in args.mol:
                 masses = [12.8] * trainset.num_beads

@@ -56,7 +56,7 @@ from datasets.dataset_utils_empty import (
     norm_stds,
 )
 
-from actions import S2Action, TruncatedAction, SimpleAction
+from actions import S2Action, TruncatedAction
 from utils import center_zero
 from logging_utils import get_interpolation_viz, visualize_gif, save_ovito_traj
 

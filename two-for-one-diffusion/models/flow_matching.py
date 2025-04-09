@@ -13,7 +13,7 @@ from ase import units
 import warnings
 from tqdm import tqdm
 from rmsd import kabsch_rotate, kabsch_rmsd
-from actions import S2Action, TruncatedAction, SimpleAction, HutchinsonAction
+from actions import S2Action, TruncatedAction, HutchinsonAction
 from dynamics.langevin import ForcesWrapper, temp_dict
 
 from utils import (
@@ -138,7 +138,7 @@ class FlowMatching(nn.Module):
             self.temp_data is not None
         ), "Temperature data must be provided for computing scaling factor"
         kbt_inv = self.kb_inv / self.temp_data
-        scaling_factor = -1 / (kbt_inv * self.sqrt_one_minus_alphas_cumprod[t])
+        scaling_factor = -1 / (kbt_inv * self.path.scheduler(t).sigma_t)
         return scaling_factor
 
     def force_func(self, x, t, z=None):
@@ -161,7 +161,11 @@ class FlowMatching(nn.Module):
         noise_pred = self.path.velocity_to_epsilon(
             velocity_pred, x, (1 - (1.0 * t / 10)).unsqueeze(-1).unsqueeze(-1)
         )
-        return -noise_pred
+        force = (
+            self.scaling_factor(1 - 1.0 * t / 10).unsqueeze(-1).unsqueeze(-1)
+            * noise_pred
+        )
+        return force
 
     def predict_start_from_noise(self, x_t, t, noise):
         """
@@ -753,8 +757,6 @@ class FlowMatching(nn.Module):
                             noised_xs_input_unique.reshape(-1, self.num_atoms, 3)
                         ).reshape(num_paths, num_points, self.num_atoms, 3)
 
-                    # TODO: gradients of forces w.r.t noised_xs_input are zero for some reason
-
                     # Subsample dimensions
                     if (
                         subsample_dimensions_percent is not None
@@ -795,8 +797,6 @@ class FlowMatching(nn.Module):
                     action_func(
                         x,
                         force,
-                        chunks_of_two=subsample_points_percent is not None,
-                        subsample_dimensions_percent=subsample_dimensions_percent,
                         mask=mask,
                     )
                     for x, force in zip(noised_xs_input, forces)
@@ -815,6 +815,7 @@ class FlowMatching(nn.Module):
                 laplace_terms.append(third_term.item())
 
                 optimizer.zero_grad()
+
                 (grads,) = torch.autograd.grad(action, noised_xs)
 
                 if add_noise:
@@ -948,7 +949,7 @@ class FlowMatching(nn.Module):
 
         t = 1.0 * t / self.num_timesteps
         path_sample = self.path.sample(t=t, x_0=noise, x_1=x_start)
-        path_sample.x_t = center_zero(path_sample.x_t) 
+        path_sample.x_t = center_zero(path_sample.x_t)
         model_out = self.model(path_sample.x_t, self.h, t, z)
 
         model_out = center_zero(model_out)
