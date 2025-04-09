@@ -335,7 +335,7 @@ class Trainer(object):
                     print(f"Gradient norm {grad_norm}")
                 if grad_norm <= self.args.gradient_norm_threshold:
                     # Clip gradient norms to 100
-                    clip_grad_norm_(self.model_dp.parameters(), max_norm=1.0)
+                    clip_grad_norm_(self.model_dp.parameters(), max_norm=10.0)
                     self.scaler.step(self.opt)
                     self.scaler.update()
                 else:

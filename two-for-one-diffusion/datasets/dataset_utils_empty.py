@@ -188,21 +188,21 @@ def get_dataset(
             suffix="_i100",
             split="./mdgen/splits/4AA_train.csv",
             atom_selection=tetra_atom_selection,
-            overfit_peptide="AVGR",
+            # overfit_peptide="AVGR",
         )
         valset = MDGenDataset(
             data_folder,
             suffix="_i100",
             split="./mdgen/splits/4AA_val.csv",
             atom_selection=tetra_atom_selection,
-            overfit_peptide="AVGR",
+            # overfit_peptide="AVGR",
         )
         testset = MDGenDataset(
             data_folder,
             suffix="_i100",
             split="./mdgen/splits/4AA_test.csv",
             atom_selection=tetra_atom_selection,
-            overfit_peptide="AVGR",
+            # overfit_peptide="AVGR",
         )
 
     elif "alanine_dipeptide" not in mol.lower():

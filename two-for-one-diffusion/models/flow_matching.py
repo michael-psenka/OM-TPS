@@ -948,7 +948,7 @@ class FlowMatching(nn.Module):
 
         t = 1.0 * t / self.num_timesteps
         path_sample = self.path.sample(t=t, x_0=noise, x_1=x_start)
-        path_sample.x_t = center_zero(path_sample.x_t)
+        path_sample.x_t = center_zero(path_sample.x_t) 
         model_out = self.model(path_sample.x_t, self.h, t, z)
 
         model_out = center_zero(model_out)

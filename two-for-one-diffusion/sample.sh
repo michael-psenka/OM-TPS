@@ -15,7 +15,7 @@ python sample.py \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
-    --append_exp_name test_AVGR_overfit_model_intrinsic_purenoise \
+    --append_exp_name test_AVGR_overfit_model \
     --path_length 100 \
     --om_dt 1 \
     --om_d 0.01 \
