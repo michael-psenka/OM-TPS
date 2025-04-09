@@ -446,21 +446,21 @@ def main(samp_args):
         else pd.read_csv(samp_args.split, index_col="name").index
     )
     for name in names:
-        try:
-            generate_samples(
-                model,
-                trainset,
-                samp_args.noise_level,
-                args,
-                device,
-                eval_folder,
-                testset,
-                name,
-                samp_args.sidechains,
-            )
-        except:
-            print(f"Failed to generate samples for {name}")
-            continue
+        # try:
+        generate_samples(
+            model,
+            trainset,
+            samp_args.noise_level,
+            args,
+            device,
+            eval_folder,
+            testset,
+            name,
+            samp_args.sidechains,
+        )
+        # except:
+        #     print(f"Failed to generate samples for {name}")
+        #     continue
 
     # writer.flush()
     # writer.close()
@@ -492,6 +492,18 @@ def generate_samples(
         bonds = torch.tensor(bonds, dtype=torch.long)
         protein_name = "tetrapeptide"
 
+    z = (
+        get_bead_types(name, atom_selection="all-atom" if sidechains else "backbone")
+        if "tetrapeptide" in protein_name
+        else None
+    )
+
+    if z is not None:
+        n_atoms = (z != 0).count_nonzero().item()
+        # remove any rows of bonds which are greater than n_atoms (have to do this because of missing OXT atoms)
+        bonds = bonds[bonds[:, 0] < n_atoms]
+        bonds = bonds[bonds[:, 1] < n_atoms]
+
     if samp_args.gen_mode == "iid":
         sampler = SamplerWrapper(model.ema_model).to(device).eval()
         if torch.cuda.device_count() > 1 and device == "cuda":
@@ -499,18 +511,6 @@ def generate_samples(
             parallel_batches = torch.cuda.device_count()
         else:
             parallel_batches = 1
-        z = (
-            get_bead_types(
-                name, atom_selection="all-atom" if sidechains else "backbone"
-            )
-            if "tetrapeptide" in protein_name
-            else None
-        )
-        if z is not None:
-            n_atoms = (z != 0).count_nonzero().item()
-            # remove any rows of bonds which are greater than n_atoms (have to do this because of missing OXT atoms)
-            bonds = bonds[bonds[:, 0] < n_atoms]
-            bonds = bonds[bonds[:, 1] < n_atoms]
 
         sampled_mol = sample_from_model(
             sampler,

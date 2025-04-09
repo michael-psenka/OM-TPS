@@ -20,12 +20,12 @@
 
 python sample.py \
     --model_path saved_models/tetrapeptides_all_atom \
-    --gen_mode iid \
+    --gen_mode om_interpolate \
     --flow_matching \
     --data_folder /data/sanjeevr/4AA_sim \
     --split mdgen/splits/4AA_test_small.csv \
-    --num_samples_eval 10000  \
-    --batch_size_gen 500 \
+    --num_samples_eval 4  \
+    --batch_size_gen 2 \
     --sidechains \
     --latent_time 0.5 \
     --initial_guess_level 7 \
@@ -39,7 +39,7 @@ python sample.py \
     --path_length 100 \
     --om_dt 1 \
     --om_d 0.01 \
-    --steps 250 \
+    --steps 50 \
 
 # rerun with backbone only model
 # python sample.py \
