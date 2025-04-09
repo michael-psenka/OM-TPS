@@ -815,7 +815,6 @@ class FlowMatching(nn.Module):
                 laplace_terms.append(third_term.item())
 
                 optimizer.zero_grad()
-
                 (grads,) = torch.autograd.grad(action, noised_xs)
 
                 if add_noise:
