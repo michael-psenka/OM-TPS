@@ -18,14 +18,37 @@
 #     --num_layers_gnn 4 \
 #     --hidden_features_gnn 256 \
 
+# python sample.py \
+#     --model_path saved_models/tetrapeptides_all_atom \
+#     --gen_mode om_interpolate \
+#     --flow_matching \
+#     --data_folder /data/sanjeevr/4AA_sim \
+#     --split mdgen/splits/4AA_test_small.csv \
+#     --num_samples_eval 4  \
+#     --batch_size_gen 2 \
+#     --sidechains \
+#     --latent_time 0.5 \
+#     --initial_guess_level 7 \
+#     --subsample_points_percent 1.0 \
+#     --subsample_dimensions_percent 1.0 \
+#     --no_encode_and_decode \
+#     --action truncated \
+#     --optimizer adam \
+#     --lr 2e-1 \
+#     --append_exp_name test_april8_model_larger \
+#     --path_length 100 \
+#     --om_dt 1 \
+#     --om_d 0.01 \
+#     --steps 50 \
+
 python sample.py \
     --model_path saved_models/tetrapeptides_all_atom \
-    --gen_mode om_interpolate \
+    --gen_mode iid \
     --flow_matching \
     --data_folder /data/sanjeevr/4AA_sim \
-    --split mdgen/splits/4AA_test_small.csv \
-    --num_samples_eval 4  \
-    --batch_size_gen 2 \
+    --split mdgen/splits/4AA_train_small.csv \
+    --num_samples_eval 10000  \
+    --batch_size_gen 500 \
     --sidechains \
     --latent_time 0.5 \
     --initial_guess_level 7 \
@@ -35,12 +58,12 @@ python sample.py \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
-    --append_exp_name test_april8_model_larger \
+    --append_exp_name test_april8_model_larger_train \
     --path_length 100 \
     --om_dt 1 \
     --om_d 0.01 \
-    --steps 50 \
-
+    --steps 250 \
+    
 # rerun with backbone only model
 # python sample.py \
 #     --model_path saved_models/tetrapeptides_all_atom \
