@@ -860,7 +860,7 @@ def generate_samples(
     # Save generated samples
     append_name = "_" + name if name is not None else ""
     torch.save(
-        sampled_mol,
+        sampled_mol[:, z != 0],
         str(str(eval_folder) + f"/sample-{samp_args.gen_mode}{append_name}.pt"),
     )
 
@@ -944,6 +944,7 @@ def generate_samples(
             eval_folder,
             args.data_folder,
             sidechains=sidechains,
+            num_paths=samp_args.num_samples_eval,
             save=True,
             plot=True,
         )

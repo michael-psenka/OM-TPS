@@ -6,14 +6,31 @@ import pickle
 import pandas as pd
 from multiprocessing import Pool
 
+
 from scipy.spatial.distance import jensenshannon
 
 import mdgen.mdgen.analysis
 import pyemma, tqdm, os
 import numpy as np
+import torch
 import matplotlib.pyplot as plt
 
-# TODO: add rate evaluations and checks for unphysical collisions
+# Energy calculation imports:
+# import openmm, mdtraj
+# from openmm.app import PDBFile, ForceField, Modeller, PME, HBonds
+# from openmm import unit, LangevinMiddleIntegrator, Platform, MonteCarloBarostat
+
+
+def compute_energies(coords, topology_path):
+    import pdb; pdb.set_trace()
+    pdb = PDBFile(topology_path + ".pdb")
+    forcefield = ForceField('amber14-all.xml', 'amber14/tip3pfb.xml')
+    modeller = Modeller(pdb.topology, pdb.positions)
+    modeller.addHydrogens(forcefield, pH=7)
+    modeller.addSolvent(forcefield, padding=1.0 * unit.nanometer)
+    system = forcefield.createSystem(modeller.topology, nonbondedMethod=PME,
+                                    nonbondedCutoff=1.0 * unit.nanometer,
+                                    constraints=HBonds)
 
 
 def evaluate_tetrapeptide(
@@ -24,6 +41,7 @@ def evaluate_tetrapeptide(
     pdbdir,
     repdir,
     sidechains=False,
+    num_paths=4,
     save=False,
     plot=False,
     traj_len=11,
@@ -59,6 +77,11 @@ def evaluate_tetrapeptide(
         name, pdbdir, sidechains=sidechains
     )  # also loads iid samples based on gen mode
     gen_traj_cat = np.concatenate(gen_traj_list, axis=0)
+
+    raw_coords = torch.load(os.path.join(pdbdir, f"sample-{gen_mode}_{name}.pt"), weights_only = True)
+    raw_coords = raw_coords.reshape(num_paths, -1, raw_coords.shape[-2], 3)
+
+    energies = compute_energies(raw_coords, f"{mddir}/{name}/{name}")
 
     if "interpolate" in gen_mode:
         fig, axs = plt.subplots(3, 4, figsize=(20, 20))

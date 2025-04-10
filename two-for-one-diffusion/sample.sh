@@ -16,10 +16,10 @@ python sample.py \
     --optimizer adam \
     --lr 2e-1 \
     --append_exp_name test_april9_model_intrinsic_larger_fulldataset \
-    --path_length 50 \
+    --path_length 100 \
     --om_dt 0.002 \
-    --om_gamma 0.3 \
-    --steps 250 \
+    --om_gamma 1 \
+    --steps 10 \
 
 # python main_train.py \
 #     --mol tetrapeptides \

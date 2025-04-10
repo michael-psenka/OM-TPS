@@ -12,7 +12,6 @@ from os.path import join
 from deeptime.clustering import MiniBatchKMeans
 from deeptime.markov import TransitionCountEstimator, pcca
 from sklearn.preprocessing import normalize
-import seaborn as sns
 from scipy.spatial.distance import jensenshannon
 from pathlib import Path
 import os
