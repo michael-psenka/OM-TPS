@@ -503,8 +503,6 @@ def generate_samples(
             if z[i] != 0:
                 masses[i] = samp_args.masses[count]
                 count += 1
-            else:
-                masses[i] = 0
 
     if z is not None:
         n_atoms = (z != 0).count_nonzero().item()

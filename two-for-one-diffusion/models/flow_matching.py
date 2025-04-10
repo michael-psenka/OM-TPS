@@ -649,6 +649,7 @@ class FlowMatching(nn.Module):
         )
 
         # Optimization of path using OM action
+
         with torch.enable_grad():
             noised_xs.requires_grad = True
 

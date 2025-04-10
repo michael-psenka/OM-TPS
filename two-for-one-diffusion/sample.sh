@@ -14,9 +14,9 @@ python sample.py \
     --no_encode_and_decode \
     --action truncated \
     --optimizer adam \
-    --lr 1e-5 \
+    --lr 2e-1 \
     --append_exp_name test_april9_model_intrinsic_larger_fulldataset \
-    --path_length 100 \
+    --path_length 50 \
     --om_dt 0.002 \
     --om_gamma 0.3 \
     --steps 250 \
