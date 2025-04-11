@@ -10,6 +10,7 @@ from actions import TruncatedAction
 from rmsd import kabsch_rmsd, kabsch_rotate
 from scipy.linalg import svd
 
+
 NUM_RESIDUES_TO_PROTEIN = {
     10: "chignolin",
     20: "trp_cage",

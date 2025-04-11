@@ -15,11 +15,11 @@ python sample.py \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
-    --append_exp_name test_april9_model_intrinsic_larger_fulldataset \
+    --append_exp_name test \
     --path_length 100 \
-    --om_dt 0.002 \
+    --om_dt 0.0002 \
     --om_gamma 1 \
-    --steps 10 \
+    --steps 5 \
 
 # python main_train.py \
 #     --mol tetrapeptides \
