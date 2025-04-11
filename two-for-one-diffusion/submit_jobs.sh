@@ -18,7 +18,7 @@ python sample.py \
     --flow_matching \
     --gen_mode om_interpolate \
     --data_folder /data/sanjeevr/4AA_sim \
-    --split mdgen/splits/4AA_test.csv \
+    --split mdgen/splits/4AA_test_AVGR.csv \
     --num_samples_eval 4  \
     --batch_size_gen 2 \
     --latent_time 0.5 \

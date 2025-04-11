@@ -19,7 +19,7 @@ python sample.py \
     --path_length 100 \
     --om_dt 0.0002 \
     --om_gamma 1 \
-    --steps 5 \
+    --steps 250 \
 
 # python main_train.py \
 #     --mol tetrapeptides \

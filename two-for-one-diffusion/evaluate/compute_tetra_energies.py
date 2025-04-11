@@ -30,9 +30,11 @@ def fix_pdb_file(pdb_path):
     has_written_header = False
     print("Adding Missing Heavy Atoms and Hydrogens to PDB File")
     with open(new_path, "w") as output_pdb:
+        count = 0
         for i in tqdm(range(input_pdb.getNumFrames())):
             # Create an in-memory PDB file containing just the one frame.
-            if i % 5 == 0:
+            if i % 5 == 0 or i == input_pdb.getNumFrames() - 1:
+                count+=1
                 output = StringIO()
                 PDBFile.writeFile(
                     input_pdb.topology, input_pdb.getPositions(frame=i), output
@@ -48,7 +50,7 @@ def fix_pdb_file(pdb_path):
                     PDBFile.writeHeader(fixer.topology, output_pdb)
                     has_written_header = True
                 PDBFile.writeModel(
-                    fixer.topology, fixer.positions, output_pdb, i // 5 + 1
+                    fixer.topology, fixer.positions, output_pdb, count
                 )
         PDBFile.writeFooter(fixer.topology, output_pdb)
     return new_path
@@ -59,7 +61,6 @@ def compute_energies(pdb_path):
     new_path = fix_pdb_file(pdb_path)  # Add missing heavy atoms and hydrogens
 
     # Read multi-frame PDB
-
     with open(new_path, "r") as f:
         pdb_text = f.read()
 
@@ -118,16 +119,16 @@ if __name__ == "__main__":
     energies = torch.stack(
         [torch.tensor(compute_energies(pdb_file)) for pdb_file in pdb_files]
     )
-    import pdb
-
-    pdb.set_trace()
+    torch.save(energies, os.path.join(args.pdb_dir, f"energies_{args.name}.pt"))
     if args.plot:
         plt.figure(figsize=(10, 6))
         for energy in energies:
+            energy = energy - energy.min() + 1e-3
             plt.plot(range(len(energy)), energy, label="Potential Energy")
         plt.xlabel("Frame")
         plt.ylabel("Potential Energy (kJ/mol)")
+        plt.yscale("log")
         plt.title("Energy Profile Across PDB Frames")
         plt.grid(True)
         plt.tight_layout()
-        plt.savefig(os.path.join(args.pdb_dir, "energy_profiles.png"))
+        plt.savefig(os.path.join(args.pdb_dir, f"energy_profiles_{args.name}.png"))
