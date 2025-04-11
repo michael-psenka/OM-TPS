@@ -20,44 +20,47 @@ def fix_pdb_file(pdb_path):
     """
     Adds missing heavy atoms and hydrogens to a potentially multi-frame pdb file.
     """
-    output_path = pdb_path
     # first use MDtraj to fix issues with pdb file by loading and resaving
     top = md.load(pdb_path)
-    top.save_pdb(pdb_path)
+    # Save the fixed PDB file
+    new_path = os.path.splitext(pdb_path)[0] + "_fixed.pdb"
+    top.save_pdb(new_path)
 
-    input_pdb = PDBFile(pdb_path)
+    input_pdb = PDBFile(new_path)
     has_written_header = False
     print("Adding Missing Heavy Atoms and Hydrogens to PDB File")
-    with open(output_path, "w") as output_pdb:
+    with open(new_path, "w") as output_pdb:
         for i in tqdm(range(input_pdb.getNumFrames())):
             # Create an in-memory PDB file containing just the one frame.
-            if i > 5:
-                break
-            output = StringIO()
-            PDBFile.writeFile(
-                input_pdb.topology, input_pdb.getPositions(frame=i), output
-            )
-            # Process it with PDBFixer.
-            fixer = PDBFixer(pdbfile=StringIO(output.getvalue()))
-            fixer.missingResidues = {}
-            fixer.findMissingAtoms()
-            fixer.addMissingAtoms()
-            fixer.addMissingHydrogens(pH=7.0)
-            # Write the result to the output file.
-            if not has_written_header:
-                PDBFile.writeHeader(fixer.topology, output_pdb)
-                has_written_header = True
-            PDBFile.writeModel(fixer.topology, fixer.positions, output_pdb, i + 1)
+            if i % 5 == 0:
+                output = StringIO()
+                PDBFile.writeFile(
+                    input_pdb.topology, input_pdb.getPositions(frame=i), output
+                )
+                # Process it with PDBFixer.
+                fixer = PDBFixer(pdbfile=StringIO(output.getvalue()))
+                fixer.missingResidues = {}
+                fixer.findMissingAtoms()
+                fixer.addMissingAtoms()
+                fixer.addMissingHydrogens(pH=7.0)
+                # Write the result to the output file.
+                if not has_written_header:
+                    PDBFile.writeHeader(fixer.topology, output_pdb)
+                    has_written_header = True
+                PDBFile.writeModel(
+                    fixer.topology, fixer.positions, output_pdb, i // 5 + 1
+                )
         PDBFile.writeFooter(fixer.topology, output_pdb)
+    return new_path
 
 
 def compute_energies(pdb_path):
 
-    fix_pdb_file(pdb_path)  # Add missing heavy atoms and hydrogens
+    new_path = fix_pdb_file(pdb_path)  # Add missing heavy atoms and hydrogens
 
     # Read multi-frame PDB
 
-    with open(pdb_path, "r") as f:
+    with open(new_path, "r") as f:
         pdb_text = f.read()
 
     # Split into frames based on MODEL / ENDMDL
@@ -76,7 +79,6 @@ def compute_energies(pdb_path):
 
         # Build modeller and add hydrogens
         modeller = Modeller(pdb.topology, pdb.positions)
-        modeller.addHydrogens(forcefield)
 
         # Create system without solvent
         system = forcefield.createSystem(
@@ -116,6 +118,9 @@ if __name__ == "__main__":
     energies = torch.stack(
         [torch.tensor(compute_energies(pdb_file)) for pdb_file in pdb_files]
     )
+    import pdb
+
+    pdb.set_trace()
     if args.plot:
         plt.figure(figsize=(10, 6))
         for energy in energies:
