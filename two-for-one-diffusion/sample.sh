@@ -1,12 +1,11 @@
 python sample.py \
-    --model_path saved_models/tetrapeptides_all_atom \
-    --sidechains \
+    --model_path saved_models/tetrapeptides \
     --flow_matching \
-    --gen_mode om_interpolate \
+    --gen_mode iid \
     --data_folder /data/sanjeevr/4AA_sim \
-    --split mdgen/splits/4AA_test_AVGR.csv \
-    --num_samples_eval 4  \
-    --batch_size_gen 2 \
+    --split mdgen/splits/4AA_test_small.csv \
+    --num_samples_eval 10000  \
+    --batch_size_gen 500 \
     --latent_time 0.5 \
     --initial_guess_level 7 \
     --subsample_points_percent 1.0 \
