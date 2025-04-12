@@ -41,7 +41,7 @@ def evaluate_tetrapeptide(
     print(f"Evaluating {name}")
     # Activate om_diffusion environment, which has OpenMM installed to compute energies
     subprocess.run(
-        f"conda run -n om-diffusion python evaluate/compute_tetra_energies.py --pdb_dir {pdbdir} --name {name} --plot {plot}",
+        f"conda run -n om-diffusion python evaluate/compute_tetra_energies.py --gen_mode {gen_mode} --pdb_dir {pdbdir} --name {name} --plot {plot}",
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,

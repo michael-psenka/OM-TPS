@@ -14,5 +14,5 @@ PDB_DIR="$BASE_DIR/$FOLDER_SUFFIX"
 tail -n +2 "$CSV_FILE" | while IFS=, read -r name _; do
     name=$(echo "$name" | xargs)  # Trim any leading/trailing whitespace
     echo "Processing $name..."
-    python evaluate/compute_tetra_energies.py --pdb_dir "$PDB_DIR" --name "$name" --plot True
+    python evaluate/compute_tetra_energies.py --pdb_dir "$PDB_DIR" --name "$name" --plot True --gen_mode om_interpolate
 done

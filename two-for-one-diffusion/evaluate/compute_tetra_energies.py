@@ -16,7 +16,7 @@ from openmm.unit import *
 import torch
 
 
-def fix_pdb_file(pdb_path):
+def fix_pdb_file(pdb_path, freq=5):
     """
     Adds missing heavy atoms and hydrogens to a potentially multi-frame pdb file.
     """
@@ -33,7 +33,7 @@ def fix_pdb_file(pdb_path):
         count = 0
         for i in tqdm(range(input_pdb.getNumFrames())):
             # Create an in-memory PDB file containing just the one frame.
-            if i % 5 == 0 or i == input_pdb.getNumFrames() - 1:
+            if i % freq == 0 or i == input_pdb.getNumFrames() - 1:
                 count+=1
                 output = StringIO()
                 PDBFile.writeFile(
@@ -56,11 +56,11 @@ def fix_pdb_file(pdb_path):
     return new_path
 
 
-def compute_energies(pdb_path):
+def compute_energies(pdb_path, compute_freq = 5):
 
-    new_path = fix_pdb_file(pdb_path)  # Add missing heavy atoms and hydrogens
+    new_path = fix_pdb_file(pdb_path, freq = compute_freq)  # Add missing heavy atoms and hydrogens
 
-    # Read multi-frame PDB
+    # Read multi-frame PDB    
     with open(new_path, "r") as f:
         pdb_text = f.read()
 
@@ -108,6 +108,7 @@ if __name__ == "__main__":
         description="Compute energies of a multi-frame PDB file."
     )
     parser.add_argument("--pdb_dir", type=str, help="Dir of the multi-frame PDB files.")
+    parser.add_argument("--gen_mode", type=str, help="generation mode: iid, interpolate, or om_interpolate.")
     parser.add_argument("--name", type=str, help="Name of the tetrapeptide.")
     parser.add_argument(
         "--plot", type=bool, default=False, help="Whether to plot the energies."
@@ -115,9 +116,12 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    pdb_files = [os.path.join(args.pdb_dir, f"{args.name}_{i}.pdb") for i in range(4)]
+    if args.gen_mode == "iid": 
+        pdb_files = [os.path.join(args.pdb_dir, f"{args.name}_{i}.pdb") for i in range(1)]
+    else:
+        pdb_files = [os.path.join(args.pdb_dir, f"{args.name}_{i}.pdb") for i in range(1, 4)]
     energies = torch.stack(
-        [torch.tensor(compute_energies(pdb_file)) for pdb_file in pdb_files]
+        [torch.tensor(compute_energies(pdb_file, compute_freq = 100 if args.gen_mode == "iid" else 5)) for pdb_file in pdb_files]
     )
     torch.save(energies, os.path.join(args.pdb_dir, f"energies_{args.name}.pt"))
     if args.plot:
