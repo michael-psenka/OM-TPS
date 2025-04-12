@@ -1,6 +1,5 @@
 python sample.py \
-    --model_path saved_models/tetrapeptides_all_atom \
-    --sidechains \
+    --model_path saved_models/tetrapeptides \
     --flow_matching \
     --gen_mode iid \
     --data_folder /data/sanjeevr/4AA_sim \

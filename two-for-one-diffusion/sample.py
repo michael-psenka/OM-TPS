@@ -488,8 +488,9 @@ def generate_samples(
         z = None
     else:
         topology = md.load_topology(f"/data/sanjeevr/4AA_sim/{name}/{name}.pdb")
-        bonds = [(bond[0].index, bond[1].index) for bond in topology.bonds]
-        bonds = torch.tensor(bonds, dtype=torch.long)
+        if sidechains:
+            bonds = [(bond[0].index, bond[1].index) for bond in topology.bonds]
+            bonds = torch.tensor(bonds, dtype=torch.long)
         protein_name = "tetrapeptide"
 
         samp_args.masses = [atom.element.mass for atom in list(topology.atoms)]
@@ -504,9 +505,10 @@ def generate_samples(
                 masses[i] = samp_args.masses[count]
                 count += 1
 
-    if z is not None:
+    if z is not None and bonds is not None:
         n_atoms = (z != 0).count_nonzero().item()
         # remove any rows of bonds which are greater than n_atoms (have to do this because of missing OXT atoms)
+
         bonds = bonds[bonds[:, 0] < n_atoms]
         bonds = bonds[bonds[:, 1] < n_atoms]
 
