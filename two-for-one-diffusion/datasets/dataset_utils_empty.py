@@ -663,15 +663,16 @@ class MDGenDataset(torch.utils.data.Dataset):
     def __len__(self):
         if self.overfit_peptide:
             return 1000
-        return self.repeat * len(self.df)
+        return 10000 * len(self.df)
 
     def __getitem__(self, idx):
-        idx = idx % len(self.df)
+        protein = idx // 10000
+        t_idx = idx % 10000
         if self.overfit:
             idx = 0
 
         if self.overfit_peptide is None:
-            name = self.df.index[idx]
+            name = self.df.index[protein]
             seqres = self.df.seqres[name]
         else:
             name = self.overfit_peptide
@@ -689,7 +690,7 @@ class MDGenDataset(torch.utils.data.Dataset):
 
         # arr should be in ANGSTROMS
         # pick a random frame in the trajectory
-        t_idx = np.random.randint(0, arr.shape[0])
+        # t_idx = np.random.randint(0, arr.shape[0])
         frame = torch.tensor(arr[t_idx], dtype=torch.float32)
 
         if self.atom_selection == "c-alpha":
