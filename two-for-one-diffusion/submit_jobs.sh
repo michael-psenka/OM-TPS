@@ -1,11 +1,11 @@
 #!/bin/bash
 #SBATCH --mail-type=BEGIN,END,FAIL  # Send email when job begins, ends, or fails
 #SBATCH --mail-user=sanjeevr@umich.edu  # Replace with your email
-#SBATCH --partition=scavenger
-#SBATCH --qos=scavenger
+#SBATCH --partition=long
+#SBATCH --qos=long
 #SBATCH --nodelist=germain
-#SBATCH --gpus=1
-#SBATCH --time=24:00:00
+#SBATCH --gpus=2
+#SBATCH --time=72:00:00
 
 source /home/sanjeevr/mambaforge/etc/profile.d/conda.sh
 conda activate alphaflow
@@ -53,4 +53,4 @@ python main_train.py \
     --scale_data False \
     --gradient_norm_threshold 100000 \
     --num_samples 100 \
-    --start_from_last_saved False \
+    --start_from_last_saved True \

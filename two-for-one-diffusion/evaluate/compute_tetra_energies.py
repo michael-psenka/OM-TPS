@@ -11,9 +11,26 @@ import matplotlib.pyplot as plt
 import io
 import matplotlib.pyplot as plt
 from openmm.app import PDBFile, ForceField, Modeller, Simulation, NoCutoff, HBonds
-from openmm import VerletIntegrator
+from openmm import VerletIntegrator, LocalEnergyMinimizer
 from openmm.unit import *
 import torch
+from rmsd import kabsch_rmsd
+from logging_utils import save_ovito_traj
+
+def minimize_with_rmsd_limit(simulation, max_rmsd=0.5, max_total_steps=100, step_size=10):
+    """Run energy minimization in steps, stopping early if RMSD exceeds threshold."""
+    initial_pos = simulation.context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(angstroms)
+
+    for step in range(0, max_total_steps, step_size):
+        LocalEnergyMinimizer.minimize(simulation.context, maxIterations=step_size)
+        current_pos = simulation.context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(angstroms)
+
+        rmsd = kabsch_rmsd(initial_pos, current_pos)
+
+        if rmsd > max_rmsd:
+            print(f"Stopping early: RMSD {rmsd:.3f} Å exceeds cutoff {max_rmsd:.3f} Å after {step + step_size} steps")
+            return current_pos, rmsd
+    return current_pos, rmsd  # final pos and rmsd if threshold not exceeded
 
 
 def fix_pdb_file(pdb_path, freq=5):
@@ -54,51 +71,55 @@ def fix_pdb_file(pdb_path, freq=5):
     return new_path
 
 
-def compute_energies(pdb_path, compute_freq=5):
+def compute_energies(pdb_path, compute_freq=5, output_path="energy_minimized_2.gsd", max_rmsd=0.5):
+    new_path = fix_pdb_file(pdb_path, freq=compute_freq)  # Add missing atoms
+    topology = md.load_topology(new_path)
+    bonds = [(bond[0].index, bond[1].index) for bond in topology.bonds]
+    bonds = np.array(bonds)
 
-    new_path = fix_pdb_file(
-        pdb_path, freq=compute_freq
-    )  # Add missing heavy atoms and hydrogens
-
-    # Read multi-frame PDB
     with open(new_path, "r") as f:
         pdb_text = f.read()
 
-    # Split into frames based on MODEL / ENDMDL
     frames = pdb_text.split("ENDMDL")
     frames = [frame.strip() + "\nENDMDL\n" for frame in frames if "MODEL" in frame]
 
-    # Load force field
     forcefield = ForceField("amber14-all.xml")
-
     energies = []
+    positions = []
 
-    print("Computing energies...")
+    
+    print("Computing energies with RMSD thresholding...")
     for i, frame in tqdm(enumerate(frames)):
-        # Load frame into PDBFile using a StringIO buffer
         pdb = PDBFile(io.StringIO(frame))
-
-        # Build modeller and add hydrogens
         modeller = Modeller(pdb.topology, pdb.positions)
 
-        # Create system without solvent
         system = forcefield.createSystem(
             modeller.topology, nonbondedMethod=NoCutoff, constraints=HBonds
         )
 
-        # Create integrator and simulation context
         integrator = VerletIntegrator(1.0 * femtoseconds)
         simulation = Simulation(modeller.topology, system, integrator)
         simulation.context.setPositions(modeller.positions)
 
-        # Get potential energy
+        # Minimize with RMSD limit
+        minimized_pos, rmsd = minimize_with_rmsd_limit(
+            simulation, max_rmsd=max_rmsd, max_total_steps=1, step_size=10
+        )
+
+        # Compute energy
         state = simulation.context.getState(getEnergy=True)
-        potential_energy = state.getPotentialEnergy().value_in_unit(kilojoule_per_mole)
-        energies.append(potential_energy)
+        energy = state.getPotentialEnergy().value_in_unit(kilojoule_per_mole)
+        energies.append(energy)
+        positions.append(minimized_pos)
 
-    energies = np.array(energies)
+        print(f"Frame {i}: Energy = {energy:.2f} kJ/mol | RMSD = {rmsd:.3f} Å")
 
-    return energies
+    # Write to OVITO
+    positions = np.array(positions)
+    save_ovito_traj(positions, output_path, align=False, all_backbone=False, create_bonds = True, bonds = bonds)
+    
+
+    return np.array(energies)
 
 
 if __name__ == "__main__":

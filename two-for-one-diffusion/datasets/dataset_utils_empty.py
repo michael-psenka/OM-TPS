@@ -188,6 +188,7 @@ def get_dataset(
             suffix="_i100",
             split="./mdgen/splits/4AA_train.csv",
             atom_selection=tetra_atom_selection,
+            train=True,
             # overfit_peptide="AVGR",
         )
         valset = MDGenDataset(
@@ -195,6 +196,7 @@ def get_dataset(
             suffix="_i100",
             split="./mdgen/splits/4AA_val.csv",
             atom_selection=tetra_atom_selection,
+            train=False,
             # overfit_peptide="AVGR",
         )
         testset = MDGenDataset(
@@ -202,6 +204,7 @@ def get_dataset(
             suffix="_i100",
             split="./mdgen/splits/4AA_test.csv",
             atom_selection=tetra_atom_selection,
+            train=False,
             # overfit_peptide="AVGR",
         )
 
@@ -634,6 +637,7 @@ class MDGenDataset(torch.utils.data.Dataset):
         atlas=False,
         repeat=1,
         atom_selection="all-atom",
+        train=True,
     ):
         super().__init__()
 
@@ -651,6 +655,7 @@ class MDGenDataset(torch.utils.data.Dataset):
         self.overfit = overfit
         self.overfit_peptide = overfit_peptide
         self.atom_selection = atom_selection
+        self.train = train
 
         # remove proteins for which we don't have any data (not sure why we couldn't download these)
         new_index = deepcopy(self.df.index)
@@ -663,11 +668,16 @@ class MDGenDataset(torch.utils.data.Dataset):
     def __len__(self):
         if self.overfit_peptide:
             return 1000
-        return 10000 * len(self.df)
+        return 10000 * len(self.df) if self.train else 1000 * len(self.df)
 
     def __getitem__(self, idx):
-        protein = idx // 10000
-        t_idx = idx % 10000
+        if self.train:
+            protein = idx // 10000
+            t_idx = idx % 10000
+        else:
+            protein = idx // 1000
+            t_idx = (idx % 1000) * 10
+        
         if self.overfit:
             idx = 0
 

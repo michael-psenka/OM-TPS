@@ -490,7 +490,7 @@ def generate_samples(
         topology = md.load_topology(f"/data/sanjeevr/4AA_sim/{name}/{name}.pdb")
         if sidechains:
             bonds = [(bond[0].index, bond[1].index) for bond in topology.bonds]
-            bonds = torch.tensor(bonds, dtype=torch.long)
+            bonds = np.array(bonds)
         protein_name = "tetrapeptide"
 
         samp_args.masses = [atom.element.mass for atom in list(topology.atoms)]
