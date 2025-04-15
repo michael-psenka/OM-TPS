@@ -86,7 +86,15 @@ def fix_pdb_file(pdb_path, freq=5):
     return new_path
 
 
-def compute_energies(pdb_path, compute_freq=5, max_minimization_steps=200, max_rmsd=0.5):
+def compute_energies(
+    pdb_path, compute_freq=5, max_minimization_steps=200, max_rmsd=0.5
+):
+    """
+    Top level function to compute energies of a multi-frame PDB file.
+    Adds missing heavy atoms and hydrogens, and then performs some energy minimization,
+    before evaluating energies with Amber FF.
+
+    """
     new_path = fix_pdb_file(pdb_path, freq=compute_freq)  # Add missing atoms
     topology = md.load_topology(new_path)
     bonds = [(bond[0].index, bond[1].index) for bond in topology.bonds]
@@ -103,6 +111,7 @@ def compute_energies(pdb_path, compute_freq=5, max_minimization_steps=200, max_r
     positions = []
 
     print("Computing energies with RMSD thresholding...")
+
     for i, frame in tqdm(enumerate(frames)):
         pdb = PDBFile(io.StringIO(frame))
         modeller = Modeller(pdb.topology, pdb.positions)
@@ -120,17 +129,28 @@ def compute_energies(pdb_path, compute_freq=5, max_minimization_steps=200, max_r
 
         # Minimize with RMSD limit (keep endpoints fixed)
         minimized_pos, rmsd = minimize_with_rmsd_limit(
-            simulation, max_rmsd=max_rmsd, max_total_steps=0 if i == 0 or i==len(frames)-1 else max_minimization_steps, step_size=10
+            simulation,
+            max_rmsd=max_rmsd,
+            max_total_steps=(
+                0 if i == 0 or i == len(frames) - 1 else max_minimization_steps
+            ),
+            step_size=10,
         )
 
-        # Compute energy
         state = simulation.context.getState(getEnergy=True)
         energy_after = state.getPotentialEnergy().value_in_unit(kilojoule_per_mole)
+
         energies.append(energy_after)
         positions.append(minimized_pos)
 
-        print(f"Frame {i}: Energy Change = {energy_after - energy_before:.2f} kJ/mol | RMSD = {rmsd:.3f} Å")
-    return np.array(energies), np.array(positions), bonds
+        print(
+            f"Frame {i}: Energy Change = {energy_after - energy_before:.2f} kJ/mol | RMSD = {rmsd:.3f} Å"
+        )
+    # Save as xtc
+    positions = np.array(positions)
+    traj = md.Trajectory(positions / 10, topology=topology)
+    traj.save(new_path.split(".pdb")[0] + ".xtc")
+    return np.array(energies), positions, bonds
 
 
 if __name__ == "__main__":
@@ -146,7 +166,12 @@ if __name__ == "__main__":
         help="generation mode: iid, interpolate, or om_interpolate.",
     )
     parser.add_argument("--name", type=str, help="Name of the tetrapeptide.")
-    parser.add_argument("--max_minimization_steps", type=int, default = 200, help="Maximum number of energy minimization steps to perform.")
+    parser.add_argument(
+        "--max_minimization_steps",
+        type=int,
+        default=200,
+        help="Maximum number of energy minimization steps to perform.",
+    )
     parser.add_argument(
         "--plot", type=bool, default=False, help="Whether to plot the energies."
     )
