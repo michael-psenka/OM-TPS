@@ -72,6 +72,7 @@ def evaluate_tetrapeptide(
     if "interpolate" in gen_mode:
         print("Reference Transition Path Analysis")
 
+    # TODO: make this load the new samples after energy minimization
     gen_feats_list, gen_traj_list = mdgen.mdgen.analysis.load_tps_ensemble(
         name, pdbdir, sidechains=sidechains
     )  # also loads iid samples based on gen mode

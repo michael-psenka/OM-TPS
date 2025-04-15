@@ -677,7 +677,7 @@ class MDGenDataset(torch.utils.data.Dataset):
         else:
             protein = idx // 1000
             t_idx = (idx % 1000) * 10
-        
+
         if self.overfit:
             idx = 0
 

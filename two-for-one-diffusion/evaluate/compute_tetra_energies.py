@@ -17,18 +17,33 @@ import torch
 from rmsd import kabsch_rmsd
 from logging_utils import save_ovito_traj
 
-def minimize_with_rmsd_limit(simulation, max_rmsd=0.5, max_total_steps=100, step_size=10):
+
+def minimize_with_rmsd_limit(
+    simulation, max_rmsd=0.5, max_total_steps=100, step_size=10
+):
     """Run energy minimization in steps, stopping early if RMSD exceeds threshold."""
-    initial_pos = simulation.context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(angstroms)
+    initial_pos = (
+        simulation.context.getState(getPositions=True)
+        .getPositions(asNumpy=True)
+        .value_in_unit(angstroms)
+    )
+    current_pos = initial_pos
+    rmsd = 0.0
 
     for step in range(0, max_total_steps, step_size):
         LocalEnergyMinimizer.minimize(simulation.context, maxIterations=step_size)
-        current_pos = simulation.context.getState(getPositions=True).getPositions(asNumpy=True).value_in_unit(angstroms)
+        current_pos = (
+            simulation.context.getState(getPositions=True)
+            .getPositions(asNumpy=True)
+            .value_in_unit(angstroms)
+        )
 
         rmsd = kabsch_rmsd(initial_pos, current_pos)
 
         if rmsd > max_rmsd:
-            print(f"Stopping early: RMSD {rmsd:.3f} Å exceeds cutoff {max_rmsd:.3f} Å after {step + step_size} steps")
+            print(
+                f"Stopping early: RMSD {rmsd:.3f} Å exceeds cutoff {max_rmsd:.3f} Å after {step + step_size} steps"
+            )
             return current_pos, rmsd
     return current_pos, rmsd  # final pos and rmsd if threshold not exceeded
 
@@ -71,7 +86,7 @@ def fix_pdb_file(pdb_path, freq=5):
     return new_path
 
 
-def compute_energies(pdb_path, compute_freq=5, output_path="energy_minimized.gsd", max_rmsd=0.5):
+def compute_energies(pdb_path, compute_freq=5, max_minimization_steps=200, max_rmsd=0.5):
     new_path = fix_pdb_file(pdb_path, freq=compute_freq)  # Add missing atoms
     topology = md.load_topology(new_path)
     bonds = [(bond[0].index, bond[1].index) for bond in topology.bonds]
@@ -87,7 +102,6 @@ def compute_energies(pdb_path, compute_freq=5, output_path="energy_minimized.gsd
     energies = []
     positions = []
 
-    
     print("Computing energies with RMSD thresholding...")
     for i, frame in tqdm(enumerate(frames)):
         pdb = PDBFile(io.StringIO(frame))
@@ -101,25 +115,22 @@ def compute_energies(pdb_path, compute_freq=5, output_path="energy_minimized.gsd
         simulation = Simulation(modeller.topology, system, integrator)
         simulation.context.setPositions(modeller.positions)
 
-        # Minimize with RMSD limit
+        state = simulation.context.getState(getEnergy=True)
+        energy_before = state.getPotentialEnergy().value_in_unit(kilojoule_per_mole)
+
+        # Minimize with RMSD limit (keep endpoints fixed)
         minimized_pos, rmsd = minimize_with_rmsd_limit(
-            simulation, max_rmsd=max_rmsd, max_total_steps=100, step_size=10
+            simulation, max_rmsd=max_rmsd, max_total_steps=0 if i == 0 or i==len(frames)-1 else max_minimization_steps, step_size=10
         )
 
         # Compute energy
         state = simulation.context.getState(getEnergy=True)
-        energy = state.getPotentialEnergy().value_in_unit(kilojoule_per_mole)
-        energies.append(energy)
+        energy_after = state.getPotentialEnergy().value_in_unit(kilojoule_per_mole)
+        energies.append(energy_after)
         positions.append(minimized_pos)
 
-        print(f"Frame {i}: Energy = {energy:.2f} kJ/mol | RMSD = {rmsd:.3f} Å")
-
-    # Write to OVITO
-    positions = np.array(positions)
-    save_ovito_traj(positions, output_path, align=False, all_backbone=False, create_bonds = True, bonds = bonds)
-    
-
-    return np.array(energies)
+        print(f"Frame {i}: Energy Change = {energy_after - energy_before:.2f} kJ/mol | RMSD = {rmsd:.3f} Å")
+    return np.array(energies), np.array(positions), bonds
 
 
 if __name__ == "__main__":
@@ -135,6 +146,7 @@ if __name__ == "__main__":
         help="generation mode: iid, interpolate, or om_interpolate.",
     )
     parser.add_argument("--name", type=str, help="Name of the tetrapeptide.")
+    parser.add_argument("--max_minimization_steps", type=int, default = 200, help="Maximum number of energy minimization steps to perform.")
     parser.add_argument(
         "--plot", type=bool, default=False, help="Whether to plot the energies."
     )
@@ -147,23 +159,37 @@ if __name__ == "__main__":
         ]
     else:
         pdb_files = [
-            os.path.join(args.pdb_dir, f"{args.name}_{i}.pdb") for i in range(1, 4)
+            os.path.join(args.pdb_dir, f"{args.name}_{i}.pdb") for i in range(4)
         ]
-    energies = torch.stack(
-        [
-            torch.tensor(
-                compute_energies(
-                    pdb_file, compute_freq=100 if args.gen_mode == "iid" else 5
-                )
-            )
-            for pdb_file in pdb_files
-        ]
+
+    out = [
+        compute_energies(
+            pdb_file,
+            compute_freq=100 if args.gen_mode == "iid" else 5,
+            max_minimization_steps=args.max_minimization_steps,
+            max_rmsd=1.0,
+        )
+        for pdb_file in pdb_files
+    ]
+    energies = torch.stack([torch.tensor(o[0]) for o in out], dim=0)
+    positions = torch.cat([torch.tensor(o[1]) for o in out], dim=0)
+    bonds = out[0][2]
+
+    # Save new OVITO trajectory
+    save_ovito_traj(
+        positions,
+        os.path.join(args.pdb_dir, f"sample-{args.gen_mode}_{args.name}_fixed.gsd"),
+        align=args.gen_mode == "iid",
+        all_backbone=False,
+        create_bonds=True,
+        bonds=bonds,
     )
+
     torch.save(energies, os.path.join(args.pdb_dir, f"energies_{args.name}.pt"))
     if args.plot:
         plt.figure(figsize=(10, 6))
         for energy in energies:
-            energy = energy - energy.min() + 1e-3
+            energy = energy - energy.min() + 1
             plt.plot(range(len(energy)), energy, label="Potential Energy")
         plt.xlabel("Frame")
         plt.ylabel("Potential Energy (kJ/mol)")
