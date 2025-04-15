@@ -71,7 +71,7 @@ def fix_pdb_file(pdb_path, freq=5):
     return new_path
 
 
-def compute_energies(pdb_path, compute_freq=5, output_path="energy_minimized_2.gsd", max_rmsd=0.5):
+def compute_energies(pdb_path, compute_freq=5, output_path="energy_minimized.gsd", max_rmsd=0.5):
     new_path = fix_pdb_file(pdb_path, freq=compute_freq)  # Add missing atoms
     topology = md.load_topology(new_path)
     bonds = [(bond[0].index, bond[1].index) for bond in topology.bonds]
@@ -103,7 +103,7 @@ def compute_energies(pdb_path, compute_freq=5, output_path="energy_minimized_2.g
 
         # Minimize with RMSD limit
         minimized_pos, rmsd = minimize_with_rmsd_limit(
-            simulation, max_rmsd=max_rmsd, max_total_steps=1, step_size=10
+            simulation, max_rmsd=max_rmsd, max_total_steps=100, step_size=10
         )
 
         # Compute energy
