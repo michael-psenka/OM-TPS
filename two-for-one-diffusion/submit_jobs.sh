@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --mail-type=BEGIN,END,FAIL  # Send email when job begins, ends, or fails
 #SBATCH --mail-user=sanjeevr@umich.edu  # Replace with your email
-#SBATCH --partition=long
-#SBATCH --qos=long
+#SBATCH --partition=scavenger
+#SBATCH --qos=scavenger
 #SBATCH --nodelist=germain
 #SBATCH --gpus=2
 #SBATCH --time=72:00:00

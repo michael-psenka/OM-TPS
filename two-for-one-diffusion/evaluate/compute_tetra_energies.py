@@ -168,6 +168,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("--name", type=str, help="Name of the tetrapeptide.")
     parser.add_argument(
+        "--num_paths",
+        type=int,
+        default=16,
+        help="Number of paths to compute energies for.",
+    )
+    parser.add_argument(
         "--max_minimization_steps",
         type=int,
         default=200,
@@ -185,13 +191,13 @@ if __name__ == "__main__":
         ]
     else:
         pdb_files = [
-            os.path.join(args.pdb_dir, f"{args.name}_{i}.pdb") for i in range(4)
+            os.path.join(args.pdb_dir, f"{args.name}_{i}.pdb") for i in range(args.num_paths)
         ]
 
     out = [
         compute_energies(
             pdb_file,
-            compute_freq=100 if args.gen_mode == "iid" else 5,
+            compute_freq=100 if args.gen_mode == "iid" else 10,
             max_minimization_steps=args.max_minimization_steps,
             max_rmsd=1.0,
         )

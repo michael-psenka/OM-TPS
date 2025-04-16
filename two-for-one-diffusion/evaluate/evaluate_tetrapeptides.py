@@ -38,7 +38,7 @@ def evaluate_tetrapeptide(
     # This adds missing atoms, performs a small energy minimization, and computes energies
     # for the generated tetrapeptide conformations/paths
     result = subprocess.run(
-        f"conda run -n om-diffusion python evaluate/compute_tetra_energies.py --gen_mode {gen_mode} --pdb_dir {pdbdir} --name {name}",
+        f"conda run -n om-diffusion python evaluate/compute_tetra_energies.py --gen_mode {gen_mode} --pdb_dir {pdbdir} --name {name} --num_paths {num_paths}",
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -88,7 +88,6 @@ def evaluate_tetrapeptide(
         ax=axs[0, 0] if "interpolate" in gen_mode else axs[1],
         cbar=False,
     )
-
     if "interpolate" in gen_mode:
         axs[0, 1].scatter(
             tica.transform(ref)[start_idx, 0],
@@ -133,14 +132,16 @@ def evaluate_tetrapeptide(
     else:
         axs[0].set_title("Reference MD in TICA space with start and end state")
 
-    # Now load the fixed samples for MSM analysis
-    gen_feats_list, gen_traj_list = mdgen.mdgen.analysis.load_tps_ensemble(
-        name, pdbdir, sidechains=sidechains, fixed=True
-    )  # also loads iid samples based on gen mode
-
-    gen_traj_cat = np.concatenate(gen_traj_list, axis=0)
+    
+    
 
     if "interpolate" in gen_mode:
+        # Now load the fixed samples for MSM analysis
+        gen_feats_list, gen_traj_list = mdgen.mdgen.analysis.load_tps_ensemble(
+            name, pdbdir, sidechains=sidechains, fixed=True
+        )  # also loads iid samples based on gen mode
+
+        gen_traj_cat = np.concatenate(gen_traj_list, axis=0)
         out = pickle.load(open(os.path.join(pdbdir, f"{name}_metadata.pkl"), "rb"))
         msm = out["msm"]
         cmsm = out["cmsm"]
@@ -166,9 +167,6 @@ def evaluate_tetrapeptide(
         gen_discrete = mdgen.mdgen.analysis.discretize(
             tica.transform(np.concatenate(gen_traj_list)), kmeans, msm
         )
-        import pdb
-
-        pdb.set_trace()
         gen_tp_all = gen_discrete.reshape((len(gen_traj_list), -1))
         gen_tp = gen_tp_all[
             :, :: math.floor(gen_tp_all.shape[1] / (traj_len - 1))

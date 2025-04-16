@@ -5,7 +5,7 @@ python sample.py \
     --gen_mode iid \
     --data_folder /data/sanjeevr/4AA_sim \
     --split mdgen/splits/4AA_test_AVGR.csv \
-    --num_samples_eval 10000  \
+    --num_samples_eval 1000  \
     --batch_size_gen 500 \
     --latent_time 0 \
     --initial_guess_level 7 \
