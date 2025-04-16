@@ -96,6 +96,7 @@ def compute_energies(
 
     """
     new_path = fix_pdb_file(pdb_path, freq=compute_freq)  # Add missing atoms
+
     topology = md.load_topology(new_path)
     bonds = [(bond[0].index, bond[1].index) for bond in topology.bonds]
     bonds = np.array(bonds)
@@ -173,7 +174,7 @@ if __name__ == "__main__":
         help="Maximum number of energy minimization steps to perform.",
     )
     parser.add_argument(
-        "--plot", type=bool, default=False, help="Whether to plot the energies."
+        "--dont_plot", action="store_true", help="Whether to plot the energies."
     )
 
     args = parser.parse_args()
@@ -211,7 +212,7 @@ if __name__ == "__main__":
     )
 
     torch.save(energies, os.path.join(args.pdb_dir, f"energies_{args.name}.pt"))
-    if args.plot:
+    if not args.dont_plot:
         plt.figure(figsize=(10, 6))
         for energy in energies:
             energy = energy - energy.min() + 1
