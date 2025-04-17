@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --mail-type=BEGIN,END,FAIL  # Send email when job begins, ends, or fails
 #SBATCH --mail-user=sanjeevr@umich.edu  # Replace with your email
-#SBATCH --partition=scavenger
-#SBATCH --qos=scavenger
-#SBATCH --nodelist=escher
+#SBATCH --partition=long
+#SBATCH --qos=long
+#SBATCH --nodelist=germain
 #SBATCH --gpus=1
 #SBATCH --time=24:00:00
 
@@ -25,7 +25,7 @@ python sample.py \
     --no_encode_and_decode \
     --action truncated \
     --optimizer adam \
-    --lr 1e-5 \
+    --lr 2e-1 \
     --append_exp_name test_initial_latent_time_250_physical_params_FINAL \
     --om_dt 0.001 \
     --om_gamma 1 \
@@ -47,7 +47,7 @@ python sample.py \
     --no_encode_and_decode \
     --action truncated \
     --optimizer adam \
-    --lr 1e-5 \
+    --lr 2e-1 \
     --append_exp_name test_initial_latent_time_250_physical_params_FINAL \
     --om_dt 0.001 \
     --om_gamma 1 \
@@ -136,7 +136,7 @@ python sample.py \
     --no_encode_and_decode \
     --action truncated \
     --optimizer sgd \
-    --lr 1e-5 \
+    --lr 2e-1 \
     --append_exp_name test_initial_latent_time_250_SGD_physical_params_FINAL \
     --om_dt 0.001 \
     --om_gamma 1 \
@@ -158,7 +158,7 @@ python sample.py \
     --no_encode_and_decode \
     --action truncated \
     --optimizer sgd \
-    --lr 1e-5 \
+    --lr 2e-1 \
     --append_exp_name test_initial_latent_time_250_SGD_physical_params_FINAL \
     --om_dt 0.001 \
     --om_gamma 1 \

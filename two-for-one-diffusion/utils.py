@@ -10,9 +10,9 @@ from git import Repo
 from actions import TruncatedAction
 from rmsd import kabsch_rmsd, kabsch_rotate
 from scipy.linalg import svd
-from torchmd.parameters import Parameters
-from torchmd.forcefields.forcefield import ForceField
-from moleculekit.molecule import Molecule
+# from torchmd.parameters import Parameters
+# from torchmd.forcefields.forcefield import ForceField
+# from moleculekit.molecule import Molecule
 
 NUM_RESIDUES_TO_PROTEIN = {
     10: "chignolin",
