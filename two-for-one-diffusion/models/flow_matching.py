@@ -164,10 +164,11 @@ class FlowMatching(nn.Module):
         noise_pred = self.path.velocity_to_epsilon(
             velocity_pred, x, (1 - (1.0 * t / 10)).unsqueeze(-1).unsqueeze(-1)
         )
-        return (
-            self.scaling_factor(1 - (1.0 * t / 10)).unsqueeze(-1).unsqueeze(-1)
+        force = (
+            self.scaling_factor(1 - 1.0 * t / 10).unsqueeze(-1).unsqueeze(-1)
             * noise_pred
         )
+        return force
 
     def predict_start_from_noise(self, x_t, t, noise):
         """
