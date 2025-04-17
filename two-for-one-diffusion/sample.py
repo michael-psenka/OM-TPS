@@ -406,7 +406,7 @@ def main(samp_args):
         wandb.login()
         wandb.init(
             project=(
-                "fastfolders"
+                "fastfolders_physicalparams"
                 if "tetrapeptide" not in samp_args.model_path
                 else "tetrapeptide"
             ),

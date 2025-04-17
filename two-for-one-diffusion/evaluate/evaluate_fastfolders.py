@@ -588,11 +588,19 @@ def evaluate_fastfolders(
         "Path Probability Mean": (
             path_probabilities.mean() if path_probabilities is not None else None
         ),
+        "Valid Path Probability Mean": (
+            path_probabilities[path_probabilities > 0].mean() if path_probabilities is not None else None
+        ),
         "Path Probability Std": (
             path_probabilities.std() if path_probabilities is not None else None
         ),
-        "Path Log Probability Mean": (
-            path_log_probabilities.mean() / traj_len
+        "Path Negative Log Probability Mean (Normalized)": (
+            - path_log_probabilities.mean() / traj_len
+            if path_log_probabilities is not None
+            else None
+        ),
+        "Valid Path Negative Log Probability Mean (Normalized)": (
+            - path_log_probabilities[path_probabilities > 0].mean() / traj_len
             if path_log_probabilities is not None
             else None
         ),

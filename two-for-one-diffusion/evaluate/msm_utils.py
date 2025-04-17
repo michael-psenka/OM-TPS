@@ -66,7 +66,7 @@ def get_tp_log_likelihood(tp, trans):
         t = i + 1
         s_t = tp[:, i]
 
-        # The original code's 'numerator' and 'probs' steps stay the same,
+        # The original function's 'numerator' and 'probs' steps stay the same,
         # but we move to log-space before appending to 'log_trans_probs'.
         numerator = np.linalg.matrix_power(trans, N - t - 1)[:, s_N] * trans[s_t, :]
         denom = np.linalg.matrix_power(trans, N - t)[s_t, s_N][:, None]
