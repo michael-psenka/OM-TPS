@@ -445,21 +445,21 @@ def main(samp_args):
         else pd.read_csv(samp_args.split, index_col="name").index
     )
     for name in names:
-        try:
-            generate_samples(
-                model,
-                trainset,
-                samp_args.noise_level,
-                args,
-                device,
-                eval_folder,
-                testset,
-                name,
-                samp_args.sidechains,
-            )
-        except:
-            print(f"Failed to generate samples for {name}")
-            continue
+        # try:
+        generate_samples(
+            model,
+            trainset,
+            samp_args.noise_level,
+            args,
+            device,
+            eval_folder,
+            testset,
+            "AKIR",
+            samp_args.sidechains,
+        )
+        # except:
+        #     print(f"Failed to generate samples for {name}")
+        #     continue
 
     # writer.flush()
     # writer.close()
@@ -546,9 +546,9 @@ def generate_samples(
 
             if os.path.exists(f"{eval_folder}/{name}_metadata.pkl"):
                 # load the existing data
-                pkl_metadata = pickle.load(
-                    open(f"{eval_folder}/{name}_metadata.pkl", "rb")
-                )
+                # pkl_metadata = pickle.load(open(f"{eval_folder}/{name}_metadata.pkl", "rb"))
+                pkl_metadata = pickle.load(open(f"/home/sanjeevr/om-diffusion/two-for-one-diffusion/test/{name}_metadata.pkl", "rb"))
+                # print("file name", f"/home/sanjeevr/om-diffusion/two-for-one-diffusion/mdgen/test/{name}_metadata.pkl")
                 msm = pkl_metadata["msm"]
                 cmsm = pkl_metadata["cmsm"]
                 ref_kmeans = pkl_metadata["ref_kmeans"]
@@ -583,18 +583,23 @@ def generate_samples(
             start_state, end_state = np.unravel_index(
                 np.argmin(flux_mat, axis=None), flux_mat.shape
             )
-            ref_discrete = msm.metastable_assignments[
-                ref_kmeans[::100]
-            ]  # underlying data for training generative model is saved every 100 steps
+            import pdb; pdb.set_trace()
+            ref_discrete = msm.metastable_assignments[ref_kmeans]  # underlying data for training generative model is saved every 100 steps
             start_idxs = np.where(ref_discrete == start_state)[0]
             end_idxs = np.where(ref_discrete == end_state)[0]
+            # import pdb; pdb.set_trace()
+
+            np.save("our_start_idxs.npy", start_idxs)
+            np.save("our_end_idxs.npy", end_idxs)
+            # start_idxs = np.where(ref_discrete[::100] == start_state)[0]
+            # end_idxs = np.where(ref_discrete[::100] == end_state)[0]
             if (ref_discrete == start_state).sum() == 0 or (
                 ref_discrete == end_state
             ).sum() == 0:
                 RuntimeError("No start or end state found for ", name, "skipping...")
 
             # Now get start and end samples
-            arr = np.lib.format.open_memmap(f"{args.data_folder}/{name}_i100.npy", "r")
+            arr = np.lib.format.open_memmap(f"{args.data_folder}/{name}.npy", "r")
             (
                 endpoint_1_samples,
                 endpoint_2_samples,

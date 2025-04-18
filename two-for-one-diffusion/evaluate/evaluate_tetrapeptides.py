@@ -90,18 +90,20 @@ def evaluate_tetrapeptide(
         ax=axs[0, 0] if "interpolate" in gen_mode else axs[1],
         cbar=False,
     )
+    start_idx = np.load("our_mdgen_start_idxs.npy")[::100]
+    end_idx = np.load("our_mdgen_end_idxs.npy")[::100]
     if "interpolate" in gen_mode:
         axs[0, 1].scatter(
-            tica.transform(ref[::100])[start_idx, 0],
-            tica.transform(ref[::100])[start_idx, 1],
+            tica.transform(ref)[start_idx, 0],
+            tica.transform(ref)[start_idx, 1],
             s=200,
             c="black",
         )
         axs[0, 1].scatter(
-            tica.transform(ref[::100])[end_idx, 0],
-            tica.transform(ref[::100])[end_idx, 1],
+            tica.transform(ref)[end_idx, 0],
+            tica.transform(ref)[end_idx, 1],
             s=200,
-            c="black",
+            c="red",
         )
 
     if "interpolate" in gen_mode:
@@ -115,19 +117,20 @@ def evaluate_tetrapeptide(
         ax=axs[0, 0] if "interpolate" in gen_mode else axs[0],
         cbar=False,
     )
-
+    start_idx = np.load("our_start_idxs.npy")[::100]
+    end_idx = np.load("our_end_idxs.npy")[::100]
     if "interpolate" in gen_mode:
         axs[0, 0].scatter(
-            tica.transform(ref[::100])[start_idx, 0],
-            tica.transform(ref[::100])[start_idx, 1],
+            tica.transform(ref)[start_idx, 0],
+            tica.transform(ref)[start_idx, 1],
             s=200,
             c="black",
         )
         axs[0, 0].scatter(
-            tica.transform(ref[::100])[end_idx, 0],
-            tica.transform(ref[::100])[end_idx, 1],
+            tica.transform(ref)[end_idx, 0],
+            tica.transform(ref)[end_idx, 1],
             s=200,
-            c="black",
+            c="red",
         )
     if "interpolate" in gen_mode:
         axs[0, 0].set_title("Reference MD in TICA space with start and end state")
@@ -157,6 +160,8 @@ def evaluate_tetrapeptide(
             traj_len=traj_len,
             n_samples=1000,
         )
+        assert ref_tp[0, 0] == start_state
+        assert ref_tp[0, -1] == end_state
         ref_stateprobs = mdgen.mdgen.analysis.get_state_probs(ref_tp)
 
         print("Generated Transition Path Analysis")
@@ -172,6 +177,9 @@ def evaluate_tetrapeptide(
         ]  # make the length consistent with the ref_tp
 
         gen_tp = np.concatenate([gen_tp, gen_tp_all[:, -1:]], axis=1)
+        # import pdb; pdb.set_trace()
+        assert gen_tp[0, 0] == start_state
+        assert gen_tp[0, -1] == end_state
         gen_stateprobs = mdgen.mdgen.analysis.get_state_probs(gen_tp)
         gen_probs = mdgen.mdgen.analysis.get_tp_likelihood(
             np.vectorize(allidx_to_activeidx.get)(gen_tp, highest_prob_state),
