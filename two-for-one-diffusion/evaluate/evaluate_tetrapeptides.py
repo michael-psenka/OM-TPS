@@ -279,7 +279,7 @@ def evaluate_tetrapeptide(
                     *tica.transform(ref)[::100, :2].T, ax=axs[2, idx], cbar=False
                 )
                 plot_traj = tica.transform(gen_stack_all[idx])[:, :2]
-                
+
                 axs[2, idx].plot(
                     plot_traj[:, 0], plot_traj[:, 1], c="black", marker="o"
                 )
@@ -292,9 +292,17 @@ def evaluate_tetrapeptide(
                     *tica.transform(ref)[::100, :2].T, ax=axs[3, idx], cbar=False
                 )
                 for _idx in range(1000):
-                    plot_traj = kmeans.clustercenters[rep_tp[_idx]][
-                        :, :2
-                    ]  # we only have kmeans cluster centers for the reference (not exact transition paths)
+                    path = rep_tp[_idx]
+                    test = path[:, None] == msm.metastable_assignments[None]
+                    plot_traj = []
+                    for k in range(len(test)):
+                        # take mean of the kmeans cluster centers corresponding to the msm metastable state
+                        plot_traj.append(
+                            np.mean(
+                                kmeans.clustercenters[test[k]], axis=0, keepdims=True
+                            )[:, :2]
+                        )
+                    plot_traj = np.concatenate(plot_traj, axis=0)
                     axs[3, idx].plot(
                         plot_traj[:, 0], plot_traj[:, 1], c="black", marker="o"
                     )
