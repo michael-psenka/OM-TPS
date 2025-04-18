@@ -3,7 +3,7 @@
 #SBATCH --mail-user=sanjeevr@umich.edu  # Replace with your email
 #SBATCH --partition=scavenger
 #SBATCH --qos=scavenger
-#SBATCH --nodelist=germain
+#SBATCH --nodelist=escher
 #SBATCH --gpus=2
 #SBATCH --time=72:00:00
 
@@ -36,21 +36,22 @@ cd /home/sanjeevr/om-diffusion/two-for-one-diffusion
 #     --steps 250 \
 
 
-python main_train.py \
-    --mol tetrapeptides \
-    --atom_selection all-atom \
-    --data_folder /data/sanjeevr/4AA_data  \
-    --flow_matching \
-    --eval_interval 1000 \
-    --warmup_proportion 0.05 \
-    --batch_size 512 \
-    --gradient_accumulate_every 4 \
-    --train_iter 250000 \
-    --weight_decay 0 \
-    --learning_rate 4e-4 \
-    --min_lr_cosine_anneal 0 \
-    --experiment_name tetra_all_atom_flowmatching_bs=2048_newdataloader_april14 \
-    --scale_data False \
-    --gradient_norm_threshold 100000 \
-    --num_samples 100 \
-    --start_from_last_saved True \
+# python main_train.py \
+#     --mol tetrapeptides \
+#     --atom_selection all-atom \
+#     --data_folder /data/sanjeevr/4AA_data  \
+#     --flow_matching \
+#     --eval_interval 1000 \
+#     --warmup_proportion 0.05 \
+#     --batch_size 512 \
+#     --gradient_accumulate_every 4 \
+#     --hidden_features_gnn 256 \
+#     --train_iter 250000 \
+#     --weight_decay 0 \
+#     --learning_rate 4e-4 \
+#     --min_lr_cosine_anneal 0 \
+#     --experiment_name tetra_all_atom_flowmatching_bs=2048_newdataloader_april14_hiddensize256 \
+#     --scale_data False \
+#     --gradient_norm_threshold 100000 \
+#     --num_samples 100 \
+#     --start_from_last_saved False \

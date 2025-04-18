@@ -5,7 +5,7 @@
 #SBATCH --qos=scavenger
 #SBATCH --nodelist=escher
 #SBATCH --gpus=1
-#SBATCH --time=48:00:00
+#SBATCH --time=16:00:00
 
 source /home/sanjeevr/mambaforge/etc/profile.d/conda.sh
 conda activate alphaflow
@@ -31,6 +31,6 @@ python sample.py \
     --lr 2e-1 \
     --append_exp_name test_april14_model_fulldataset_dt=0.0002 \
     --path_length 100 \
-    --om_dt 0.0001 \
+    --om_dt 0.0002 \
     --om_gamma 1 \
     --steps 250 \

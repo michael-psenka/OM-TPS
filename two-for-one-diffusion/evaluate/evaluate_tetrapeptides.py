@@ -90,14 +90,14 @@ def evaluate_tetrapeptide(
     )
     if "interpolate" in gen_mode:
         axs[0, 1].scatter(
-            tica.transform(ref)[start_idx, 0],
-            tica.transform(ref)[start_idx, 1],
+            tica.transform(ref[::100])[start_idx, 0],
+            tica.transform(ref[::100])[start_idx, 1],
             s=200,
             c="black",
         )
         axs[0, 1].scatter(
-            tica.transform(ref)[end_idx, 0],
-            tica.transform(ref)[end_idx, 1],
+            tica.transform(ref[::100])[end_idx, 0],
+            tica.transform(ref[::100])[end_idx, 1],
             s=200,
             c="black",
         )
@@ -116,14 +116,14 @@ def evaluate_tetrapeptide(
 
     if "interpolate" in gen_mode:
         axs[0, 0].scatter(
-            tica.transform(ref)[start_idx, 0],
-            tica.transform(ref)[start_idx, 1],
+            tica.transform(ref[::100])[start_idx, 0],
+            tica.transform(ref[::100])[start_idx, 1],
             s=200,
             c="black",
         )
         axs[0, 0].scatter(
-            tica.transform(ref)[end_idx, 0],
-            tica.transform(ref)[end_idx, 1],
+            tica.transform(ref[::100])[end_idx, 0],
+            tica.transform(ref[::100])[end_idx, 1],
             s=200,
             c="black",
         )
@@ -279,11 +279,11 @@ def evaluate_tetrapeptide(
                     *tica.transform(ref)[::100, :2].T, ax=axs[2, idx], cbar=False
                 )
                 plot_traj = tica.transform(gen_stack_all[idx])[:, :2]
+                
                 axs[2, idx].plot(
                     plot_traj[:, 0], plot_traj[:, 1], c="black", marker="o"
                 )
                 axs[2, idx].set_title(f"Generated Trajectory {idx}")
-
         # Plot reference transition paths superimposed on the TICA free energy landscape
         for i in range(2):
             for j in range(2):
