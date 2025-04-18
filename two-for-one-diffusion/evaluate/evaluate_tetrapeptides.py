@@ -6,6 +6,7 @@ import pickle
 import pandas as pd
 import math
 from multiprocessing import Pool
+from collections import Counter
 
 
 from scipy.spatial.distance import jensenshannon
@@ -16,6 +17,7 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import subprocess
+from evaluate.msm_utils import remove_consecutive_repeats
 
 
 def evaluate_tetrapeptide(
@@ -284,29 +286,34 @@ def evaluate_tetrapeptide(
                     plot_traj[:, 0], plot_traj[:, 1], c="black", marker="o"
                 )
                 axs[2, idx].set_title(f"Generated Trajectory {idx}")
-        # Plot reference transition paths superimposed on the TICA free energy landscape
+
+        # Plot 4 most common reference transition paths superimposed on the TICA free energy landscape
+        cleaned_rep_tp = [remove_consecutive_repeats(path) for path in rep_tp]
+        path_counts = Counter(map(tuple, cleaned_rep_tp))
+        most_common_paths = path_counts.most_common(4)
         for i in range(2):
             for j in range(2):
                 idx = i * 2 + j
                 pyemma.plots.plot_free_energy(
                     *tica.transform(ref)[::100, :2].T, ax=axs[3, idx], cbar=False
                 )
-                for _idx in range(1000):
-                    path = rep_tp[_idx]
-                    test = path[:, None] == msm.metastable_assignments[None]
-                    plot_traj = []
-                    for k in range(len(test)):
-                        # take mean of the kmeans cluster centers corresponding to the msm metastable state
-                        plot_traj.append(
-                            np.mean(
-                                kmeans.clustercenters[test[k]], axis=0, keepdims=True
-                            )[:, :2]
-                        )
-                    plot_traj = np.concatenate(plot_traj, axis=0)
-                    axs[3, idx].plot(
-                        plot_traj[:, 0], plot_traj[:, 1], c="black", marker="o"
+
+                path = np.array(most_common_paths[idx][0])
+
+                test = path[:, None] == msm.metastable_assignments[None]
+                plot_traj = []
+                for k in range(len(test)):  # loop over path
+                    # take mean of the kmeans cluster centers corresponding to the msm metastable state
+                    plot_traj.append(
+                        np.mean(kmeans.clustercenters[test[k]], axis=0, keepdims=True)[
+                            :, :2
+                        ]
                     )
-                axs[3, idx].set_title(f"Reference Trajectories")
+                plot_traj = np.concatenate(plot_traj, axis=0)
+                axs[3, idx].plot(
+                    plot_traj[:, 0], plot_traj[:, 1], c="black", marker="o"
+                )
+                axs[3, idx].set_title(f"Reference Trajectory {idx}")
 
         mapping = {value: idx for idx, value in enumerate(cmsm.active_set)}
         ref_tpt = pyemma.msm.tpt(cmsm, [mapping[start_state]], [mapping[end_state]])
