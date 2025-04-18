@@ -6,7 +6,7 @@ if [ $# -ne 1 ]; then
 fi
 
 FOLDER_SUFFIX="$1"
-CSV_FILE="mdgen/splits/4AA_test_small.csv"
+CSV_FILE="mdgen/splits/4AA_test.csv"
 BASE_DIR="/home/sanjeevr/om-diffusion/two-for-one-diffusion/saved_models/tetrapeptides_all_atom/main_eval_output_om_interpolate"
 PDB_DIR="${BASE_DIR}_${FOLDER_SUFFIX}"
 
@@ -21,4 +21,4 @@ source ~/miniforge3/etc/profile.d/conda.sh
 # done
 
 conda activate alphaflow
-python evaluate/evaluate_tetrapeptides.py --gen_mode om_interpolate --append_exp_name $FOLDER_SUFFIX --sidechains 
+python evaluate/evaluate_tetrapeptides.py --gen_mode om_interpolate --append_exp_name $FOLDER_SUFFIX --sidechains --dont_save

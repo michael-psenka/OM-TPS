@@ -37,14 +37,14 @@ def evaluate_tetrapeptide(
     # Activate om_diffusion environment, which has OpenMM installed to compute energies
     # This adds missing atoms, performs a small energy minimization, and computes energies
     # for the generated tetrapeptide conformations/paths
-    result = subprocess.run(
-        f"conda run -n om-diffusion python evaluate/compute_tetra_energies.py --gen_mode {gen_mode} --pdb_dir {pdbdir} --name {name} --num_paths {num_paths}",
-        shell=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    print(result.stdout)
+    # result = subprocess.run(
+    #     f"conda run -n om-diffusion python evaluate/compute_tetra_energies.py --gen_mode {gen_mode} --pdb_dir {pdbdir} --name {name} --num_paths {num_paths}",
+    #     shell=True,
+    #     stdout=subprocess.PIPE,
+    #     stderr=subprocess.STDOUT,
+    #     text=True,
+    # )
+    # print(result.stdout)
 
     out = None
     np.random.seed(137)
@@ -78,7 +78,7 @@ def evaluate_tetrapeptide(
     gen_traj_cat_og = np.concatenate(gen_traj_list_og, axis=0)
 
     if "interpolate" in gen_mode:
-        fig, axs = plt.subplots(3, 4, figsize=(20, 20))
+        fig, axs = plt.subplots(4, 4, figsize=(20, 20))
     else:
         fig, axs = plt.subplots(1, 2, figsize=(20, 10))
 
@@ -131,9 +131,6 @@ def evaluate_tetrapeptide(
         axs[0, 0].set_title("Reference MD in TICA space with start and end state")
     else:
         axs[0].set_title("Reference MD in TICA space with start and end state")
-
-    
-    
 
     if "interpolate" in gen_mode:
         # Now load the fixed samples for MSM analysis
@@ -285,7 +282,23 @@ def evaluate_tetrapeptide(
                 axs[2, idx].plot(
                     plot_traj[:, 0], plot_traj[:, 1], c="black", marker="o"
                 )
-                axs[2, idx].set_title(f"Trajectory {idx}")
+                axs[2, idx].set_title(f"Generated Trajectory {idx}")
+
+        # Plot reference transition paths superimposed on the TICA free energy landscape
+        for i in range(2):
+            for j in range(2):
+                idx = i * 2 + j
+                pyemma.plots.plot_free_energy(
+                    *tica.transform(ref)[::100, :2].T, ax=axs[3, idx], cbar=False
+                )
+                for _idx in range(1000):
+                    plot_traj = kmeans.clustercenters[rep_tp[_idx]][
+                        :, :2
+                    ]  # we only have kmeans cluster centers for the reference (not exact transition paths)
+                    axs[3, idx].plot(
+                        plot_traj[:, 0], plot_traj[:, 1], c="black", marker="o"
+                    )
+                axs[3, idx].set_title(f"Reference Trajectories")
 
         mapping = {value: idx for idx, value in enumerate(cmsm.active_set)}
         ref_tpt = pyemma.msm.tpt(cmsm, [mapping[start_state]], [mapping[end_state]])
@@ -333,7 +346,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--split",
         type=str,
-        default="/home/sanjeevr/om-diffusion/two-for-one-diffusion/mdgen/splits/4AA_test_small.csv",
+        default="/home/sanjeevr/om-diffusion/two-for-one-diffusion/mdgen/splits/4AA_test.csv",
     )
     parser.add_argument(
         "--sidechains",

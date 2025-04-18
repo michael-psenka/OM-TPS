@@ -191,7 +191,8 @@ if __name__ == "__main__":
         ]
     else:
         pdb_files = [
-            os.path.join(args.pdb_dir, f"{args.name}_{i}.pdb") for i in range(args.num_paths)
+            os.path.join(args.pdb_dir, f"{args.name}_{i}.pdb")
+            for i in range(args.num_paths)
         ]
 
     out = [
