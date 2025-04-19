@@ -243,14 +243,14 @@ def evaluate_fastfolders(
 
     # Load data
     if gen_mode == "langevin":
-        subsample = int(subsample * 1000)  # convert from nanoseconds to frames
+        subsample = int(subsample * 1000)  # convert from nanoseconds to frames (simulations were saved every 1 ps)
     if gen_mode == "gt":
         eval_folder = os.path.join(
             checkpoint_folder, f"{protein_name}{all_atom_append}/main_eval_output_gt"
         )
         os.makedirs(eval_folder, exist_ok=True)
         sampled_mol = torch.tensor(gt_traj)
-        subsample = int(subsample * 5)  # convert from nanoseconds to frames
+        subsample = int(subsample * 5)  # convert from nanoseconds to frames (GT simulations are saved every 200 ps)
     else:
         append_exp_name_str = "_" + append_exp_name if append_exp_name else ""
         eval_folder = os.path.join(
@@ -474,6 +474,14 @@ def evaluate_fastfolders(
                 / path_probabilities.shape[0]
             )
 
+            ref_path_probabilities = get_tp_likelihood(ref_sampled_traj, gt_prob_matrix).prod(
+                -1
+            )
+
+            ref_path_log_probabilities = get_tp_log_likelihood(
+                ref_sampled_traj, gt_prob_matrix
+            ).sum(-1)
+
     # Physicality metrics
     (
         fraction_unphysical,
@@ -595,13 +603,23 @@ def evaluate_fastfolders(
             path_probabilities.std() if path_probabilities is not None else None
         ),
         "Path Negative Log Probability Mean (Normalized)": (
-            - path_log_probabilities.mean() / traj_len
+            - path_log_probabilities.mean() / sampled_traj.shape[1]
             if path_log_probabilities is not None
             else None
         ),
         "Valid Path Negative Log Probability Mean (Normalized)": (
-            - path_log_probabilities[path_probabilities > 0].mean() / traj_len
+            - path_log_probabilities[path_probabilities > 0].mean() / sampled_traj.shape[1]
             if path_log_probabilities is not None
+            else None
+        ),
+        "Reference Path Negative Log Probability Mean": (
+            - ref_path_log_probabilities.mean()
+            if ref_path_log_probabilities is not None
+            else None
+        ),
+        "Reference Path Negative Log Probability Mean (Normalized)": (
+            - ref_path_log_probabilities.mean() / ref_sampled_traj.shape[1]
+            if ref_path_log_probabilities is not None
             else None
         ),
         "Fraction of Valid Paths": fraction_valid_paths,
