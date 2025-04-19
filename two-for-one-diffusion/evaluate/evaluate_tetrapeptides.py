@@ -222,12 +222,12 @@ def evaluate_tetrapeptide(
             if (start_state not in idx_to_repidx.keys()) or (
                 end_state not in idx_to_repidx.keys()
             ):
-                out[f"{rep_names[i]}_rep_log_prob"] = torch.tensor([1e-15]).log() 
-                out[f"{rep_names[i]}_rep_valid_log_prob"] = torch.tensor([1e-15]).log()
+                out[f"{rep_names[i]}_rep_log_prob"] = torch.tensor([1e-15]).log() / (rep_tp.shape[1]-1)
+                out[f"{rep_names[i]}_rep_valid_log_prob"] = torch.tensor([1e-15]).log() / (rep_tp.shape[1]-1)
                 out[f"{rep_names[i]}_rep_valid_rate"] = 0
                 out[f"{rep_names[i]}_rep_JSD"] = 1
-                out[f"{rep_names[i]}_repcheat_log_prob"] = torch.tensor([1e-15]).log()
-                out[f"{rep_names[i]}_repcheat_valid_log_prob"] = torch.tensor([1e-15]).log()
+                out[f"{rep_names[i]}_repcheat_log_prob"] = torch.tensor([1e-15]).log() / (rep_tp.shape[1]-1)
+                out[f"{rep_names[i]}_repcheat_valid_log_prob"] = torch.tensor([1e-15]).log() / (rep_tp.shape[1]-1)
                 out[f"{rep_names[i]}_repcheat_valid_rate"] = np.nan
                 out[f"{rep_names[i]}_repcheat_JSD"] = np.nan
                 rep_stateprobs_list.append(np.zeros(10))
