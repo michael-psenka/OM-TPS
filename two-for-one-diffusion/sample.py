@@ -445,21 +445,21 @@ def main(samp_args):
         else pd.read_csv(samp_args.split, index_col="name").index
     )
     for name in names:
-        # try:
-        generate_samples(
-            model,
-            trainset,
-            samp_args.noise_level,
-            args,
-            device,
-            eval_folder,
-            testset,
-            "AKIR",
-            samp_args.sidechains,
-        )
-        # except:
-        #     print(f"Failed to generate samples for {name}")
-        #     continue
+        try:
+            generate_samples(
+                model,
+                trainset,
+                samp_args.noise_level,
+                args,
+                device,
+                eval_folder,
+                testset,
+                name,
+                samp_args.sidechains,
+            )
+        except:
+            print(f"Failed to generate samples for {name}")
+            continue
 
     # writer.flush()
     # writer.close()
@@ -535,47 +535,51 @@ def generate_samples(
     elif "interpolate" in samp_args.gen_mode:
 
         if "tetrapeptide" in protein_name:
-            for root, dirs, files in os.walk(args.model_path):
-                for file in files:
-                    if file.endswith(f"{name}_metadata.pkl") and root != str(
-                        eval_folder
-                    ):
+            # for root, dirs, files in os.walk(args.model_path):
+            #     for file in files:
+            #         if file.endswith(f"{name}_metadata.pkl") and root != str(
+            #             eval_folder
+            #         ):
 
-                        shutil.copy(f"{root}/{name}_metadata.pkl", eval_folder)
-                        break
+            #             shutil.copy(f"{root}/{name}_metadata.pkl", eval_folder)
+            #             break
 
-            if os.path.exists(f"{eval_folder}/{name}_metadata.pkl"):
-                # load the existing data
-                # pkl_metadata = pickle.load(open(f"{eval_folder}/{name}_metadata.pkl", "rb"))
-                pkl_metadata = pickle.load(open(f"/home/sanjeevr/om-diffusion/two-for-one-diffusion/test/{name}_metadata.pkl", "rb"))
-                # print("file name", f"/home/sanjeevr/om-diffusion/two-for-one-diffusion/mdgen/test/{name}_metadata.pkl")
-                msm = pkl_metadata["msm"]
-                cmsm = pkl_metadata["cmsm"]
-                ref_kmeans = pkl_metadata["ref_kmeans"]
-            else:
-                with temp_seed(137):
-                    feats, ref = mdgen.mdgen.analysis.get_featurized_traj(
-                        f"{args.data_folder}/{name}/{name}", sidechains=sidechains
-                    )
-                    tica, _ = mdgen.mdgen.analysis.get_tica(ref)
-                    kmeans, ref_kmeans = mdgen.mdgen.analysis.get_kmeans(
-                        tica.transform(ref)
-                    )
-                    msm, pcca, cmsm = mdgen.mdgen.analysis.get_msm(
-                        ref_kmeans, nstates=10
-                    )
+            # if os.path.exists(f"{eval_folder}/{name}_metadata.pkl"):
+            # load the existing data
+            # Mystery 1: this pickle file leads to the wrong min flux paths, while the other one is fine
+            # pkl_metadata = pickle.load(open(f"{eval_folder}/{name}_metadata.pkl", "rb"))
+            # (even running the mdgen code directly doesn't give the same paths as in the paper - have reached out to Bowen/Hannes to get the original pkl metadata from their paper)
+            # Temp hack: always load the metadata directly from MDGen
+            pkl_metadata = pickle.load(
+                open(f"/home/sanjeevr/mdgen/test/{name}_metadata.pkl", "rb")
+            )
+            msm = pkl_metadata["msm"]
+            cmsm = pkl_metadata["cmsm"]
+            ref_kmeans = pkl_metadata["ref_kmeans"]
+            # else:
+            #     with temp_seed(137):
+            #         feats, ref = mdgen.mdgen.analysis.get_featurized_traj(
+            #             f"{args.data_folder}/{name}/{name}", sidechains=sidechains
+            #         )
+            #         tica, _ = mdgen.mdgen.analysis.get_tica(ref)
+            #         kmeans, ref_kmeans = mdgen.mdgen.analysis.get_kmeans(
+            #             tica.transform(ref)
+            #         )
+            #         msm, pcca, cmsm = mdgen.mdgen.analysis.get_msm(
+            #             ref_kmeans, nstates=10
+            #         )
 
-                pickle.dump(
-                    {
-                        "msm": msm,
-                        "cmsm": cmsm,
-                        "tica": tica,
-                        "pcca": pcca,
-                        "kmeans": kmeans,
-                        "ref_kmeans": ref_kmeans,
-                    },
-                    open(f"{eval_folder}/{name}_metadata.pkl", "wb"),
-                )
+            #     pickle.dump(
+            #         {
+            #             "msm": msm,
+            #             "cmsm": cmsm,
+            #             "tica": tica,
+            #             "pcca": pcca,
+            #             "kmeans": kmeans,
+            #             "ref_kmeans": ref_kmeans,
+            #         },
+            #         open(f"{eval_folder}/{name}_metadata.pkl", "wb"),
+            #     )
             flux_mat = cmsm.transition_matrix * cmsm.pi[None, :]
             flux_mat[flux_mat < 0.0000001] = (
                 np.inf
@@ -583,14 +587,14 @@ def generate_samples(
             start_state, end_state = np.unravel_index(
                 np.argmin(flux_mat, axis=None), flux_mat.shape
             )
-            import pdb; pdb.set_trace()
-            ref_discrete = msm.metastable_assignments[ref_kmeans]  # underlying data for training generative model is saved every 100 steps
+
+            ref_discrete = msm.metastable_assignments[ref_kmeans]
             start_idxs = np.where(ref_discrete == start_state)[0]
             end_idxs = np.where(ref_discrete == end_state)[0]
             # import pdb; pdb.set_trace()
 
-            np.save("our_start_idxs.npy", start_idxs)
-            np.save("our_end_idxs.npy", end_idxs)
+            # np.save("our_start_idxs.npy", start_idxs)
+            # np.save("our_end_idxs.npy", end_idxs)
             # start_idxs = np.where(ref_discrete[::100] == start_state)[0]
             # end_idxs = np.where(ref_discrete[::100] == end_state)[0]
             if (ref_discrete == start_state).sum() == 0 or (
@@ -616,7 +620,6 @@ def generate_samples(
                 samp_args.num_samples_eval,
                 atom_selection="all-atom" if sidechains else "backbone",
             )
-
         else:
             # choose two endpoints as cluster centers (calculated from min flux paths)
             cluster_endpoints_path = Path(

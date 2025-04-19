@@ -2,7 +2,7 @@ python sample.py \
     --model_path saved_models/tetrapeptides_all_atom \
     --sidechains \
     --flow_matching \
-    --gen_mode om_interpolate \
+    --gen_mode interpolate \
     --data_folder /data/sanjeevr/4AA_sim \
     --split mdgen/splits/4AA_test.csv \
     --num_samples_eval 4  \

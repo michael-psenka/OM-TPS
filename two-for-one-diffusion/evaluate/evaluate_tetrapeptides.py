@@ -39,14 +39,14 @@ def evaluate_tetrapeptide(
     # Activate om_diffusion environment, which has OpenMM installed to compute energies
     # This adds missing atoms, performs a small energy minimization, and computes energies
     # for the generated tetrapeptide conformations/paths
-    # result = subprocess.run(
-    #     f"conda run -n om-diffusion python evaluate/compute_tetra_energies.py --gen_mode {gen_mode} --pdb_dir {pdbdir} --name {name} --num_paths {num_paths}",
-    #     shell=True,
-    #     stdout=subprocess.PIPE,
-    #     stderr=subprocess.STDOUT,
-    #     text=True,
-    # )
-    # print(result.stdout)
+    result = subprocess.run(
+        f"conda run -n om-diffusion python evaluate/compute_tetra_energies.py --gen_mode {gen_mode} --pdb_dir {pdbdir} --name {name} --num_paths {num_paths}",
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    print(result.stdout)
 
     out = None
     np.random.seed(137)
@@ -90,8 +90,8 @@ def evaluate_tetrapeptide(
         ax=axs[0, 0] if "interpolate" in gen_mode else axs[1],
         cbar=False,
     )
-    start_idx = np.load("our_mdgen_start_idxs.npy")[::100]
-    end_idx = np.load("our_mdgen_end_idxs.npy")[::100]
+    # start_idx = np.load("our_mdgen_start_idxs.npy")[::100]
+    # end_idx = np.load("our_mdgen_end_idxs.npy")[::100]
     if "interpolate" in gen_mode:
         axs[0, 1].scatter(
             tica.transform(ref)[start_idx, 0],
@@ -103,7 +103,7 @@ def evaluate_tetrapeptide(
             tica.transform(ref)[end_idx, 0],
             tica.transform(ref)[end_idx, 1],
             s=200,
-            c="red",
+            c="black",
         )
 
     if "interpolate" in gen_mode:
@@ -117,8 +117,8 @@ def evaluate_tetrapeptide(
         ax=axs[0, 0] if "interpolate" in gen_mode else axs[0],
         cbar=False,
     )
-    start_idx = np.load("our_start_idxs.npy")[::100]
-    end_idx = np.load("our_end_idxs.npy")[::100]
+    # start_idx = np.load("start_idxs.npy")[::100]
+    # end_idx = np.load("end_idxs.npy")[::100]
     if "interpolate" in gen_mode:
         axs[0, 0].scatter(
             tica.transform(ref)[start_idx, 0],
@@ -130,7 +130,7 @@ def evaluate_tetrapeptide(
             tica.transform(ref)[end_idx, 0],
             tica.transform(ref)[end_idx, 1],
             s=200,
-            c="red",
+            c="black",
         )
     if "interpolate" in gen_mode:
         axs[0, 0].set_title("Reference MD in TICA space with start and end state")
@@ -142,9 +142,10 @@ def evaluate_tetrapeptide(
         gen_feats_list, gen_traj_list = mdgen.mdgen.analysis.load_tps_ensemble(
             name, pdbdir, sidechains=sidechains, fixed=True
         )  # also loads iid samples based on gen mode
-
         gen_traj_cat = np.concatenate(gen_traj_list, axis=0)
-        out = pickle.load(open(os.path.join(pdbdir, f"{name}_metadata.pkl"), "rb"))
+        # out = pickle.load(open(os.path.join(pdbdir, f"{name}_metadata.pkl"), "rb"))
+        # Load from MDGen
+        out = pickle.load(open(f"/home/sanjeevr/mdgen/test/{name}_metadata.pkl", "rb"))
         msm = out["msm"]
         cmsm = out["cmsm"]
         kmeans = out["kmeans"]
@@ -177,7 +178,6 @@ def evaluate_tetrapeptide(
         ]  # make the length consistent with the ref_tp
 
         gen_tp = np.concatenate([gen_tp, gen_tp_all[:, -1:]], axis=1)
-        # import pdb; pdb.set_trace()
         assert gen_tp[0, 0] == start_state
         assert gen_tp[0, -1] == end_state
         gen_stateprobs = mdgen.mdgen.analysis.get_state_probs(gen_tp)
