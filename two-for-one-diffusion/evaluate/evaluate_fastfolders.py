@@ -603,12 +603,12 @@ def evaluate_fastfolders(
             path_probabilities.std() if path_probabilities is not None else None
         ),
         "Path Negative Log Probability Mean (Normalized)": (
-            - path_log_probabilities.mean() / sampled_traj.shape[1]
+            - path_log_probabilities.mean() / (sampled_traj.shape[1]-1)
             if path_log_probabilities is not None
             else None
         ),
         "Valid Path Negative Log Probability Mean (Normalized)": (
-            - path_log_probabilities[path_probabilities > 0].mean() / sampled_traj.shape[1]
+            - path_log_probabilities[path_probabilities > 0].mean() / (sampled_traj.shape[1]-1)
             if path_log_probabilities is not None
             else None
         ),
@@ -618,7 +618,7 @@ def evaluate_fastfolders(
             else None
         ),
         "Reference Path Negative Log Probability Mean (Normalized)": (
-            - ref_path_log_probabilities.mean() / ref_sampled_traj.shape[1]
+            - ref_path_log_probabilities.mean() / (ref_sampled_traj.shape[1]-1)
             if ref_path_log_probabilities is not None
             else None
         ),
