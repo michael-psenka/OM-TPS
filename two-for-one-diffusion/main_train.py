@@ -373,6 +373,10 @@ if __name__ == "__main__":
     # GNN model
     # For in_node_nf, the features are:
     model = get_model(args, trainset, device)
+    
+    # print number of parameters in model
+    num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Number of learnable parameters in model: {num_params}")
 
     # Diffusion model
     if args.flow_matching:

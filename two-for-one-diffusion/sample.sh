@@ -1,25 +1,22 @@
-python sample.py \
-    --model_path saved_models/tetrapeptides_all_atom \
-    --sidechains \
+python main_train.py \
+    --mol tetrapeptides \
+    --atom_selection all-atom \
+    --data_folder /data/sanjeevr/4AA_data  \
     --flow_matching \
-    --gen_mode om_interpolate \
-    --data_folder /data/sanjeevr/4AA_sim \
-    --split mdgen/splits/4AA_test_AVGR.csv \
-    --num_samples_eval 4  \
-    --batch_size_gen 2 \
-    --latent_time 0.5 \
-    --initial_guess_level 7 \
-    --subsample_points_percent 1.0 \
-    --subsample_dimensions_percent 1.0 \
-    --no_encode_and_decode \
-    --action truncated \
-    --optimizer adam \
-    --lr 2e-1 \
-    --append_exp_name test \
-    --path_length 100 \
-    --om_dt 0.0001 \
-    --om_gamma 1 \
-    --steps 10 \
+    --eval_interval 1000 \
+    --warmup_proportion 0.05 \
+    --batch_size 512 \
+    --gradient_accumulate_every 4 \
+    --hidden_features_gnn 64 \
+    --train_iter 250000 \
+    --weight_decay 0 \
+    --learning_rate 4e-4 \
+    --min_lr_cosine_anneal 0 \
+    --experiment_name test \
+    --scale_data False \
+    --gradient_norm_threshold 100000 \
+    --num_samples 100 \
+    --start_from_last_saved False \
 
 # python main_train.py \
 #     --mol tetrapeptides \
