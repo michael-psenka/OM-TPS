@@ -123,7 +123,7 @@ def evaluate_fastfolders(
     gif=True,
     model=None,
     num_paths=8,
-    traj_len=10,
+    traj_len=20,
     endpoints=None,
     log=False,
 ):
