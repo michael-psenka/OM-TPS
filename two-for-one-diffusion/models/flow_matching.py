@@ -84,6 +84,7 @@ class FlowMatching(nn.Module):
         self.loss_type = loss_type
         self.norm_factor = norm_factor
         self.temp_data = temp_data
+        
 
         def register_buffer(name, val):
             """
