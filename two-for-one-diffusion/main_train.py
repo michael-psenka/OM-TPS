@@ -390,7 +390,9 @@ if __name__ == "__main__":
     )
 
     # temp hard coding
-    norm_factor = 3.6533  if args.mol == "chignolin" else 5.094 # trainset.std if args.scale_data else 1.0  # 3.6533
+    norm_factor = (
+        3.6533 if args.mol == "chignolin" else 5.094
+    )  # trainset.std if args.scale_data else 1.0  # 3.6533
 
     # Set device
     # Note: Code does not work for cpu in current form

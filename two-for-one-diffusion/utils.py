@@ -10,6 +10,7 @@ from git import Repo
 from actions import TruncatedAction
 from rmsd import kabsch_rmsd, kabsch_rotate
 from scipy.linalg import svd
+
 # from torchmd.parameters import Parameters
 # from torchmd.forcefields.forcefield import ForceField
 # from moleculekit.molecule import Molecule
@@ -430,7 +431,6 @@ class OMInterpolatorWrapper(torch.nn.Module):
             encode_and_decode=self.encode_and_decode,
             latent_time=self.latent_time,
             mlff=self.mlff,
-            cg_prior=self.cg_prior,
             action_cls=self.action_cls,
             initial_guess_fn=self.initial_guess_fn,
             initial_guess_level=self.initial_guess_level,
