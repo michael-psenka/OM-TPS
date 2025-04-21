@@ -73,7 +73,7 @@ def get_tp_log_likelihood(tp, trans):
         probs = numerator / denom
 
         # Avoid log of zero or negative by clipping
-        probs = np.clip(probs, a_min=1e-15, a_max=None)
+        probs = np.clip(np.nan_to_num(probs), a_min=1e-15, a_max=None)
 
         s_tp1 = tp[:, i + 1]
         trans_prob = probs[np.arange(n_samples), s_tp1]

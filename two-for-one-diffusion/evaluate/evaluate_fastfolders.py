@@ -323,23 +323,18 @@ def evaluate_fastfolders(
         sampled_traj = cluster_assignments  # don't need to subsample
     elif gen_mode == "langevin" or gen_mode == "gt":
         # Fit a MSM to the generated samples, using the reference cluster centers
-        (
-            prob_matrix,
-            _,
-            _,
-            _,
-        ) = dynamics_analysis(
+        (prob_matrix, _) = dynamics_analysis(
             protein_name,
             reference_folder,
             pdb_folder,
             sampled_mol,
             num_clusters=20,
+            atom_selection=atom_selection,
             gt_cluster_assignments=cluster_assignments,
             lagtime=(
                 200 if gen_mode == "langevin" else 1
             ),  # langevin sims were saved every 1 ps, reference was saved every 200 ps
         )
-
         if (
             prob_matrix.shape[0] < 20
             or (prob_matrix[end] == 0).all()
@@ -353,6 +348,7 @@ def evaluate_fastfolders(
                     prob_matrix, start, end, traj_len, n_ref_samples
                 )
             except ValueError:  # no transition found
+                sampled_traj = None
                 no_transition = True
                 warnings.warn("No transition between start and end states found.")
     else:  # interpolate or om_interpolate
@@ -368,6 +364,12 @@ def evaluate_fastfolders(
     # Sample transition paths from the reference MSM
     ref_sampled_traj = sample_tp(gt_prob_matrix, start, end, traj_len, n_ref_samples)
     ref_entropy = compute_shannon_entropy(ref_sampled_traj)
+    ref_path_probabilities = get_tp_likelihood(ref_sampled_traj, gt_prob_matrix).prod(
+        -1
+    )
+    ref_path_log_probabilities = get_tp_log_likelihood(
+        ref_sampled_traj, gt_prob_matrix
+    ).sum(-1)
     entropy = None
 
     if no_transition:
@@ -478,14 +480,6 @@ def evaluate_fastfolders(
                 / path_probabilities.shape[0]
             )
 
-            ref_path_probabilities = get_tp_likelihood(
-                ref_sampled_traj, gt_prob_matrix
-            ).prod(-1)
-
-            ref_path_log_probabilities = get_tp_log_likelihood(
-                ref_sampled_traj, gt_prob_matrix
-            ).sum(-1)
-
     # Physicality metrics
     (
         fraction_unphysical,
@@ -563,6 +557,7 @@ def evaluate_fastfolders(
     #     )
 
     # Save final metrics to a JSON file
+
     metrics = {
         # "True Transition Rate (ns^-1)": true_rate,
         # "Predicted Transition Rate (ns^-1)": predicted_rate,
@@ -610,13 +605,13 @@ def evaluate_fastfolders(
         ),
         "Path Negative Log Probability Mean (Normalized)": (
             -path_log_probabilities.mean() / (sampled_traj.shape[1] - 1)
-            if path_log_probabilities is not None
+            if path_log_probabilities is not None and sampled_traj is not None
             else None
         ),
         "Valid Path Negative Log Probability Mean (Normalized)": (
             -path_log_probabilities[path_probabilities > 0].mean()
             / (sampled_traj.shape[1] - 1)
-            if path_log_probabilities is not None
+            if path_log_probabilities is not None and sampled_traj is not None
             else None
         ),
         "Reference Path Negative Log Probability Mean": (
@@ -626,7 +621,7 @@ def evaluate_fastfolders(
         ),
         "Reference Path Negative Log Probability Mean (Normalized)": (
             -ref_path_log_probabilities.mean() / (ref_sampled_traj.shape[1] - 1)
-            if ref_path_log_probabilities is not None
+            if ref_path_log_probabilities is not None and ref_sampled_traj is not None
             else None
         ),
         "Fraction of Valid Paths": fraction_valid_paths,
@@ -641,6 +636,7 @@ def evaluate_fastfolders(
     )
     if original_subsample != 0 and gen_mode != "iid":
         subsample_append += f"ns"
+
     final_metrics_file = (
         f"final_metrics_traj_len={traj_len}" + subsample_append + ".json"
     )
@@ -700,7 +696,11 @@ def get_tic_free_energy_plots(
     )
 
     # Load pretrained committor model
-    device = torch.device(torch.cuda.current_device())
+    device = (
+        torch.device(torch.cuda.current_device())
+        if torch.cuda.is_available()
+        else torch.device("cpu")
+    )
     model = GraphTransformer(num_beads=n_atoms, hidden_nf=64, conservative=True)
     committor_model = None
     committor_state_dict_file = os.path.join(
@@ -710,7 +710,7 @@ def get_tic_free_energy_plots(
     )
     if os.path.exists(committor_state_dict_file):
         committor_model = CommittorNN(model)
-        state_dict = torch.load(committor_state_dict_file)
+        state_dict = torch.load(committor_state_dict_file, map_location=device)
 
         committor_model.load_state_dict(state_dict.state_dict())
         committor_model.to(device)
@@ -900,7 +900,11 @@ def get_tic_free_energy_plots(
 
         tic_paths.append(file_name)
 
-        device = torch.device(torch.cuda.current_device())
+        device = (
+            torch.device(torch.cuda.current_device())
+            if torch.cuda.is_available()
+            else torch.device("cpu")
+        )
         transition_rates = None
         if committor_model is not None:
             norm_grads = []
@@ -1174,7 +1178,7 @@ def dynamics_analysis(
         folded_pdb_folder=os.path.join(pdb_folder, "folded_pdbs"),
         bins=101,
         evalset="testset",
-        gt_traj=gt_traj / 10,
+        gt_traj=gt_traj / 10 if gt_traj is not None else None,
     )  # The evalset is the set we'll compare to in the next evaluation steps
 
     # Get samples TIC free energy landscape
@@ -1333,7 +1337,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--traj_len",
         type=int,
-        default=10,
+        default=20,
         help="Length of the discretized trajectories for evaluation. Affects JSD, valid path, and path probability metrics",
     )
 
