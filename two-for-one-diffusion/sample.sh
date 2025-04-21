@@ -4,7 +4,7 @@ python sample.py \
     --flow_matching \
     --gen_mode interpolate \
     --data_folder /data/sanjeevr/4AA_sim \
-    --split mdgen/splits/4AA_test.csv \
+    --split mdgen/splits/4AA_test_AKIR.csv \
     --num_samples_eval 4  \
     --batch_size_gen 2 \
     --latent_time 0.5 \

@@ -551,11 +551,18 @@ def generate_samples(
             # (even running the mdgen code directly doesn't give the same paths as in the paper - have reached out to Bowen/Hannes to get the original pkl metadata from their paper)
             # Temp hack: always load the metadata directly from MDGen
             pkl_metadata = pickle.load(
-                open(f"/home/sanjeevr/mdgen/test/{name}_metadata.pkl", "rb")
+                open(f"/home/sanjeevr/mdgen/metadata/{name}_metadata.pkl", "rb")
             )
             msm = pkl_metadata["msm"]
             cmsm = pkl_metadata["cmsm"]
             ref_kmeans = pkl_metadata["ref_kmeans"]
+
+            # Also use MDGen start and end indices
+            # json_metadata = json.load(open(f"/home/sanjeevr/mdgen/metadata/{name}_metadata.json", "rb"))
+            # start_idxs = np.array([path["start_idx"] for path in json_metadata])
+            # end_idxs = np.array([path["end_idx"] for path in json_metadata])
+            # start_state = json_metadata[0]["start_state"]
+            # end_state = json_metadata[0]["end_state"]
             # else:
             #     with temp_seed(137):
             #         feats, ref = mdgen.mdgen.analysis.get_featurized_traj(
@@ -591,12 +598,10 @@ def generate_samples(
             ref_discrete = msm.metastable_assignments[ref_kmeans]
             start_idxs = np.where(ref_discrete == start_state)[0]
             end_idxs = np.where(ref_discrete == end_state)[0]
-            # import pdb; pdb.set_trace()
 
             # np.save("our_start_idxs.npy", start_idxs)
             # np.save("our_end_idxs.npy", end_idxs)
-            # start_idxs = np.where(ref_discrete[::100] == start_state)[0]
-            # end_idxs = np.where(ref_discrete[::100] == end_state)[0]
+
             if (ref_discrete == start_state).sum() == 0 or (
                 ref_discrete == end_state
             ).sum() == 0:
