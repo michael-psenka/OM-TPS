@@ -11,7 +11,6 @@ source /home/sanjeevr/mambaforge/etc/profile.d/conda.sh
 conda activate alphaflow
 cd /home/sanjeevr/om-diffusion/two-for-one-diffusion
 
-
 python sample.py \
     --model_path saved_models/chignolin \
     --flow_matching \
@@ -26,8 +25,8 @@ python sample.py \
     --no_encode_and_decode \
     --action truncated \
     --optimizer adam \
-    --lr 1e-4 \
-    --append_exp_name test_initial_latent_time_250_physical_params_dt=0.002_FINAL \
+    --lr 2e-1 \
+    --append_exp_name test_initial_latent_time_250_physical_params_dt=0.002_lr=2e-1_FINAL \
     --om_dt 0.002 \
     --om_gamma 1 \
     --path_length 200 \
@@ -49,9 +48,55 @@ python sample.py \
     --no_encode_and_decode \
     --action truncated \
     --optimizer adam \
-    --lr 1e-4 \
-    --append_exp_name test_initial_latent_time_250_physical_params_dt=0.002_FINAL \
+    --lr 2e-1 \
+    --append_exp_name test_initial_latent_time_250_physical_params_dt=0.002_lr=2e-1_FINAL \
     --om_dt 0.002 \
+    --om_gamma 1 \
+    --path_length 200 \
+    --path_batch_size 200 \
+    --steps 5000
+
+
+python sample.py \
+    --model_path saved_models/chignolin \
+    --flow_matching \
+    --gen_mode om_interpolate \
+    --atom_selection c-alpha \
+    --num_samples_eval 8 \
+    --batch_size_gen 4 \
+    --latent_time 0.5 \
+    --initial_guess_level 7\
+    --subsample_points_percent 1.0 \
+    --subsample_dimensions_percent 1.0 \
+    --no_encode_and_decode \
+    --action truncated \
+    --optimizer adam \
+    --lr 2e-1 \
+    --append_exp_name test_initial_latent_time_250_physical_params_dt=0.001_lr=2e-1_FINAL \
+    --om_dt 0.001 \
+    --om_gamma 1 \
+    --path_length 200 \
+    --path_batch_size 200 \
+    --steps 5000
+
+
+python sample.py \
+    --model_path saved_models/trp_cage \
+    --flow_matching \
+    --gen_mode om_interpolate \
+    --atom_selection c-alpha \
+    --num_samples_eval 8 \
+    --batch_size_gen 4 \
+    --latent_time 0.5 \
+    --initial_guess_level 7\
+    --subsample_points_percent 1.0 \
+    --subsample_dimensions_percent 1.0 \
+    --no_encode_and_decode \
+    --action truncated \
+    --optimizer adam \
+    --lr 2e-1 \
+    --append_exp_name test_initial_latent_time_250_physical_params_dt=0.001_lr=2e-1_FINAL \
+    --om_dt 0.001 \
     --om_gamma 1 \
     --path_length 200 \
     --path_batch_size 200 \
@@ -72,8 +117,8 @@ python sample.py \
     --action hutch \
     --optimizer sgd \
     --lr 1e-4 \
-    --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_physical_params_dt=0.002_FINAL \
-    --om_dt 0.002 \
+    --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_physical_params_dt=0.001_FINAL \
+    --om_dt 0.001 \
     --om_gamma 1 \
     --om_d 1 \
     --path_length 200 \
@@ -95,8 +140,8 @@ python sample.py \
     --action truncated \
     --optimizer sgd \
     --lr 1e-4 \
-    --append_exp_name test_initial_latent_time_250_SGD_physical_params_dt=0.002_FINAL \
-    --om_dt 0.002 \
+    --append_exp_name test_initial_latent_time_250_SGD_physical_params_dt=0.001_FINAL \
+    --om_dt 0.001 \
     --om_gamma 1 \
     --om_d 1 \
     --path_length 200 \
@@ -119,8 +164,8 @@ python sample.py \
     --action truncated \
     --optimizer sgd \
     --lr 1e-4 \
-    --append_exp_name test_initial_latent_time_250_SGD_physical_params_dt=0.002_FINAL \
-    --om_dt 0.002 \
+    --append_exp_name test_initial_latent_time_250_SGD_physical_params_dt=0.001_FINAL \
+    --om_dt 0.001 \
     --om_gamma 1 \
     --om_d 1 \
     --path_length 200 \

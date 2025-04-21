@@ -520,32 +520,35 @@ def evaluate_fastfolders(
         )
 
     # Visualize the model-produced interpolation along with a subset of 20 reference/generated paths
-    free_energies, transition_rates = get_tic_free_energy_plots(
-        protein_name,
-        gen_mode,
-        append_exp_name,
-        checkpoint_folder,
-        reference_folder,
-        pdb_folder,
-        atom_selection,
-        sampled_mol,
-        opt_steps=opt_steps,
-        gen_paths=(
-            kmeans_cluster_centers[sampled_traj[:20]]
-            if ("langevin" in gen_mode or "gt" in gen_mode) and not no_transition
-            else None
-        ),
-        ref_paths=kmeans_cluster_centers[ref_sampled_traj[:8]],
-        bin_committor_probs=bin_committor_probs,
-        gif=gif,
-        window_size=window_size,
-        num_paths=num_paths,
-        log=log,
-    )
+    max_free_energies = None
+    transition_rates = None
+    if "gt" not in gen_mode:
+        free_energies, transition_rates = get_tic_free_energy_plots(
+            protein_name,
+            gen_mode,
+            append_exp_name,
+            checkpoint_folder,
+            reference_folder,
+            pdb_folder,
+            atom_selection,
+            sampled_mol,
+            opt_steps=opt_steps,
+            gen_paths=(
+                kmeans_cluster_centers[sampled_traj[:20]]
+                if ("langevin" in gen_mode or "gt" in gen_mode) and not no_transition
+                else None
+            ),
+            ref_paths=kmeans_cluster_centers[ref_sampled_traj[:8]],
+            bin_committor_probs=bin_committor_probs,
+            gif=gif,
+            window_size=window_size,
+            num_paths=num_paths,
+            log=log,
+        )
 
-    max_free_energies = np.array(
-        [np.max(free_energy_profile) for free_energy_profile in free_energies]
-    )
+        max_free_energies = np.array(
+            [np.max(free_energy_profile) for free_energy_profile in free_energies]
+        )
 
     # Compute rates
     # if compute_rates:
@@ -561,8 +564,12 @@ def evaluate_fastfolders(
     metrics = {
         # "True Transition Rate (ns^-1)": true_rate,
         # "Predicted Transition Rate (ns^-1)": predicted_rate,
-        "Max Free Energy (kBT) Mean: ": max_free_energies.mean(),
-        "Max Free Energy (kBT) Std: ": max_free_energies.std(),
+        "Max Free Energy (kBT) Mean: ": (
+            max_free_energies.mean() if max_free_energies is not None else None
+        ),
+        "Max Free Energy (kBT) Std: ": (
+            max_free_energies.std() if max_free_energies is not None else None
+        ),
         "Fraction of Physical Paths: ": (
             1 - fraction_unphysical.item() if fraction_unphysical is not None else None
         ),
