@@ -41,20 +41,21 @@ python main_train.py \
     --atom_selection all-atom \
     --data_folder /data/sanjeevr/4AA_data  \
     --flow_matching \
+    --conservative False \
     --eval_interval 1000 \
     --warmup_proportion 0.05 \
-    --batch_size 512 \
-    --gradient_accumulate_every 4 \
-    --hidden_features_gnn 256 \
+    --batch_size 1024 \
+    --gradient_accumulate_every 2 \
+    --hidden_features_gnn 512 \
     --train_iter 250000 \
     --weight_decay 0 \
     --learning_rate 4e-4 \
     --min_lr_cosine_anneal 0 \
-    --experiment_name tetra_all_atom_flowmatching_bs=2048_newdataloader_april18_hiddensize256 \
+    --experiment_name tetra_all_atom_flowmatching_bs=2048_newdataloader_april21_nonconservative_hiddenfeatures512 \
     --scale_data False \
     --gradient_norm_threshold 100000 \
     --num_samples 100 \
-    --start_from_last_saved True \
+    --start_from_last_saved False \
 
 
 # python main_train.py \
