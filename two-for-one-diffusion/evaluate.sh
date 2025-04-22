@@ -49,29 +49,29 @@
 # python evaluate/evaluate_fastfolders.py \
 #             --protein_name chignolin \
 #             --gen_mode om_interpolate \
-#             --append_exp_name test_initial_latent_time_250_SGD_physical_params_FINAL \
+#             --append_exp_name test_initial_latent_time_250_physical_params_FINAL \
 #             --num_paths 8 
+
+python evaluate/evaluate_fastfolders.py \
+            --protein_name trp_cage \
+            --gen_mode om_interpolate \
+            --append_exp_name test_initial_latent_time_250_physical_params_FINAL \
+            --num_paths 8 
 
 # python evaluate/evaluate_fastfolders.py \
-#             --protein_name trp_cage \
+#             --protein_name bba \
 #             --gen_mode om_interpolate \
-#             --append_exp_name test_initial_latent_time_250_SGD_physical_params_FINAL \
-#             --num_paths 8 
+#             --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_32paths_physical_params_FINAL \
+#             --num_paths 32 
 
-python evaluate/evaluate_fastfolders.py \
-            --protein_name bba \
-            --gen_mode om_interpolate \
-            --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_32paths_physical_params_FINAL \
-            --num_paths 32 
+# python evaluate/evaluate_fastfolders.py \
+#             --protein_name villin \
+#             --gen_mode om_interpolate \
+#             --append_exp_name test_initial_latent_time_250_SGD_physical_params_dt=0.005_FINAL \
+#             --num_paths 4 
 
-python evaluate/evaluate_fastfolders.py \
-            --protein_name villin \
-            --gen_mode om_interpolate \
-            --append_exp_name test_initial_latent_time_250_SGD_physical_params_dt=0.005_FINAL \
-            --num_paths 4 
-
-python evaluate/evaluate_fastfolders.py \
-            --protein_name protein_g \
-            --gen_mode om_interpolate \
-            --append_exp_name test_initial_latent_time_250_SGD_physical_params_dt=0.002_FINAL \
-            --num_paths 4 
+# python evaluate/evaluate_fastfolders.py \
+#             --protein_name protein_g \
+#             --gen_mode om_interpolate \
+#             --append_exp_name test_initial_latent_time_250_SGD_physical_params_dt=0.002_FINAL \
+#             --num_paths 4 
