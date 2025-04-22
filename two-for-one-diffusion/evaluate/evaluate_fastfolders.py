@@ -341,6 +341,7 @@ def evaluate_fastfolders(
             or (prob_matrix[start] == 0).all()
         ):
             no_transition = True
+            sampled_traj = None
             warnings.warn("No transition between start and end states found.")
         else:
             try:
@@ -913,6 +914,7 @@ def get_tic_free_energy_plots(
             else torch.device("cpu")
         )
         transition_rates = None
+        committor_model = None # don't do rate stuff now
         if committor_model is not None:
             norm_grads = []
             pred_probs = []
