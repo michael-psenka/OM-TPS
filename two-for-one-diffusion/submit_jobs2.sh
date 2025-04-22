@@ -3,7 +3,7 @@
 #SBATCH --mail-user=sanjeevr@umich.edu  # Replace with your email
 #SBATCH --partition=scavenger
 #SBATCH --qos=scavenger
-#SBATCH --nodelist=germain
+#SBATCH --nodelist=escher
 #SBATCH --gpus=1
 #SBATCH --time=36:00:00
 
