@@ -718,7 +718,7 @@ def get_tic_free_energy_plots(
     )
     if os.path.exists(committor_state_dict_file):
         committor_model = CommittorNN(model)
-        state_dict = torch.load(committor_state_dict_file, map_location=device)
+        state_dict = torch.load(committor_state_dict_file, map_location=device, weights_only = False)
 
         committor_model.load_state_dict(state_dict.state_dict())
         committor_model.to(device)
