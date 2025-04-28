@@ -71,3 +71,25 @@ python evaluate/evaluate_fastfolders.py \
             --gen_mode om_interpolate \
             --append_exp_name test_initial_latent_time_250_physical_params_dt=0.0008_lr=2e-1_FINAL_flowmatching \
             --num_paths 8 
+
+
+            
+
+
+# python evaluate/evaluate_fastfolders.py \
+#             --protein_name trp_cage \
+#             --gen_mode om_interpolate \
+#             --append_exp_name test_initial_latent_time_250_physical_params_FINAL \
+#             --num_paths 8 
+
+# python evaluate/evaluate_fastfolders.py \
+#             --protein_name bba \
+#             --gen_mode om_interpolate \
+#             --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_32paths_physical_params_dt=0.001_FINAL_flowmatching \
+#             --num_paths 32 
+
+python evaluate/evaluate_fastfolders.py \
+            --protein_name trp_cage \
+            --gen_mode om_interpolate \
+            --append_exp_name test_initial_latent_time_250_physical_params_dt=0.0008_lr=2e-1_FINAL_flowmatching \
+            --num_paths 8 
