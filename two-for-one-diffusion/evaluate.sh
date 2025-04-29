@@ -23,13 +23,13 @@
 #     #         --protein_name "$protein" \
 #     #         --gen_mode langevin
 
-#     # Reference simulations
-#     for time in "${ns_times_long[@]}"; do
-#         python evaluate/evaluate_fastfolders.py \
-#             --protein_name "$protein" \
-#             --gen_mode gt \
-#             --subsample="$time"
-#     done
+    # Reference simulations
+    for time in "${ns_times_long[@]}"; do
+        python evaluate/evaluate_fastfolders.py \
+            --protein_name "$protein" \
+            --gen_mode gt \
+            --subsample="$time"
+    done
 
 #     # # No subsample
 #     # python evaluate/evaluate_fastfolders.py \
