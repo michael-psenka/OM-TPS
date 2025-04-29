@@ -502,8 +502,8 @@ class GaussianDiffusion(nn.Module):
         """
 
         # TODO: we would use these parameters if we were considering the denoise-noise SDE
-        # dt = self.betas[0]
-        # gamma = self.sqrt_one_minus_alphas_cumprod[0]
+        # dt = self.betas[20]
+        # gamma = torch.tensor(1).to(self.device)
         self.model.training = (
             True  # needed to track gradients through conservative force calculation
         )
