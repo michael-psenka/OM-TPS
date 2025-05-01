@@ -170,6 +170,9 @@ class GaussianDiffusion(nn.Module):
         ), "Temperature data must be provided for computing scaling factor"
         kbt_inv = self.kb_inv / self.temp_data
         scaling_factor = -1 / (kbt_inv * self.sqrt_one_minus_alphas_cumprod[t])
+
+        # TODO: we would do this if we were considering the denoise-noise SDE
+        # scaling_factor = -1 / (self.sqrt_one_minus_alphas_cumprod[t])
         return scaling_factor
 
     def force_func(self, x, t, z=None):
@@ -497,6 +500,10 @@ class GaussianDiffusion(nn.Module):
             truncated_gradient: bool, whether to use truncated gradient method
             temperature: float, temperature for sampling
         """
+
+        # TODO: we would use these parameters if we were considering the denoise-noise SDE
+        # dt = self.betas[20]
+        # gamma = torch.tensor(1).to(self.device)
         self.model.training = (
             True  # needed to track gradients through conservative force calculation
         )
