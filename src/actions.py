@@ -59,7 +59,7 @@ class HessianAction(torch.nn.Module):
     because it is constant and does not affect the optimization.
     """
 
-    def __init__(self, dt, xi, D):
+    def __init__(self, dt, xi, D=1):
         """
         Args:
             dt: float, time step
@@ -158,7 +158,7 @@ class TruncatedAction(torch.nn.Module):
 
         # Third term just ignored.
 
-        result = torch.sum(first_term + second_term)
+        result = torch.mean(first_term + second_term)
 
         return result * self.dt / 2.0
 

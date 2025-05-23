@@ -69,26 +69,6 @@ class MullerBrownPotential(Calculator):
         # self.initial_point = self.initial_point.to(device)
         # self.final_point = self.final_point.to(device)
 
-    def initialize_positions(self):
-        """
-        Initialize positions within the regions defined by the Gaussian functions.
-
-        Returns:
-            positions (np.ndarray): Initialized positions.
-        """
-        index = np.random.randint(0, len(self.a))
-        x = self.a[index].item() + torch.FloatTensor(1).uniform_(-2, 2)
-        y = self.b[index].item() + torch.FloatTensor(1).uniform_(-2, 2)
-
-        if self.n_in == 2:
-            positions = torch.tensor([x, y], device=self.device)
-        elif self.n_in == 5:
-            positions = torch.tensor([x, y, 0.0, 0.0, 0.0], device=self.device)
-
-        positions = torch.concatenate([positions, torch.zeros((1,))]).unsqueeze(0)
-
-        return positions
-
     def U_split(self, x, y):
         """Simple potential that represents a transition avoiding a barrier for the 2D case.
 
@@ -126,7 +106,7 @@ class MullerBrownPotential(Calculator):
 
         X = X.to(self.device)
 
-        if self.n_in == 2:
+        if self.n_in == 2:  # 2D case
             if len(X.shape) == 1:
                 x = X[0]
                 y = X[1]
@@ -134,7 +114,7 @@ class MullerBrownPotential(Calculator):
                 x = X[:, 0]
                 y = X[:, 1]
             u = self.U_split(x, y)
-        else:
+        else:  # 5D case
             if len(X.shape) == 1:
                 x1, x2, x3, x4, x5 = torch.split(X, 1, dim=0)
             else:
@@ -179,3 +159,32 @@ class MullerBrownPotential(Calculator):
 
         self.results["free_energy"] = energy
         self.results["forces"] = forces
+
+
+class DiffusionModel_MullerBrownPotential(MullerBrownPotential):
+    """
+    Muller-Brown potential calculator where the forces are computed with a trained diffusion model.
+    Only forces are supported, not energies.
+    """
+
+    implemented_properties = ["energy", "forces"]
+
+    def __init__(self, model, t, device, **kwargs):
+        Calculator.__init__(self, **kwargs)
+        self.model = model
+        self.t = t
+        self.device = device
+        self.model.to(device)
+        self.force_func = lambda x: self.model.force_func(x[:, :2].to(device), t)
+
+    def get_energy(self, X):
+        # Dummy function to satisfy the Calculator interface
+        return torch.tensor(0.0).to(self.device)
+
+    def get_force(self, X):
+        with torch.no_grad():
+            if len(X.shape) == 1:
+                X = X.unsqueeze(0).to(torch.float32)
+            result = torch.zeros_like(X)
+            result[:, :2] = self.force_func(X)
+        return result

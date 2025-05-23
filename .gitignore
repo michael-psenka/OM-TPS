@@ -8,15 +8,17 @@ log
 mnist_data/
 data
 *.png
+*.out
 *.pyc
 *.gsd
-*.pdf
-*.txt
-*.out
 *.pickle
+*.pkl
+*.txt
+*.pdf
+train_diffusion_mb.py
 *ipynb_checkpoints/
-Variational-Doob/
 wandb/
+poisson/
 guided_diffusion/
 mnist/
 ffp-output/
@@ -25,7 +27,13 @@ mlff_residue_numbers/
 alphaflow/saved_references
 msas/
 alphaflow/
-saved_models/
+.bashrc
+*txt
+*pdf
+*vtu
+*.npy
+*pvd
+train_diffusion_mb.py
 
 # Two for One stuff:
 
@@ -409,6 +417,7 @@ MigrationBackup/
 FodyWeavers.xsd
 
 # VS Code files for those working on multiple tools
+.vscode
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
@@ -428,3 +437,6 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# hotfix TODO need to fix, ignore mdgen
+two-for-one-diffusion/mdgen

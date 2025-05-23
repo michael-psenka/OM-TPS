@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from functorch import grad, grad_and_value, vmap
+from torch.func import grad, grad_and_value, vmap
 
 
 class SimpleMB:
@@ -53,7 +53,7 @@ class SimpleMB:
 
         self.total_potential = lambda X: torch.sum(self.U(X))
 
-        self.force_func = vmap(lambda X: grad_and_value(self.total_potential)(X))
+        self.sample_force_func = lambda X: -grad_and_value(self.total_potential)(X)[0]
 
         self.old_force_func = lambda X: (
             torch.tensor(0),
@@ -162,7 +162,7 @@ class SimpleMB:
             argnums=1,
         )(x, y)
 
-        return torch.stack((U_xx, U_yy), axis=-1)
+        return U_xx + U_yy
 
     def get_init_point(self, batch_size):
 
