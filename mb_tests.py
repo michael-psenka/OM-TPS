@@ -24,7 +24,7 @@ from mb_actions import SimpleAction, S2Action, HutchinsonAction, TruncatedAction
 line_density = 80  # number of points on the line
 iterations = 1000
 alpha = 2e-1
-#How many subiterations of Hutch to do
+# How many subiterations of Hutch to do
 write_every = 100
 # WARGNING if use_guess is true, line_density is ignored
 use_guess = False
@@ -37,12 +37,13 @@ global_config = {
     "alpha": alpha,
     "write_every": write_every,
     "use_guess": use_guess,
-    "save_guess": save_guess
+    "save_guess": save_guess,
 }
 
 wandb.login()
 wandb.init(
-    project="OMBasics", config=global_config, # name = "Define name if desired"
+    project="OMBasics",
+    config=global_config,  # name = "Define name if desired"
 )
 
 os.makedirs("MB_tests", exist_ok=True)
@@ -62,30 +63,34 @@ gamma = torch.tensor(1.0).to(device)
 dt = torch.tensor(1.0).to(device)
 D = torch.tensor(1.0)
 
-#Create trunaced action config
+# Create trunaced action config
 trunc_config = {
     "gamma": gamma.item(),
     "dt": dt.item(),
     "D": 0,
     "action": S2Action,
     "name": "Trunc_dt={:.2f}_gamma={:.2f}_D={:.2f}".format(dt.item(), gamma.item(), 0),
-} 
+}
 
 s2_config = {
     "gamma": gamma.item(),
     "dt": dt.item(),
     "D": D.item(),
     "action": S2Action,
-    "name": "S2dt={:.2f}_gamma={:.2f}_D={:.2f}".format(dt.item(), gamma.item(), D.item()),
-} 
+    "name": "S2dt={:.2f}_gamma={:.2f}_D={:.2f}".format(
+        dt.item(), gamma.item(), D.item()
+    ),
+}
 
 hutch_config = {
     "gamma": gamma.item(),
     "dt": dt.item(),
     "D": D.item(),
     "action": HutchinsonAction,
-    "name": "Hutch_dt={:.2f}_gamma={:.2f}_D={:.2f}".format(dt.item(), gamma.item(), D.item()),
-} 
+    "name": "Hutch_dt={:.2f}_gamma={:.2f}_D={:.2f}".format(
+        dt.item(), gamma.item(), D.item()
+    ),
+}
 
 D = torch.tensor(5.0)
 s2_highD = {
@@ -93,16 +98,20 @@ s2_highD = {
     "dt": dt.item(),
     "D": D.item(),
     "action": S2Action,
-    "name": "S2dt={:.2f}_gamma={:.2f}_D={:.2f}".format(dt.item(), gamma.item(), D.item()),
-} 
+    "name": "S2dt={:.2f}_gamma={:.2f}_D={:.2f}".format(
+        dt.item(), gamma.item(), D.item()
+    ),
+}
 
 hutch_highD = {
     "gamma": gamma.item(),
     "dt": dt.item(),
     "D": D.item(),
     "action": HutchinsonAction,
-    "name": "Hutch_dt={:.2f}_gamma={:.2f}_D={:.2f}".format(dt.item(), gamma.item(), D.item()),
-} 
+    "name": "Hutch_dt={:.2f}_gamma={:.2f}_D={:.2f}".format(
+        dt.item(), gamma.item(), D.item()
+    ),
+}
 
 configs = [trunc_config, s2_config, hutch_config, s2_highD, hutch_highD]
 
@@ -112,7 +121,7 @@ result_dict = {}
 log_dict = {}
 
 if use_guess:
-    with open('good_guess.bck', 'rb') as handle:
+    with open("good_guess.bck", "rb") as handle:
         good_guess = pickle.load(handle)
 
 print("Will run for {} runs.".format(len(configs)))
@@ -121,16 +130,15 @@ for config in configs:
 
     action_f = config["action"]
     action_func = lambda path: action_f(
-            sample_force_func=potential.sample_force_func,
-            laplace_func=potential.laplace,
-            dt=config["dt"],
-            gamma=config["gamma"],
-            D=config["D"],
-        )(path)
+        sample_force_func=potential.sample_force_func,
+        laplace_func=potential.laplace,
+        dt=config["dt"],
+        gamma=config["gamma"],
+        D=config["D"],
+    )(path)
     run_name = config["name"]
     result_dict[run_name] = []
 
-    
     if use_guess:
         line_points = torch.tensor(good_guess).to(device)
     else:
@@ -159,7 +167,9 @@ for config in configs:
             optimizer.step()
             grads = grads.cpu()
             draw_points = line_points.detach().cpu()
-            result_dict[run_name].append((draw_points.detach().cpu().numpy(), grads.detach().cpu().numpy()))
+            result_dict[run_name].append(
+                (draw_points.detach().cpu().numpy(), grads.detach().cpu().numpy())
+            )
 
         if i % write_every == 0:
             image = gif_drawer.draw_single_traj(draw_points, grads)
@@ -170,17 +180,19 @@ for config in configs:
         gif_data,
         fps=3,
     )
-    
+
     log_dict[run_name] = wandb.Video(f"MB_tests/{run_name}.gif")
 
     gif_data = []
-    
-if save_guess: 
-    with open('good_guess.bck', 'wb') as handle:
-        pickle.dump(line_points.detach().cpu().numpy(), handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+if save_guess:
+    with open("good_guess.bck", "wb") as handle:
+        pickle.dump(
+            line_points.detach().cpu().numpy(), handle, protocol=pickle.HIGHEST_PROTOCOL
+        )
 
 # Save all points for future plotting if needed.
-with open('trajectories.bck', 'wb') as handle:
+with open("trajectories.bck", "wb") as handle:
     pickle.dump(result_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 gif_drawer.draw_all_data(result_dict)

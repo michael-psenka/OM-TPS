@@ -6,6 +6,7 @@ log
 mnist_data/
 data
 *.png
+*.out
 *.pyc
 *ipynb_checkpoints/
 wandb/
@@ -17,6 +18,12 @@ two-for-one-diffusion/
 dig/
 alphaflow/
 .bashrc
+*txt
+*pdf
+*vtu
+*.npy
+*pvd
+train_diffusion_mb.py
 
 # ignore test notebook
 michael_testbed.ipynb
