@@ -535,47 +535,58 @@ def generate_samples(
     elif "interpolate" in samp_args.gen_mode:
 
         if "tetrapeptide" in protein_name:
-            for root, dirs, files in os.walk(args.model_path):
-                for file in files:
-                    if file.endswith(f"{name}_metadata.pkl") and root != str(
-                        eval_folder
-                    ):
+            # for root, dirs, files in os.walk(args.model_path):
+            #     for file in files:
+            #         if file.endswith(f"{name}_metadata.pkl") and root != str(
+            #             eval_folder
+            #         ):
 
-                        shutil.copy(f"{root}/{name}_metadata.pkl", eval_folder)
-                        break
+            #             shutil.copy(f"{root}/{name}_metadata.pkl", eval_folder)
+            #             break
 
-            if os.path.exists(f"{eval_folder}/{name}_metadata.pkl"):
-                # load the existing data
-                pkl_metadata = pickle.load(
-                    open(f"{eval_folder}/{name}_metadata.pkl", "rb")
-                )
-                msm = pkl_metadata["msm"]
-                cmsm = pkl_metadata["cmsm"]
-                ref_kmeans = pkl_metadata["ref_kmeans"]
-            else:
-                with temp_seed(137):
-                    feats, ref = mdgen.mdgen.analysis.get_featurized_traj(
-                        f"{args.data_folder}/{name}/{name}", sidechains=sidechains
-                    )
-                    tica, _ = mdgen.mdgen.analysis.get_tica(ref)
-                    kmeans, ref_kmeans = mdgen.mdgen.analysis.get_kmeans(
-                        tica.transform(ref)
-                    )
-                    msm, pcca, cmsm = mdgen.mdgen.analysis.get_msm(
-                        ref_kmeans, nstates=10
-                    )
+            # if os.path.exists(f"{eval_folder}/{name}_metadata.pkl"):
+            # load the existing data
+            # Mystery 1: this pickle file leads to the wrong min flux paths, while the other one is fine
+            # pkl_metadata = pickle.load(open(f"{eval_folder}/{name}_metadata.pkl", "rb"))
+            # (even running the mdgen code directly doesn't give the same paths as in the paper - have reached out to Bowen/Hannes to get the original pkl metadata from their paper)
+            # Temp hack: always load the metadata directly from MDGen
+            pkl_metadata = pickle.load(
+                open(f"/home/sanjeevr/mdgen/metadata/{name}_metadata.pkl", "rb")
+            )
+            msm = pkl_metadata["msm"]
+            cmsm = pkl_metadata["cmsm"]
+            ref_kmeans = pkl_metadata["ref_kmeans"]
 
-                pickle.dump(
-                    {
-                        "msm": msm,
-                        "cmsm": cmsm,
-                        "tica": tica,
-                        "pcca": pcca,
-                        "kmeans": kmeans,
-                        "ref_kmeans": ref_kmeans,
-                    },
-                    open(f"{eval_folder}/{name}_metadata.pkl", "wb"),
-                )
+            # Also use MDGen start and end indices
+            # json_metadata = json.load(open(f"/home/sanjeevr/mdgen/metadata/{name}_metadata.json", "rb"))
+            # start_idxs = np.array([path["start_idx"] for path in json_metadata])
+            # end_idxs = np.array([path["end_idx"] for path in json_metadata])
+            # start_state = json_metadata[0]["start_state"]
+            # end_state = json_metadata[0]["end_state"]
+            # else:
+            #     with temp_seed(137):
+            #         feats, ref = mdgen.mdgen.analysis.get_featurized_traj(
+            #             f"{args.data_folder}/{name}/{name}", sidechains=sidechains
+            #         )
+            #         tica, _ = mdgen.mdgen.analysis.get_tica(ref)
+            #         kmeans, ref_kmeans = mdgen.mdgen.analysis.get_kmeans(
+            #             tica.transform(ref)
+            #         )
+            #         msm, pcca, cmsm = mdgen.mdgen.analysis.get_msm(
+            #             ref_kmeans, nstates=10
+            #         )
+
+            #     pickle.dump(
+            #         {
+            #             "msm": msm,
+            #             "cmsm": cmsm,
+            #             "tica": tica,
+            #             "pcca": pcca,
+            #             "kmeans": kmeans,
+            #             "ref_kmeans": ref_kmeans,
+            #         },
+            #         open(f"{eval_folder}/{name}_metadata.pkl", "wb"),
+            #     )
             flux_mat = cmsm.transition_matrix * cmsm.pi[None, :]
             flux_mat[flux_mat < 0.0000001] = (
                 np.inf
@@ -583,18 +594,21 @@ def generate_samples(
             start_state, end_state = np.unravel_index(
                 np.argmin(flux_mat, axis=None), flux_mat.shape
             )
-            ref_discrete = msm.metastable_assignments[
-                ref_kmeans[::100]
-            ]  # underlying data for training generative model is saved every 100 steps
+
+            ref_discrete = msm.metastable_assignments[ref_kmeans]
             start_idxs = np.where(ref_discrete == start_state)[0]
             end_idxs = np.where(ref_discrete == end_state)[0]
+
+            # np.save("our_start_idxs.npy", start_idxs)
+            # np.save("our_end_idxs.npy", end_idxs)
+
             if (ref_discrete == start_state).sum() == 0 or (
                 ref_discrete == end_state
             ).sum() == 0:
                 RuntimeError("No start or end state found for ", name, "skipping...")
 
             # Now get start and end samples
-            arr = np.lib.format.open_memmap(f"{args.data_folder}/{name}_i100.npy", "r")
+            arr = np.lib.format.open_memmap(f"{args.data_folder}/{name}.npy", "r")
             (
                 endpoint_1_samples,
                 endpoint_2_samples,
@@ -611,7 +625,6 @@ def generate_samples(
                 samp_args.num_samples_eval,
                 atom_selection="all-atom" if sidechains else "backbone",
             )
-
         else:
             # choose two endpoints as cluster centers (calculated from min flux paths)
             cluster_endpoints_path = Path(

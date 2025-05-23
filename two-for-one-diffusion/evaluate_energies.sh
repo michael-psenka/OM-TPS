@@ -21,4 +21,4 @@ source ~/miniforge3/etc/profile.d/conda.sh
 # done
 
 conda activate alphaflow
-python evaluate/evaluate_tetrapeptides.py --gen_mode om_interpolate --append_exp_name $FOLDER_SUFFIX --sidechains --dont_save
+python evaluate/evaluate_tetrapeptides.py --gen_mode om_interpolate --append_exp_name $FOLDER_SUFFIX --sidechains

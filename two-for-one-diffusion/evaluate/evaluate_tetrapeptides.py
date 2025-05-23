@@ -39,14 +39,14 @@ def evaluate_tetrapeptide(
     # Activate om_diffusion environment, which has OpenMM installed to compute energies
     # This adds missing atoms, performs a small energy minimization, and computes energies
     # for the generated tetrapeptide conformations/paths
-    # result = subprocess.run(
-    #     f"conda run -n om-diffusion python evaluate/compute_tetra_energies.py --gen_mode {gen_mode} --pdb_dir {pdbdir} --name {name} --num_paths {num_paths}",
-    #     shell=True,
-    #     stdout=subprocess.PIPE,
-    #     stderr=subprocess.STDOUT,
-    #     text=True,
-    # )
-    # print(result.stdout)
+    result = subprocess.run(
+        f"conda run -n om-diffusion python evaluate/compute_tetra_energies.py --gen_mode {gen_mode} --pdb_dir {pdbdir} --name {name} --num_paths {num_paths}",
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    print(result.stdout)
 
     out = None
     np.random.seed(137)
@@ -90,18 +90,20 @@ def evaluate_tetrapeptide(
         ax=axs[0, 0] if "interpolate" in gen_mode else axs[1],
         cbar=False,
     )
+    # start_idx = np.load("our_start_idxs.npy")[::100]
+    # end_idx = np.load("our_end_idxs.npy")[::100]
     if "interpolate" in gen_mode:
         axs[0, 1].scatter(
-            tica.transform(ref[::100])[start_idx, 0],
-            tica.transform(ref[::100])[start_idx, 1],
+            tica.transform(ref)[start_idx, 0],
+            tica.transform(ref)[start_idx, 1],
             s=200,
             c="black",
         )
         axs[0, 1].scatter(
-            tica.transform(ref[::100])[end_idx, 0],
-            tica.transform(ref[::100])[end_idx, 1],
+            tica.transform(ref)[end_idx, 0],
+            tica.transform(ref)[end_idx, 1],
             s=200,
-            c="black",
+            c="red",
         )
 
     if "interpolate" in gen_mode:
@@ -115,19 +117,20 @@ def evaluate_tetrapeptide(
         ax=axs[0, 0] if "interpolate" in gen_mode else axs[0],
         cbar=False,
     )
-
+    # start_idx = np.load("start_idxs.npy")[::100]
+    # end_idx = np.load("end_idxs.npy")[::100]
     if "interpolate" in gen_mode:
         axs[0, 0].scatter(
-            tica.transform(ref[::100])[start_idx, 0],
-            tica.transform(ref[::100])[start_idx, 1],
+            tica.transform(ref)[start_idx, 0],
+            tica.transform(ref)[start_idx, 1],
             s=200,
             c="black",
         )
         axs[0, 0].scatter(
-            tica.transform(ref[::100])[end_idx, 0],
-            tica.transform(ref[::100])[end_idx, 1],
+            tica.transform(ref)[end_idx, 0],
+            tica.transform(ref)[end_idx, 1],
             s=200,
-            c="black",
+            c="red",
         )
     if "interpolate" in gen_mode:
         axs[0, 0].set_title("Reference MD in TICA space with start and end state")
@@ -139,9 +142,12 @@ def evaluate_tetrapeptide(
         gen_feats_list, gen_traj_list = mdgen.mdgen.analysis.load_tps_ensemble(
             name, pdbdir, sidechains=sidechains, fixed=True
         )  # also loads iid samples based on gen mode
-
         gen_traj_cat = np.concatenate(gen_traj_list, axis=0)
-        out = pickle.load(open(os.path.join(pdbdir, f"{name}_metadata.pkl"), "rb"))
+        # out = pickle.load(open(os.path.join(pdbdir, f"{name}_metadata.pkl"), "rb"))
+        # Load from MDGen (Bowen provided data)
+        out = pickle.load(
+            open(f"/home/sanjeevr/mdgen/metadata/{name}_metadata.pkl", "rb")
+        )
         msm = out["msm"]
         cmsm = out["cmsm"]
         kmeans = out["kmeans"]
@@ -157,11 +163,22 @@ def evaluate_tetrapeptide(
             traj_len=traj_len,
             n_samples=1000,
         )
+        assert ref_tp[0, 0] == start_state
+        assert ref_tp[0, -1] == end_state
         ref_stateprobs = mdgen.mdgen.analysis.get_state_probs(ref_tp)
 
-        print("Generated Transition Path Analysis")
         highest_prob_state = cmsm.active_set[np.argmax(cmsm.pi)]
         allidx_to_activeidx = {value: idx for idx, value in enumerate(cmsm.active_set)}
+
+        ref_probs = mdgen.mdgen.analysis.get_tp_likelihood(
+            np.vectorize(allidx_to_activeidx.get)(ref_tp, highest_prob_state),
+            cmsm.transition_matrix,
+        )
+        ref_prob = ref_probs.prod(-1)
+        out[f"ref_log_prob"] = np.log(ref_prob + 1e-15).mean() / (ref_tp.shape[1] - 1)
+
+        print("Generated Transition Path Analysis")
+
         ### Generated analysis
         gen_discrete = mdgen.mdgen.analysis.discretize(
             tica.transform(np.concatenate(gen_traj_list)), kmeans, msm
@@ -172,14 +189,18 @@ def evaluate_tetrapeptide(
         ]  # make the length consistent with the ref_tp
 
         gen_tp = np.concatenate([gen_tp, gen_tp_all[:, -1:]], axis=1)
+        assert gen_tp[0, 0] == start_state
+        assert gen_tp[0, -1] == end_state
         gen_stateprobs = mdgen.mdgen.analysis.get_state_probs(gen_tp)
         gen_probs = mdgen.mdgen.analysis.get_tp_likelihood(
             np.vectorize(allidx_to_activeidx.get)(gen_tp, highest_prob_state),
             cmsm.transition_matrix,
         )
         gen_prob = gen_probs.prod(-1)
-        out[f"gen_prob"] = gen_prob.mean()
-        out[f"gen_valid_prob"] = gen_prob[gen_prob > 0].mean()
+        out[f"gen_log_prob"] = np.log(gen_prob + 1e-15).mean() / (gen_tp.shape[1] - 1)
+        out[f"gen_valid_log_prob"] = np.log(gen_prob[gen_prob > 0] + 1e-15).mean() / (
+            gen_tp.shape[1] - 1
+        )
         out[f"gen_valid_rate"] = (gen_prob > 0).mean()
         out[f"gen_JSD"] = jensenshannon(ref_stateprobs, gen_stateprobs)
 
@@ -205,12 +226,20 @@ def evaluate_tetrapeptide(
             if (start_state not in idx_to_repidx.keys()) or (
                 end_state not in idx_to_repidx.keys()
             ):
-                out[f"{rep_names[i]}_rep_prob"] = 0
-                out[f"{rep_names[i]}_rep_valid_prob"] = 0
+                out[f"{rep_names[i]}_rep_log_prob"] = torch.tensor([1e-15]).log() / (
+                    rep_tp.shape[1] - 1
+                )
+                out[f"{rep_names[i]}_rep_valid_log_prob"] = torch.tensor(
+                    [1e-15]
+                ).log() / (rep_tp.shape[1] - 1)
                 out[f"{rep_names[i]}_rep_valid_rate"] = 0
                 out[f"{rep_names[i]}_rep_JSD"] = 1
-                out[f"{rep_names[i]}_repcheat_prob"] = np.nan
-                out[f"{rep_names[i]}_repcheat_valid_prob"] = np.nan
+                out[f"{rep_names[i]}_repcheat_log_prob"] = torch.tensor(
+                    [1e-15]
+                ).log() / (rep_tp.shape[1] - 1)
+                out[f"{rep_names[i]}_repcheat_valid_log_prob"] = torch.tensor(
+                    [1e-15]
+                ).log() / (rep_tp.shape[1] - 1)
                 out[f"{rep_names[i]}_repcheat_valid_rate"] = np.nan
                 out[f"{rep_names[i]}_repcheat_JSD"] = np.nan
                 rep_stateprobs_list.append(np.zeros(10))
@@ -236,14 +265,23 @@ def evaluate_tetrapeptide(
             rep_prob = rep_probs.prod(-1)
             rep_stateprobs = mdgen.mdgen.analysis.get_state_probs(rep_tp)
             rep_stateprobs_list.append(rep_stateprobs)
-            out[f"{rep_names[i]}_rep_prob"] = rep_prob.mean()
-            out[f"{rep_names[i]}_rep_valid_prob"] = rep_prob[rep_prob > 0].mean()
+            out[f"{rep_names[i]}_rep_log_prob"] = np.log(rep_prob + 1e-15).mean() / (
+                rep_tp.shape[1] - 1
+            )
+            out[f"{rep_names[i]}_rep_valid_log_prob"] = np.log(
+                rep_prob[rep_prob > 0] + 1e-15
+            ).mean() / (rep_tp.shape[1] - 1)
+
             out[f"{rep_names[i]}_rep_valid_rate"] = (rep_prob > 0).mean()
             out[f"{rep_names[i]}_rep_JSD"] = jensenshannon(
                 ref_stateprobs, rep_stateprobs
             )
-            out[f"{rep_names[i]}_repcheat_prob"] = rep_prob.mean()
-            out[f"{rep_names[i]}_repcheat_valid_prob"] = rep_prob[rep_prob > 0].mean()
+            out[f"{rep_names[i]}_repcheat_log_prob"] = np.log(
+                rep_prob + 1e-15
+            ).mean() / (rep_tp.shape[1] - 1)
+            out[f"{rep_names[i]}_repcheat_valid_log_prob"] = np.log(
+                rep_prob[rep_prob > 0] + 1e-15
+            ).mean() / (rep_tp.shape[1] - 1)
             out[f"{rep_names[i]}_repcheat_valid_rate"] = (rep_prob > 0).mean()
             out[f"{rep_names[i]}_repcheat_JSD"] = jensenshannon(
                 ref_stateprobs, rep_stateprobs
@@ -349,7 +387,6 @@ def evaluate_tetrapeptide(
     if save and "interpolate" in gen_mode:
         with open(f"{out_dir}/{name}.pkl", "wb") as f:
             f.write(pickle.dumps(out))
-
     return name, out
 
 

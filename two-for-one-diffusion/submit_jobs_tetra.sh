@@ -53,8 +53,8 @@ python sample.py \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
-    --append_exp_name test_april14_model_fulldataset_dt=0.0002 \
+    --append_exp_name test_april14_model_fulldataset_dt=0.0001_actualendpoints_500steps \
     --path_length 100 \
-    --om_dt 0.0002 \
+    --om_dt 0.0001 \
     --om_gamma 1 \
-    --steps 250 \
+    --steps 500 \
