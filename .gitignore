@@ -27,7 +27,13 @@ mlff_residue_numbers/
 alphaflow/saved_references
 msas/
 alphaflow/
-saved_models/
+.bashrc
+*txt
+*pdf
+*vtu
+*.npy
+*pvd
+train_diffusion_mb.py
 
 # Two for One stuff:
 
