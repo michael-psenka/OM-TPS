@@ -8,6 +8,8 @@ log
 mnist_data/
 data
 *.png
+*.pvd
+*.vtu
 *.out
 *.pyc
 *.gsd
@@ -21,6 +23,7 @@ wandb/
 poisson/
 guided_diffusion/
 mnist/
+test/
 ffp-output/
 mlffs/
 mlff_residue_numbers/

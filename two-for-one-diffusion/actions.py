@@ -21,16 +21,25 @@ class TruncatedAction(torch.nn.Module):
         self,
         path: torch.Tensor,
         forces: torch.Tensor,
+        mask: torch.Tensor = None,
     ):
         """
         Args: path of shape [B, P, N, 3], forces of shape [B, P, N, 3]
         """
         path_term = torch.square((path[:, 1:] - path[:, :-1])) / (2 * self.dt)
         force_term = torch.square(forces) * (self.dt / (2 * self.gamma**2))
-        return path_term.sum(), force_term.sum(), torch.tensor(0).to(torch.float32)
+
+        # mask out padded indices
+        if mask is not None:
+            mask = mask.unsqueeze(0).repeat(path_term.shape[0], 1)
+        else:
+            mask = torch.ones_like(path_term).bool()
+
+        return path_term[mask].sum(), force_term[mask].sum(), torch.tensor(0).to(torch.float32)
 
 
 class S2Action(torch.nn.Module):
+    #TODO: remove this class since we always use HutchinsonAction anyways
     """Action with Hessian"""
 
     def __init__(self, force_func, dt, gamma, laplace_func, D=None):
@@ -126,30 +135,18 @@ class HutchinsonAction(torch.nn.Module):
         self,
         path: torch.Tensor,
         forces: torch.Tensor = None,
-        subsample_dimensions_percent=None,
     ):
         """
         Args: path of shape [B, P, N, 3], forces of shape [B, P, N, 3]
         """
         num_atoms = path.shape[-2]
-        subsample_dimensions = None
-        if subsample_dimensions_percent is not None:
-            num_dims = int(subsample_dimensions_percent * 3 * num_atoms)
-            subsample_dimensions = torch.randperm(3 * num_atoms)[:num_dims].to(
-                path.device
-            )
-
+        
         f_n, laplace = self.force_and_laplace(
             path[:, :-1],
             forces,
             subsample_dimensions,
         )
 
-        # now remove dims from path
-        if subsample_dimensions is not None:
-            path = path.reshape(-1, 3 * num_atoms).gather(
-                -1, subsample_dimensions.expand(path.shape[0], -1)
-            )
 
         first_term = torch.square((path[:, 1:] - path[:, :-1])) / (2 * self.dt)
 
@@ -157,5 +154,14 @@ class HutchinsonAction(torch.nn.Module):
 
         third_term = laplace * self.dt * self.D / self.gamma
 
+        # mask out padded indices
+        if mask is not None:
+            mask = mask.unsqueeze(0).repeat(first_term.shape[0], 1)
+        else:
+            mask = torch.ones_like(first_term).bool()
+
+
         # Result is the action and is expected to have shape [batch, 1]
-        return first_term.sum(), second_term.sum(), third_term.sum()
+        return first_term[mask].sum(), second_term[mask].sum(), third_term[mask].sum()
+
+

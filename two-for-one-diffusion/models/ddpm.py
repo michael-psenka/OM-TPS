@@ -840,6 +840,7 @@ class GaussianDiffusion(nn.Module):
                     batch_first_term, batch_second_term, batch_third_term = action_func(
                         path_batch,
                         batch_forces,
+                        mask = (z != 0) if z is not None else None
                     )
 
                     # Take mean across batch dimension
@@ -1035,7 +1036,13 @@ class GaussianDiffusion(nn.Module):
             raise ValueError(f"unknown objective {self.objective}")
 
         loss = self.loss_fn(model_out, target, reduction="none")
-        loss = reduce(loss, "b ... -> b (...)", "mean")
+
+        if z is not None:
+            # mask out padded losses
+            padding_idx = z == 0
+            loss = loss[~padding_idx]
+
+        # loss = reduce(loss, "b ... -> b (...)", "mean")
 
         return loss.mean()
 
@@ -1056,7 +1063,6 @@ class GaussianDiffusion(nn.Module):
         ), f"Molecule shape must be {(num_atoms, dims)}"
 
         self.num_atoms = n
-
         t = torch.multinomial(self.p2_loss_weight, b, replacement=True).long()
         self.assert_normal_kl(
             x_start=mol, t=torch.full((b,), T, device=device, dtype=torch.long)

@@ -678,6 +678,7 @@ class FlowMatching(nn.Module):
         )
 
         # Optimization of path using OM action
+
         with torch.enable_grad():
             noised_xs.requires_grad = True
 
@@ -778,7 +779,7 @@ class FlowMatching(nn.Module):
                         noised_xs_input = noised_xs
                         noised_xs_input_unique = noised_xs
 
-                    # Initialize gradient accumulator
+                # Initialize gradient accumulator
                 optimizer.zero_grad()
                 grads_accumulator = torch.zeros_like(noised_xs)
                 total_action = 0.0
@@ -840,6 +841,7 @@ class FlowMatching(nn.Module):
                     batch_first_term, batch_second_term, batch_third_term = action_func(
                         path_batch,
                         batch_forces,
+                        mask = (z != 0) if z is not None else None
                     )
 
                     # Take mean across batch dimension
@@ -1045,7 +1047,12 @@ class FlowMatching(nn.Module):
             raise ValueError(f"unknown objective {self.objective}")
 
         loss = self.loss_fn(model_out, target, reduction="none")
-        loss = reduce(loss, "b ... -> b (...)", "mean")
+        if z is not None:
+            # mask out padded losses
+            padding_idx = z == 0
+            loss = loss[~padding_idx]
+
+        # loss = reduce(loss, "b ... -> b (...)", "mean")
 
         return loss.mean()
 

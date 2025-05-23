@@ -37,6 +37,7 @@ class Trainer(object):
         diffusion_model,
         dataset,  # tuple: (train_data, val_data, test_data)
         mol_name,
+        atom_selection,
         args,
         ema_decay=0.995,
         train_batch_size=32,
@@ -170,15 +171,16 @@ class Trainer(object):
         self.num_saved_samples = num_saved_samples
         self.num_samples_final_eval = num_samples_final_eval
         self.topology = topology
-        self.all_atom_protein_z = (
-            [atom.element.number for atom in list(self.topology.atoms)]
-            if args.atom_selection == AtomSelection.PROTEIN
-            else None
-        )
-        # permute to match mae atom order
-        self.all_atom_protein_z = torch.tensor(self.all_atom_protein_z)[
-            mae_to_pdb_atom_mapping(mol_name, forward=False)
-        ]
+        if "tetrapeptides" not in self.mol_name:
+            self.all_atom_protein_z = (
+                [atom.element.number for atom in list(self.topology.atoms)]
+                if args.atom_selection == AtomSelection.PROTEIN
+                else None
+            )
+            # permute to match mae atom order
+            self.all_atom_protein_z = torch.tensor(self.all_atom_protein_z)[
+                mae_to_pdb_atom_mapping(mol_name, forward=False)
+            ]
         # Tensorboard writer
         tzinfo = dt.timezone(dt.timedelta(hours=2))  # timezone UTC+2
         now = dt.datetime.now(tzinfo)
@@ -221,11 +223,8 @@ class Trainer(object):
         self.eval_langevin = eval_langevin
         self.best_val_loss = inf
         if start_from_last_saved:
-            try:
-                self.load()
-                print("Settings loaded from last checkpoint")
-            except:
-                print("Not last checkpoint available to load.")
+            self.load()
+            print("Settings loaded from last checkpoint")
 
     def save(self, milestone: dict, save_best: bool = False):
         """
@@ -332,11 +331,11 @@ class Trainer(object):
                 grad_norm = clip_grad_norm_(
                     self.model_dp.parameters(), max_norm=float("inf")
                 )
-                if self.step % 1 == 0:
+                if self.step % 50 == 0:
                     print(f"Gradient norm {grad_norm}")
                 if grad_norm <= self.args.gradient_norm_threshold:
-                    # Clip gradient norms to 1
-                    clip_grad_norm_(self.model_dp.parameters(), max_norm=100.0)
+                    # Clip gradient norms to 100
+                    clip_grad_norm_(self.model_dp.parameters(), max_norm=1.0)
                     self.scaler.step(self.opt)
                     self.scaler.update()
                 else:
@@ -368,31 +367,42 @@ class Trainer(object):
                         else self.all_atom_protein_z.to(self.device)
                     )
                     # Evaluate i.i.d.
-                    sampled_mol = sample_from_model(
-                        self.sampler_ema_dp,
-                        self.num_saved_samples // self.parallel_batches,
-                        self.batch_size // self.parallel_batches,
-                        z=z,
-                    )
-
-                    # Save as gsd
-                    save_ovito_traj(
-                        sampled_mol,
-                        str(self.results_folder) + f"/samples.gsd",
-                        align=True,
-                        all_backbone="tetrapeptides" in self.mol_name
-                        and self.train_data.atom_selection == "backbone",
-                    )
-
-                    if "tetrapeptides" not in self.mol_name:
-                        results_dict = self.evaluator_val.eval(
-                            sampled_mol,
-                            milestone=str(milestone) + "_iid",
-                            save_plots=True,
+                    try:
+                        sampled_mol = sample_from_model(
+                            self.sampler_ema_dp,
+                            self.num_saved_samples // self.parallel_batches,
+                            self.batch_size // self.parallel_batches,
+                            z=z,
                         )
+
+                        # currently only works for single GPU, since z is an input to the model
+                        sampled_mol = sample_from_model(
+                            self.sampler_ema_dp,
+                            self.num_saved_samples // self.parallel_batches,
+                            self.batch_size // self.parallel_batches,
+                            z=z,
+                        )
+                        # Save as gsd
+                        save_ovito_traj(
+                            sampled_mol,
+                            str(self.results_folder) + f"/samples.gsd",
+                            align=True,
+                            all_backbone="tetrapeptides" in self.mol_name
+                            and self.train_data.atom_selection == "backbone",
+                            create_bonds="tetrapeptides" not in self.mol_name,
+                        )
+
+                        if "tetrapeptides" not in self.mol_name:
+                            results_dict = self.evaluator_val.eval(
+                                sampled_mol,
+                                milestone=str(milestone) + "_iid",
+                                save_plots=True,
+                            )
                         # Write metrics to Tensorboard
                         for key in results_dict:
                             self.writer.add_scalar(key, results_dict[key], self.step)
+                    except:
+                        pass
 
                     self.model.train()
                     self.model_dp.train()
@@ -403,7 +413,6 @@ class Trainer(object):
                         early_stopping_counter = 0
                     # if early_stopping_counter > 9:
                     #     break
-
                 pbar.update(1)
                 if hasattr(self, "scheduler"):
                     self.scheduler.step()

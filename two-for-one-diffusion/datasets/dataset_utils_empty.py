@@ -209,6 +209,7 @@ def get_dataset(
     tic_evaluator=None,
     committor_remove_range=[],  # range of committor values to remove
     remove_freq=0,  # frequency of removing clusters from data
+    tetra_atom_selection="all-atom",
 ):
     """
     Get dataset for a specific molecule.
@@ -279,13 +280,28 @@ def get_dataset(
 
     elif mol == "tetrapeptides":
         trainset = MDGenDataset(
-            data_folder, suffix="_i100", split="./mdgen/splits/4AA_train_small.csv"
+            data_folder,
+            suffix="_i100",
+            split="./mdgen/splits/4AA_train.csv",
+            atom_selection=tetra_atom_selection,
+            train=True,
+            # overfit_peptide="AVGR",
         )
         valset = MDGenDataset(
-            data_folder, suffix="_i100", split="./mdgen/splits/4AA_val_small.csv"
+            data_folder,
+            suffix="_i100",
+            split="./mdgen/splits/4AA_val.csv",
+            atom_selection=tetra_atom_selection,
+            train=False,
+            # overfit_peptide="AVGR",
         )
         testset = MDGenDataset(
-            data_folder, suffix="_i100", split="./mdgen/splits/4AA_test_small.csv"
+            data_folder,
+            suffix="_i100",
+            split="./mdgen/splits/4AA_test.csv",
+            atom_selection=tetra_atom_selection,
+            train=False,
+            # overfit_peptide="AVGR",
         )
 
     elif "alanine_dipeptide" not in mol.lower():
@@ -715,9 +731,11 @@ class MDGenDataset(torch.utils.data.Dataset):
         overfit_peptide=None,
         atlas=False,
         repeat=1,
-        atom_selection="backbone",
+        atom_selection="all-atom",
+        train=True,
     ):
         super().__init__()
+
         self.df = pd.read_csv(split, index_col="name")
         self.repeat = repeat
         if atom_selection == "c-alpha":
@@ -725,13 +743,14 @@ class MDGenDataset(torch.utils.data.Dataset):
         elif atom_selection == "backbone":
             self.num_beads = 12
         else:
-            self.num_beads = None
+            self.num_beads = 56  # maximum number of atoms in tetrapeptide with 14-atom representation ( 14 *4 = 56)
         self.bead_onehot = torch.eye(self.num_beads)
         self.data_dir = data_dir
         self.suffix = suffix
         self.overfit = overfit
         self.overfit_peptide = overfit_peptide
         self.atom_selection = atom_selection
+        self.train = train
 
         # remove proteins for which we don't have any data (not sure why we couldn't download these)
         new_index = deepcopy(self.df.index)
@@ -744,15 +763,21 @@ class MDGenDataset(torch.utils.data.Dataset):
     def __len__(self):
         if self.overfit_peptide:
             return 1000
-        return self.repeat * len(self.df)
+        return 10000 * len(self.df) if self.train else 1000 * len(self.df)
 
     def __getitem__(self, idx):
-        idx = idx % len(self.df)
+        if self.train:
+            protein = idx // 10000
+            t_idx = idx % 10000
+        else:
+            protein = idx // 1000
+            t_idx = (idx % 1000) * 10
+
         if self.overfit:
             idx = 0
 
         if self.overfit_peptide is None:
-            name = self.df.index[idx]
+            name = self.df.index[protein]
             seqres = self.df.seqres[name]
         else:
             name = self.overfit_peptide
@@ -769,8 +794,8 @@ class MDGenDataset(torch.utils.data.Dataset):
         )
 
         # arr should be in ANGSTROMS
-
-        t_idx = np.random.randint(0, arr.shape[0])
+        # pick a random frame in the trajectory
+        # t_idx = np.random.randint(0, arr.shape[0])
         frame = torch.tensor(arr[t_idx], dtype=torch.float32)
 
         if self.atom_selection == "c-alpha":
@@ -786,17 +811,22 @@ class MDGenDataset(torch.utils.data.Dataset):
             )  # Amino acid types
             atom_types[::3] += 1  # distinguish between N and C backbone atoms
 
-        else:  # all-atom - this doesn't yet work because of variable number of atoms per protein - need to add padding
+        else:  # all-atom
             atom_names = [
                 rc.restype_name_to_atom14_names[rc.aa_one_to_three_letter[c]]
                 for c in seqres
             ]
+            # find num atoms per residue that are not ''
+            num_atoms_per_residue = [
+                len([a for a in atom if a != ""]) for atom in atom_names
+            ]
             atom_names = list(chain.from_iterable(atom_names))
 
             # remove '' elements from list
-            atom_names = [x[0] for x in atom_names if x]
-            atom_types = torch.tensor([atomic_numbers[a] for a in atom_names]).long()
-            frame = frame[frame != 0]
-        frame = frame.reshape(-1, 3)
+            atom_names = [x[0] if x else "" for x in atom_names]
+            atom_types = torch.tensor(
+                [atomic_numbers[a] if a else 0 for a in atom_names]
+            ).long()
 
+        frame = frame.reshape(-1, 3)
         return frame, atom_types

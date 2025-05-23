@@ -101,7 +101,6 @@ class GraphTransformer(nn.Module):
     ):
         # alphas: Optional tensor of shape [Batch_size,]
         # Center at 0 to be translation invariant
-
         x = center_zero(x)
         x = x.requires_grad_(requires_grad=True)
         with torch.enable_grad() if self.conservative else nullcontext():
@@ -117,12 +116,18 @@ class GraphTransformer(nn.Module):
             edge_attr = self.get_edge_attr(x)
             edge_attr = self.edge_embedding(edge_attr)
 
-            if z is not None and self.use_bead_identities:
+            padding_idx = None
+            
+            if z is not None:
                 z = z.to(self.device)
                 if len(z.shape) == 1:
                     z = z.unsqueeze(0).repeat(bs, 1)
-                elif len(z.shape) == 2 and z.shape[0] == 1:
-                    z = z.repeat(bs, 1)
+
+                if z.shape[0] != h.shape[0]:  # multi-GPU issue
+                    z = z.repeat(h.shape[0] // z.shape[0], 1)
+                # find padding indices
+                padding_idx = z == 0
+
                 z = self.bead_embedding(z)
 
                 h = torch.cat((h, z), dim=2)
@@ -132,9 +137,12 @@ class GraphTransformer(nn.Module):
                 nodes = torch.cat((h, x, t), dim=2)
             else:
                 nodes = torch.cat((h, t), dim=2)
-
             nodes = self.node_embedding(nodes)
             mask = torch.ones(x.size(0), x.size(1)).bool().to(x.device)
+            # mask out the nodes that are for padding
+            if padding_idx is not None:
+                mask[padding_idx] = False
+
             nodes, _ = self.graphtransformer(nodes, edge_attr, mask=mask)
             output = self.node_decoder(nodes)
             if self.conservative:
@@ -268,13 +276,15 @@ class Attention(nn.Module):
 
         e_kv = self.edges_to_kv(edges)
 
+        # group heads into batch dimension
         q, k, v, e_kv = map(
             lambda t: rearrange(t, "b ... (h d) -> (b h) ... d", h=h), (q, k, v, e_kv)
         )
 
         ek, ev = e_kv, e_kv
 
-        k, v = map(lambda t: rearrange(t, "b j d -> b () j d "), (k, v))
+        k, v = map(lambda t: rearrange(t, "b j d -> b () j d "), (k, v))  # unsqueeze
+        # aggregate edge and node information
         k = k + ek
         v = v + ev
 
