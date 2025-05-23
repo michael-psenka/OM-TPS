@@ -1,9 +1,30 @@
 python sample.py \
-    --model_path saved_models/chignolin \
-    --gen_mode om_interpolate \
-    --atom_selection c-alpha \
-    --num_samples_eval 4 \
-    --batch_size_gen 4 \
+    --model_path saved_models/villin \
+    --gen_mode interpolate \
+    --atom_selection protein \
+    --num_samples_eval 1 \
+    --batch_size_gen 1 \
+    --latent_time 20 \
+    --initial_guess_level 250\
+    --subsample_points_percent 1.0 \
+    --subsample_dimensions_percent 1.0 \
+    --no_encode_and_decode \
+    --action truncated \
+    --optimizer adam \
+    --lr 2e-1 \
+    --append_exp_name test \
+    --om_dt 0.002 \
+    --om_gamma 1 \
+    --path_length 200 \
+    --path_batch_size 200 \
+    --steps 1000
+
+python sample.py \
+    --model_path saved_models/protein_g \
+    --gen_mode interpolate \
+    --atom_selection protein \
+    --num_samples_eval 1 \
+    --batch_size_gen 1 \
     --latent_time 20 \
     --initial_guess_level 250\
     --subsample_points_percent 1.0 \

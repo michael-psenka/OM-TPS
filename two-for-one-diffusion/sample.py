@@ -723,7 +723,6 @@ def generate_samples(
                 )
                 gt_traj = torch.tensor(dataset.traj.xyz)
                 torch.save(gt_traj, gt_traj_path)
-
             gt_traj = 10 * gt_traj  # convert to angstroms
             gt_traj -= gt_traj.mean(1, keepdims=True)  # center
 
