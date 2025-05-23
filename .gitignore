@@ -25,8 +25,10 @@ guided_diffusion/
 mnist/
 test/
 ffp-output/
+saved_models/
 mlffs/
 mlff_residue_numbers/
+Variational_Doob/
 alphaflow/saved_references
 msas/
 alphaflow/
