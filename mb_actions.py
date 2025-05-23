@@ -75,7 +75,8 @@ class TruncatedAction(torch.nn.Module):
         )
 
         result = torch.sum(first_term + second_term)
-        return result
+        # return result
+        return first_term.sum(), second_term.sum()
 
 
 class SimpleAction(torch.nn.Module):
