@@ -25,13 +25,18 @@ class MBDataset(Dataset):
     n_sims: number of simulations to run
     n_steps: number of steps to take in each simulation
     timestep: timestep of the Langevin integrator (fs)
+    mass: mass of the atoms # TODO units
     gamma: friction for langevin dynamics (fs^-1)
     save_every: save every nth step (so timestep of dataset is time_step * save_every)
+    load_every: load every nth step from the trajectory
+    load_forces: whether to load forces from the trajectory or not (adds time in loading)
     default_atom: atom type to use for the atoms
     device: device to run the simulations on
     preload_sim_dir: directory to load simulations
     save_path: path to save generated simulations
     use_langevin: whether to use langevin dynamics or not
+    initial_positions: initial positions of the atoms (optional, if provided, will sample uniformly over these)
+    calculator: ASE calculator to use for the simulations
     """
 
     def __init__(
@@ -45,6 +50,7 @@ class MBDataset(Dataset):
         gamma: float = 0.1,
         save_every: int = 1,
         load_every: int = 1,
+        load_forces: bool = False,
         default_atom: str = "N",
         device: str = "cpu",
         preload_sim_dir: Optional[str] = None,
@@ -79,7 +85,7 @@ class MBDataset(Dataset):
             if isinstance(preload_sim_dir, str):
                 preload_sim_dir = Path(preload_sim_dir)
             print("Loading simulations from directory:", preload_sim_dir)
-            self.load_simulations()
+            self.load_simulations(load_forces=load_forces)
 
             self.n_sims = len(self.data)
             self.n_steps = len(self.data[0]["pos"])
@@ -176,24 +182,24 @@ class MBDataset(Dataset):
 
             dyn.run(self.n_steps - 1)
 
-    def load_trajectory(self, traj_file):
+    def load_trajectory(self, traj_file, load_forces = False):
         traj = Trajectory(traj_file)
         pos = np.array([a.get_positions() for a in traj[:: self.load_every]])
-        # pe = np.array([a.get_potential_energy() for a in traj])
-        # force = np.array([a.get_forces() for a in traj])
-        # ke = np.array([a.get_kinetic_energy() for a in traj])
+        if load_forces:
+            force = np.array([a.get_forces() for a in traj[:: self.load_every]])
+            return {"pos": pos, "force": force}
 
-        return {"pos": pos} #, "force": force}  # , "pe": pe, "force": force, "ke": ke}
-
-
+        return {"pos": pos}
 
 
-    def load_simulations(self):
+
+
+    def load_simulations(self, load_forces=False):
         if isinstance(self.preload_sim_dir, str):
             self.preload_sim_dir = Path(self.preload_sim_dir)
         traj_files = glob.glob(self.preload_sim_dir.as_posix() + "/*.traj")
         for i, traj_file in tqdm(enumerate(traj_files), total=len(traj_files)):
-            self.data[i] = self.load_trajectory(traj_file)
+            self.data[i] = self.load_trajectory(traj_file, load_forces=load_forces)
 
         if os.path.exists(self.preload_sim_dir / "initial_positions.npy"):
             self.initial_positions = np.load(self.preload_sim_dir / "initial_positions.npy")
