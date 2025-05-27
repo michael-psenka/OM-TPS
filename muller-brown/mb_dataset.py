@@ -100,9 +100,11 @@ class MBDataset(Dataset):
         self.all_pos = np.concatenate(
             [self.data[i]["pos"] for i in range(len(self.data))], axis=0
         )
-        self.all_force = np.concatenate(
-            [self.data[i]["force"] for i in range(len(self.data))], axis=0
-        )
+
+        if load_forces:
+            self.all_force = np.concatenate(
+                [self.data[i]["force"] for i in range(len(self.data))], axis=0
+            )
 
         if len(self.all_pos.shape) == 2:
             self.all_pos = np.expand_dims(self.all_pos, axis=1)
@@ -215,8 +217,10 @@ class MBDataset(Dataset):
 
     def __getitem__(self, idx):
         pos = torch.Tensor(self.all_pos[idx][:, :2]).squeeze()
-        force = torch.Tensor(self.all_force[idx][:, :2]).squeeze()
-        return pos, force
+        if hasattr(self, 'all_force'):
+            force = torch.Tensor(self.all_force[idx][:, :2]).squeeze()
+            return pos, force
+        return pos
 
 
 class CustomLangevin:
