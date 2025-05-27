@@ -51,9 +51,7 @@ class MBDataset(Dataset):
         save_path: Optional[str] = None,
         use_langevin: bool = True,
         initial_positions: np.array = None,
-        constrained_sims: bool = False,
         calculator=None,
-        sample_with_replacement: bool = False,
     ):
 
         np.random.seed(seed)
@@ -73,13 +71,6 @@ class MBDataset(Dataset):
         self.save_path = save_path
         self.use_langevin = use_langevin
         self.initial_positions = initial_positions
-        self.constrained_sims = constrained_sims
-        self.sample_with_replacement = sample_with_replacement
-        if self.constrained_sims:
-            assert self.initial_positions is not None, "Need initial positions for constrained simulations"
-            self.n_sims = len(self.initial_positions)
-        
-
         self.calculator = calculator
 
         self.data = {}
@@ -103,16 +94,12 @@ class MBDataset(Dataset):
         self.all_pos = np.concatenate(
             [self.data[i]["pos"] for i in range(len(self.data))], axis=0
         )
-        # self.all_force = np.concatenate(
-        #     [self.data[i]["force"] for i in range(len(self.data))], axis=0
-        # )
+        self.all_force = np.concatenate(
+            [self.data[i]["force"] for i in range(len(self.data))], axis=0
+        )
 
-        # TODO: filter out points with values greater than bounds of the calculator
-        # import pdb; pdb.set_trace()
-        # mask = np.nonzero(self.all_pos[:, :, 0] > self.calculator.Hx )
         if len(self.all_pos.shape) == 2:
             self.all_pos = np.expand_dims(self.all_pos, axis=1)
-        self.all_force = np.zeros_like(self.all_pos)
         
         self.mean = torch.tensor(np.mean(self.all_pos, axis=0)[:, :2])
         self.std = torch.tensor(np.std(self.all_pos, axis=0)[:, :2])
@@ -138,11 +125,10 @@ class MBDataset(Dataset):
         if self.initial_positions is not None:
             np.save(os.path.join(self.save_path, "initial_positions.npy"), self.initial_positions)
 
-        ic_idxs = np.arange(len(self.initial_positions)) if self.constrained_sims else np.random.choice(len(self.initial_positions), self.n_sims, replace=True)
-
+        # sample uniformly over initial conditions if provided
+        ic_idxs =  np.random.choice(len(self.initial_positions), self.n_sims, replace=True) if self.initial_positions is not None else np.arange(self.n_sims)
         for i, ic_idx in tqdm(enumerate(ic_idxs)):
             if self.initial_positions is not None:
-                
                 positions = self.initial_positions[ic_idx].reshape(1, 2)
                 positions = np.concatenate([positions, np.zeros((1, 1))], axis=1)
             else:
@@ -164,14 +150,9 @@ class MBDataset(Dataset):
                 masses=[self.mass],
             )
             MaxwellBoltzmannDistribution(atoms, temperature_K=self.temperature)
-            atoms.set_calculator(self.calculator)
+            atoms.calc = self.calculator
 
-            if self.constrained_sims:
-                self.run_constrained_sims()
-                return
-
-
-            elif self.use_langevin:
+            if self.use_langevin:
                 dyn = Langevin(
                     atoms,
                     timestep=self.timestep * units.fs,
@@ -180,8 +161,6 @@ class MBDataset(Dataset):
                 )
             else:
                 dyn = VelocityVerlet(atoms, timestep=self.timestep * units.fs)
-
-            # TODO: make sure temperature is maintained.
 
             dyn.attach(update_fu, interval=self.save_every, atom=atoms, traj_n=i)
 
@@ -205,69 +184,6 @@ class MBDataset(Dataset):
         # ke = np.array([a.get_kinetic_energy() for a in traj])
 
         return {"pos": pos} #, "force": force}  # , "pe": pe, "force": force, "ke": ke}
-
-
-    def run_constrained_sims(self):
-        """
-        Run constrained Langevin simulations within the Voronoi cell defined by the initial condition ic_idx
-        """
-        self.attempted_transitions = torch.zeros((self.n_sims, self.n_sims)).to(self.device)
-
-        integrator = CustomLangevin(
-            self.calculator.force_func,
-            masses=self.mass,
-            dt=self.timestep,
-            temperature_K=self.temperature,
-            gamma=self.gamma,
-            device=self.device,
-        )
-        all_positions = []
-        # Add a 3rd dimension
-        self.initial_positions = torch.tensor(self.initial_positions).to(self.device)
-        positions = deepcopy(self.initial_positions)
-        velocities = torch.zeros_like(positions).to(self.device)
-        n_clusters = len(self.initial_positions)
-        for i in tqdm(range(self.n_steps)):
-            new_positions, new_velocities = integrator.step(
-                positions, velocities
-            )
-            # check if we have transitioned to another cell
-            cluster_distances = torch.norm(
-                new_positions.unsqueeze(1) - self.initial_positions.unsqueeze(0), dim=-1
-            )
-            cluster_idx = torch.argmin(cluster_distances, dim=1)
-            self.attempted_transitions[torch.arange(n_clusters), cluster_idx] += 1
-            changed = cluster_idx != torch.arange(n_clusters).to(self.device)
-
-            # rejection rule
-            positions = torch.where(
-                changed[:, None], positions, new_positions
-            )
-            velocities = torch.where(
-                changed[:, None], velocities, new_velocities
-            )
-            all_positions.append(positions.detach())
-        
-        # save the final positions
-        all_positions = torch.stack(all_positions, dim=1)
-        for i in range(n_clusters):
-            traj = Trajectory(self.save_path / f"mb_{i}.traj", "w")
-            pos = torch.cat([all_positions[i], torch.zeros((self.n_steps, 1)).to(self.device)], dim=-1)
-            # Iterate over time steps and write each frame
-            for t in range(self.n_steps):
-                atom = Atoms("N", positions=[pos[t].cpu()])  # Single atom frame
-                traj.write(atom)  # Write frame to trajectory
-
-            # Close trajectory file
-            traj.close()
-            self.data[i] = {"pos": pos.cpu().detach().numpy()}
-
-        # save the attempted transitions
-        np.save(self.save_path / "attempted_transitions.npy", self.attempted_transitions.cpu().numpy())
-
-
-
-
 
 
 
