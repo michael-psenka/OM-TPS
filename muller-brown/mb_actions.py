@@ -23,7 +23,9 @@ class TruncatedAction(torch.nn.Module):
         Args: path of shape [L, 2] where L is path length
         """
         path_term = torch.square((path[1:] - path[:-1])) / (2 * self.dt)
-        force_term = torch.square(self.force_func(path[:-1])) * (self.dt / (2 * self.gamma**2))
+        force_term = torch.square(self.force_func(path[:-1])) * (
+            self.dt / (2 * self.gamma**2)
+        )
         return (path_term + force_term).sum()
 
 
@@ -52,7 +54,9 @@ class S2Action(torch.nn.Module):
         """
 
         path_term = torch.square((path[1:] - path[:-1])) / (2 * self.dt)
-        force_term = torch.square(self.force_func(path[:-1])) * (self.dt / (2 * self.gamma**2))
+        force_term = torch.square(self.force_func(path[:-1])) * (
+            self.dt / (2 * self.gamma**2)
+        )
 
         hessian_term = self.laplace_func(path[:-1]) * (self.dt * self.D / self.gamma)
 

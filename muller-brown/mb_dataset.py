@@ -106,7 +106,7 @@ class MBDataset(Dataset):
 
         if len(self.all_pos.shape) == 2:
             self.all_pos = np.expand_dims(self.all_pos, axis=1)
-        
+
         self.mean = torch.tensor(np.mean(self.all_pos, axis=0)[:, :2])
         self.std = torch.tensor(np.std(self.all_pos, axis=0)[:, :2])
 
@@ -129,10 +129,17 @@ class MBDataset(Dataset):
                     )
 
         if self.initial_positions is not None:
-            np.save(os.path.join(self.save_path, "initial_positions.npy"), self.initial_positions)
+            np.save(
+                os.path.join(self.save_path, "initial_positions.npy"),
+                self.initial_positions,
+            )
 
         # sample uniformly over initial conditions if provided
-        ic_idxs =  np.random.choice(len(self.initial_positions), self.n_sims, replace=True) if self.initial_positions is not None else np.arange(self.n_sims)
+        ic_idxs = (
+            np.random.choice(len(self.initial_positions), self.n_sims, replace=True)
+            if self.initial_positions is not None
+            else np.arange(self.n_sims)
+        )
         for i, ic_idx in tqdm(enumerate(ic_idxs)):
             if self.initial_positions is not None:
                 positions = self.initial_positions[ic_idx].reshape(1, 2)
@@ -182,7 +189,7 @@ class MBDataset(Dataset):
 
             dyn.run(self.n_steps - 1)
 
-    def load_trajectory(self, traj_file, load_forces = False):
+    def load_trajectory(self, traj_file, load_forces=False):
         traj = Trajectory(traj_file)
         pos = np.array([a.get_positions() for a in traj[:: self.load_every]])
         if load_forces:
@@ -190,9 +197,6 @@ class MBDataset(Dataset):
             return {"pos": pos, "force": force}
 
         return {"pos": pos}
-
-
-
 
     def load_simulations(self, load_forces=False):
         if isinstance(self.preload_sim_dir, str):
@@ -202,7 +206,9 @@ class MBDataset(Dataset):
             self.data[i] = self.load_trajectory(traj_file, load_forces=load_forces)
 
         if os.path.exists(self.preload_sim_dir / "initial_positions.npy"):
-            self.initial_positions = np.load(self.preload_sim_dir / "initial_positions.npy")
+            self.initial_positions = np.load(
+                self.preload_sim_dir / "initial_positions.npy"
+            )
 
     def __len__(self):
         return len(self.all_pos)
@@ -211,7 +217,6 @@ class MBDataset(Dataset):
         pos = torch.Tensor(self.all_pos[idx][:, :2]).squeeze()
         force = torch.Tensor(self.all_force[idx][:, :2]).squeeze()
         return pos, force
-
 
 
 class CustomLangevin:
@@ -234,16 +239,16 @@ class CustomLangevin:
         )
 
     def initialize_velocities(self):
-        
-        vel_dist = maxwell()
-        velocities = vel_dist.rvs(size = (1, 3))
-        #shift so that initial momentum is zero
-        velocities -= np.mean(velocities, axis = 0)
 
-        #scale velocities to match desired temperature
+        vel_dist = maxwell()
+        velocities = vel_dist.rvs(size=(1, 3))
+        # shift so that initial momentum is zero
+        velocities -= np.mean(velocities, axis=0)
+
+        # scale velocities to match desired temperature
         sum_vsq = np.sum(np.square(velocities))
-        p_dof = 3*(n_particles-1)
-        correction_factor = math.sqrt(p_dof*self.temp/sum_vsq)
+        p_dof = 3 * (n_particles - 1)
+        correction_factor = math.sqrt(p_dof * self.temp / sum_vsq)
         velocities *= correction_factor
         return torch.Tensor(velocities)
 
