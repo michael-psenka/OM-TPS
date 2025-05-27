@@ -2,8 +2,33 @@ import torch
 from torch.func import vmap, grad, vjp
 
 
+class TruncatedAction(torch.nn.Module):
+    """OM Action with Hessian term ignored."""
+
+    def __init__(self, force_func, dt, gamma, laplace_func=None, D=None):
+        """
+        Args:
+            force_func: Force function
+            dt: float, time step
+            gamma: float, diffusion coefficient
+            D: float, diffusion coefficient
+        """
+        super(TruncatedAction, self).__init__()
+        self.force_func = force_func
+        self.dt = dt
+        self.gamma = gamma
+
+    def forward(self, path: torch.Tensor):
+        """
+        Args: path of shape [L, 2] where L is path length
+        """
+        path_term = torch.square((path[1:] - path[:-1])) / (2 * self.dt)
+        force_term = torch.square(self.force_func(path[:-1])) * (self.dt / (2 * self.gamma**2))
+        return (path_term + force_term).sum()
+
+
 class S2Action(torch.nn.Module):
-    """Action with Hessian calculated using autodiff - Hessian is exact."""
+    """OM Action with Hessian calculated using autodiff - Hessian is exact."""
 
     def __init__(self, force_func=None, laplace_func=None, dt=1.0, gamma=1.0, D=1.0):
         """
@@ -23,92 +48,16 @@ class S2Action(torch.nn.Module):
 
     def forward(self, path: torch.Tensor):
         """
-        Args: path of shape [P, 2]
+        Args: path of shape [L, 2] where L is path length
         """
 
-        x_n = path[:-1]
-        x_np = path[1:]
-        f_n = self.force_func(x_n)
+        path_term = torch.square((path[1:] - path[:-1])) / (2 * self.dt)
+        force_term = torch.square(self.force_func(path[:-1])) * (self.dt / (2 * self.gamma**2))
 
-        first_term = torch.sum(
-            torch.square((x_np - x_n)) * (self.gamma / 4 / self.dt), axis=-1
-        )
-        second_term = torch.sum(torch.square(f_n) * (self.dt / 4 / self.gamma), axis=-1)
+        hessian_term = self.laplace_func(path[:-1]) * (self.dt * self.D / self.gamma)
 
-        exact_laplace = self.laplace_func(x_n)
-
-        third_term = exact_laplace.squeeze() * (self.dt * self.D / torch.tensor(2.0))
-
-        assert (
-            first_term.shape == second_term.shape
-            and second_term.shape == third_term.shape
-        )
-        result = torch.sum(first_term + second_term - third_term)
-
-        # Result is the action and is expected to have shape [batch, 1]
+        result = torch.sum(path_term + force_term - hessian_term)
         return result
-
-
-class TruncatedAction(torch.nn.Module):
-    """S2Action with Hessian term ignored."""
-
-    def __init__(self, force_func, dt, gamma, laplace_func=None, D=None):
-        """
-        Args:
-            force_func: Force function
-            dt: float, time step
-            gamma: float, diffusion coefficient
-            D: float, diffusion coefficient
-        """
-        super(TruncatedAction, self).__init__()
-        self.force_func = force_func
-        self.dt = dt
-        self.gamma = gamma
-
-    def forward(self, path: torch.Tensor):
-        """
-        Args: path of shape [P, 2]
-        """
-        first_term = torch.square((path[1:] - path[:-1])) * (self.gamma / 4 / self.dt)
-        second_term = torch.square(self.force_func(path[:-1])) * (
-            self.dt / 4 / self.gamma
-        )
-
-        result = torch.sum(first_term + second_term)
-        # return result
-        return first_term.sum(), second_term.sum()
-
-
-class SimpleAction(torch.nn.Module):
-    """
-    Action without hessian.
-    Basically same as src.actions.SimpleAction but for 2D MB, not images.
-    """
-
-    def __init__(self, force_func, dt, gamma, laplace_func=None, D=None):
-        """
-        Args:
-            force_func: Force function
-            dt: float, time step
-            gamma: float, diffusion coefficient
-        """
-        super(SimpleAction, self).__init__()
-        self.force_func = force_func
-        self.dt = dt
-        self.gamma = gamma
-
-    def forward(self, path: torch.Tensor):
-        # Args: path of shape [P, 2]
-        first_term = torch.square((path[1:] - path[:-1])) * (self.gamma / self.dt)
-        f_n = self.force_func(path[:-1])
-        f_np = self.force_func(path[1:])
-        second_term = (torch.square(f_n) + torch.square(f_np)) * (
-            self.dt / self.gamma / 2.0
-        )
-        third_term = (path[1:] - path[:-1]) * (f_np - f_n)
-
-        result = torch.sum(first_term + second_term + third_term)
-        return result / torch.tensor(4.0)
 
 
 class HutchinsonAction(torch.nn.Module):
@@ -126,7 +75,7 @@ class HutchinsonAction(torch.nn.Module):
         sample_force_func=None,
         laplace_func=None,
         force_func=None,
-        diffusion_model=True,
+        diffusion_model=False,
     ):
         super(HutchinsonAction, self).__init__()
 
@@ -166,21 +115,11 @@ class HutchinsonAction(torch.nn.Module):
         self.force_and_laplace = vmap(force_and_laplace, randomness="different")
 
     def forward(self, path: torch.Tensor):
+        f_n, laplace = self.force_and_laplace(path[:-1])
 
-        x_n = path[:-1]
-        x_np = path[1:]
-        f_n, laplace = self.force_and_laplace(x_n)
+        path_term = torch.square((path[1:] - path[:-1])) / (2 * self.dt)
+        force_term = torch.square(f_n) * (self.dt / (2 * self.gamma**2))
+        hessian_term = laplace.unsqueeze(-1) * (self.dt * self.D / self.gamma)
 
-        # Make sure the terms are [batch, 1] as is the third term
-        first_term = torch.sum(
-            torch.square((x_np - x_n)) * (self.gamma / 4 / self.dt), axis=-1
-        )
-        second_term = torch.sum(torch.square(f_n) * (self.dt / 4 / self.gamma), axis=-1)
-
-        third_term = laplace * self.dt * self.D / torch.tensor(2.0)
-
-        # First apply physical dimension sum. The sum can be rearanged but Hutch term has to be scalar. So others need to be too
-        result = torch.sum(first_term + second_term - third_term)
-
-        # Result is the action and is expected to have shape [batch, 1]
+        result = torch.sum(path_term + force_term - hessian_term)
         return result

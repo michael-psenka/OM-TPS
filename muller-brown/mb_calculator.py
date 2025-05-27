@@ -6,7 +6,7 @@ from functorch import grad
 
 class MullerBrownPotential(Calculator):
     """
-    Muller-Brown potential calculator.
+    Muller-Brown potential calculator - wrapper around ASE Calculator
     """
 
     implemented_properties = ["energy", "forces"]
