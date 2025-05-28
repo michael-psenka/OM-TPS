@@ -1,23 +1,21 @@
 python sample.py \
-    --model_path saved_models/tetrapeptides_all_atom \
-    --sidechains \
-    --flow_matching \
+    --model_path saved_models/trp_cage \
     --gen_mode om_interpolate \
-    --data_folder /data/sanjeevr/4AA_sim \
-    --split mdgen/splits/4AA_test_1.csv \
-    --num_samples_eval 16  \
-    --batch_size_gen 2 \
-    --latent_time 0.5 \
-    --initial_guess_level 7 \
+    --atom_selection c-alpha \
+    --num_samples_eval 4 \
+    --batch_size_gen 4 \
+    --latent_time 15 \
+    --initial_guess_level 250\
     --no_encode_and_decode \
     --action truncated \
     --optimizer adam \
     --lr 2e-1 \
     --append_exp_name test \
-    --path_length 100 \
-    --om_dt 0.0001 \
+    --om_dt 0.001 \
     --om_gamma 1 \
-    --steps 500 \
+    --path_length 200 \
+    --path_batch_size 200 \
+    --steps 500
 
 
 # python sample.py \

@@ -520,17 +520,25 @@ def generate_samples(
 
     else:
         protein_name = "tetrapeptide"
+        
+
+    # TODO: clean up this stuff
+    if "tetrapeptide" in protein_name:
         topology = md.load_topology(f"/data/sanjeevr/4AA_sim/{name}/{name}.pdb")
         if sidechains:
             bonds = [(bond[0].index, bond[1].index) for bond in topology.bonds]
             bonds = np.array(bonds)
 
-    # TODO: clean up this stuff
-    if "tetrapeptide" in protein_name:
         samp_args.masses = [atom.element.mass for atom in list(topology.atoms)]
         z = get_bead_types(
             name, atom_selection="all-atom" if sidechains else "backbone"
         )
+        if z is not None and bonds is not None:
+            n_atoms = (z != 0).count_nonzero().item()
+            # remove any rows of bonds which are greater than n_atoms (have to do this because of missing OXT atoms)
+            bonds = bonds[bonds[:, 0] < n_atoms]
+            bonds = bonds[bonds[:, 1] < n_atoms]
+
         masses = torch.ones_like(z, dtype=torch.float32)
         count = 0
         # Account for the padding
@@ -538,13 +546,7 @@ def generate_samples(
             if z[i] != 0:
                 masses[i] = samp_args.masses[count]
                 count += 1
-
-        if z is not None and bonds is not None:
-            n_atoms = (z != 0).count_nonzero().item()
-            # remove any rows of bonds which are greater than n_atoms (have to do this because of missing OXT atoms)
-
-            bonds = bonds[bonds[:, 0] < n_atoms]
-            bonds = bonds[bonds[:, 1] < n_atoms]
+        
     else:
 
         all_atom_append = (
@@ -561,6 +563,7 @@ def generate_samples(
 
         # adjust masses
         samp_args.masses = [atom.element.mass for atom in list(topology.atoms)]
+        masses = samp_args.masses
 
         # set atomic numbers for all-atom proteins
         z = (
@@ -762,13 +765,13 @@ def generate_samples(
                 optimizer = torch.optim.SGD
             else:
                 raise Exception("Invalid argument 'optimizer'")
-
-            masses = samp_args.masses
+            
             if masses is None:
                 if "alanine" in args.mol:
                     masses = [12.8] * trainset.num_beads
                 else:
                     masses = [12.0] * trainset.num_beads
+            
             interpolator = (
                 OMInterpolatorWrapper(
                     model.ema_model,

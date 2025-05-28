@@ -487,7 +487,7 @@ class GaussianDiffusion(nn.Module):
             om_steps: int, number of optimization steps
             lr: float, learning rate for optimization
             dt: float, time step for optimization
-            gamma: float, gamma for action
+            gamma: gamma for action
             D: float, diffusion constant for Hutchinson estimator
             path_batch_size: int, batch size for path during optimization (-1 for full path), also controls force computation batching
             anneal: bool, whether to anneal the time during optimization
@@ -495,9 +495,6 @@ class GaussianDiffusion(nn.Module):
             temperature: float, temperature for sampling
         """
 
-        # TODO: we would use these parameters if we were considering the denoise-noise SDE
-        # dt = self.betas[20]
-        # gamma = torch.tensor(1).to(self.device)
         self.model.training = (
             True  # needed to track gradients through conservative force calculation
         )

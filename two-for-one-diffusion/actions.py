@@ -26,18 +26,17 @@ class TruncatedAction(torch.nn.Module):
         """
         Args: path of shape [B, P, N, 3], forces of shape [B, P, N, 3]
         """
+        
         path_term = torch.square((path[:, 1:] - path[:, :-1])) / (2 * self.dt)
         force_term = torch.square(forces) * (self.dt / (2 * self.gamma**2))
 
         # mask out padded indices
-        if mask is not None:
-            mask = mask.unsqueeze(0).repeat(path_term.shape[0], 1)
-        else:
-            mask = torch.ones_like(path_term).bool()
+        if mask is None:
+            mask = torch.ones((path_term.shape[2], )).bool()
 
         return (
-            path_term[mask].sum(),
-            force_term[mask].sum(),
+            path_term[:, :, mask].sum(),
+            force_term[:, :, mask].sum(),
             torch.tensor(0).to(torch.float32),
         )
 
