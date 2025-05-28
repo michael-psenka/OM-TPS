@@ -5,13 +5,13 @@
   </a>
 </p>
 
+Official implementation of **"Action-Minimization Meets Generative Modeling: Efficient Transition Path Sampling with the Onsager-Machlup Functional"**, by Sanjeev Raja, Martin Šípka, Michael Psenka, Tobias Kreiman, Michal Pavelka, and Aditi S. Krishnapriyan. 
+
 <p align="center">
 <img src="assets/conceptual_figure.png" alt=""/>
 </p>
 <p align="center">
 </p>
-
-Official implementation of **"Action-Minimization Meets Generative Modeling: Efficient Transition Path Sampling with the Onsager-Machlup Functional"**, by Sanjeev Raja, Martin Šípka, Michael Psenka, Tobias Kreiman, Michal Pavelka, and Aditi S. Krishnapriyan. 
 
 We introduce a method to zero-shot repurpose pretrained generative models of atomistic conformational ensembles to produce dynamical transition pathways, by interpreting candidate paths as a realization of an SDE induced by the learned score function of the generative model. Our approach is compatible with any diffusion or flow matching generative model that can produce i.i.d conformational samples of a molecular system.
 
@@ -66,12 +66,10 @@ python main_train.py \
 If you use this code in your research, please cite our paper.
 
 ```bibtex
-@misc{raja2025actionminimizationmeetsgenerativemodeling,
-      title={Action-Minimization Meets Generative Modeling: Efficient Transition Path Sampling with the Onsager-Machlup Functional}, 
-      author={Sanjeev Raja and Martin Šípka and Michael Psenka and Tobias Kreiman and Michal Pavelka and Aditi S. Krishnapriyan},
-      year={2025},
-      eprint={2504.18506},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG},
-      url={https://arxiv.org/abs/2504.18506}, 
+@inproceedings{raja2025action,
+  title={Action-Minimization Meets Generative Modeling: Efficient Transition Path Sampling with the Onsager-Machlup Functional},
+  author={Raja, Sanjeev and {\v{S}}{\'\i}pka, Martin and Psenka, Michael and Kreiman, Tobias and Pavelka, Michal and Krishnapriyan, Aditi S},
+  booktitle={Proceedings of the 42nd International Conference on Machine Learning (ICML)},
+  year={2025},
+  organization={PMLR}
 }
