@@ -58,7 +58,7 @@ from datasets.dataset_utils_empty import (
 
 from actions import S2Action, TruncatedAction
 from utils import center_zero
-from logging_utils import get_interpolation_viz, visualize_gif, save_ovito_traj
+from logging_utils import save_ovito_traj
 
 # OM Paper plotting stuff
 import scienceplots

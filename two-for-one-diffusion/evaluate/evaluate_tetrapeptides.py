@@ -40,8 +40,9 @@ def evaluate_tetrapeptide(
     # Activate om_diffusion environment, which has OpenMM installed to compute energies
     # This adds missing atoms, performs a small energy minimization, and computes energies
     # for the generated tetrapeptide conformations/paths
+    
     result = subprocess.run(
-        f"conda run -n om-diffusion python evaluate/compute_tetra_energies.py --gen_mode {gen_mode} --pdb_dir {pdbdir} --name {name} --num_paths {num_paths}",
+        f"PYTHONPATH={os.getcwd()} conda run -n om-diffusion python evaluate/compute_tetra_energies.py --gen_mode {gen_mode} --pdb_dir {pdbdir} --name {name} --num_paths {num_paths}",
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -52,7 +53,8 @@ def evaluate_tetrapeptide(
     out = None
     np.random.seed(137)
     name = name.split("_")[0]
-    # TODO: Add a check for the existence of the TICA stuff and load from disk if they exist
+
+    # Get TICA
     feats, ref = mdgen.mdgen.analysis.get_featurized_traj(
         f"{mddir}/{name}/{name}", sidechains=sidechains
     )
@@ -396,7 +398,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--split",
         type=str,
-        default="/home/sanjeevr/om-diffusion/two-for-one-diffusion/mdgen/splits/4AA_test.csv",
+        default="../mdgen/splits/4AA_test.csv",
     )
     parser.add_argument(
         "--sidechains",
@@ -423,14 +425,12 @@ if __name__ == "__main__":
     else:
 
         pdb_id = pd.read_csv(args.split, index_col="name").index
-        # pdb_id = list(
-        #     set([nam.split("_")[0] for nam in os.listdir(pdbdir) if ".pdb" in nam])
-        # )
+
 
     if args.sidechains:
-        eval_folder = f"/home/sanjeevr/om-diffusion/two-for-one-diffusion/saved_models/tetrapeptides_all_atom/main_eval_output_{args.gen_mode}"
+        eval_folder = f"../saved_models/tetrapeptides_all_atom/main_eval_output_{args.gen_mode}"
     else:
-        eval_folder = f"/home/sanjeevr/om-diffusion/two-for-one-diffusion/saved_models/tetrapeptides/main_eval_output_{args.gen_mode}"
+        eval_folder = f"../saved_models/tetrapeptides/main_eval_output_{args.gen_mode}"
     if args.append_exp_name:
         eval_folder += f"_{args.append_exp_name}"
 

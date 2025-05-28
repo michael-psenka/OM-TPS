@@ -15,7 +15,7 @@ class TruncatedAction(torch.nn.Module):
         super(TruncatedAction, self).__init__()
         self.force_func = force_func
         self.dt = dt
-        self.gamma = gamma.unsqueeze(0).unsqueeze(-1)  # shape of [1, n_atoms, 1]
+        self.gamma = gamma.unsqueeze(0).unsqueeze(-1)
 
     def forward(
         self,
