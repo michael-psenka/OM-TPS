@@ -10,7 +10,6 @@
 Trained models per protein can be found in the [saved_models](./saved_models/) folder. 
 
 
-
 For each protein, we provide a ```model-best.pt``` file with the checkpoint corresponding to the best validation loss as well as an ```args.pickle``` file containing the arguments used for that run.
 
 ### Sampling

@@ -1,145 +1,127 @@
-# TODO: replace these with our sampling commands
 
-# Sammpling commands
-This file contains the sampling commands used for each protein to generate the i.i.d. samples and Langevin dynamics results reported in the [paper](https://pubs.acs.org/doi/full/10.1021/acs.jctc.3c00702):
+# Sampling commands
+This file contains the sampling commands used to generate the fast-folding protein and tetrapeptide results reported in the [paper](https://arxiv.org/abs/2504.18506):
 
 
-## Langevin dynamics sampling commands
+## Fast Folding Proteins
 
-#### CHIGNOLIN
+### CHIGNOLIN
 ```bash
-python sample.py 
-    --model_path saved_models/chignolin
-    --gen_mode langevin
-    --noise_level 20
-    --parallel_sim 100
-    --n_timesteps 6000000 
-    --save_interval 500
-    --kb consistent  
-    --dt 2e-3 
+python sample.py \
+    --model_path saved_models/chignolin \
+    --gen_mode om_interpolate \
+    --atom_selection c-alpha \
+    --num_samples_eval 8 \
+    --batch_size_gen 4 \
+    --latent_time 20 \
+    --initial_guess_level 250\
+    --no_encode_and_decode \
+    --action truncated \
+    --optimizer adam \
+    --lr 2e-1 \
+    --append_exp_name test_initial_latent_time_250_physical_params_FINAL \
+    --om_dt 0.001 \
+    --om_gamma 1 \
+    --path_length 200 \
+    --path_batch_size 200 \
+    --steps 5000
 ```
 
 ### TRP-CAGE
 ```bash
-python sample.py 
-    --model_path saved_models/trp_cage
-    --gen_mode langevin
-    --noise_level 15
-    --parallel_sim 100
-    --n_timesteps 6000000 
-    --save_interval 500
-    --kb consistent  
-    --dt 2e-3 
+python sample.py \
+    --model_path saved_models/trp_cage \
+    --gen_mode om_interpolate \
+    --atom_selection c-alpha \
+    --num_samples_eval 8 \
+    --batch_size_gen 4 \
+    --latent_time 15 \
+    --initial_guess_level 250\
+    --no_encode_and_decode \
+    --action truncated \
+    --optimizer adam \
+    --lr 2e-1 \
+    --append_exp_name test_initial_latent_time_250_physical_params_FINAL \
+    --om_dt 0.001 \
+    --om_gamma 1 \
+    --path_length 200 \
+    --path_batch_size 200 \
+    --steps 5000
 ```
 
 ### BBA
 ```bash
-python sample.py 
-    --model_path saved_models/bba
-    --gen_mode langevin
-    --noise_level 5
-    --parallel_sim 100
-    --n_timesteps 6000000 
-    --save_interval 500
-    --kb consistent  
-    --dt 2e-3 
+python sample.py \
+    --model_path saved_models/bba \
+    --gen_mode om_interpolate \
+    --atom_selection c-alpha \
+    --num_samples_eval 32 \
+    --batch_size_gen 2 \
+    --latent_time 20 \
+    --initial_guess_level 250\
+    --no_encode_and_decode \
+    --action hutch \
+    --optimizer sgd \
+    --lr 1e-5 \
+    --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_32paths_physical_params_FINAL \
+    --om_dt 0.001 \
+    --om_gamma 1 \
+    --om_d 1 \
+    --path_length 200 \
+    --path_batch_size 200 \
+    --steps 5000
 ```
 
 ### VILLIN
 ```bash
-python sample.py 
-    --model_path saved_models/villin
-    --gen_mode langevin
-    --noise_level 5
-    --parallel_sim 100
-    --n_timesteps 6000000 
-    --save_interval 500
-    --kb consistent  
-    --dt 2e-3 
+python sample.py \
+    --model_path saved_models/villin \
+    --gen_mode om_interpolate \
+    --atom_selection c-alpha \
+    --num_samples_eval 4 \
+    --batch_size_gen 1 \
+    --latent_time 10 \
+    --initial_guess_level 250\
+    --no_encode_and_decode \
+    --action truncated \
+    --optimizer sgd \
+    --lr 1e-5 \
+    --append_exp_name test_initial_latent_time_250_SGD_physical_params_dt=0.005_FINAL \
+    --om_dt 0.005 \
+    --om_gamma 1 \
+    --om_d 1 \
+    --path_length 200 \
+    --path_batch_size 200 \
+    --steps 5000
 ```
 
 ### PROTEIN_G
 ```bash
-python sample.py 
-    --model_path saved_models/protein_g
-    --gen_mode langevin
-    --noise_level 5
-    --parallel_sim 100
-    --n_timesteps 6000000 
-    --save_interval 500
-    --kb consistent  
-    --dt 2e-3 
+python sample.py \
+    --model_path saved_models/protein_g \
+    --gen_mode om_interpolate \
+    --atom_selection c-alpha \
+    --num_samples_eval 4 \
+    --batch_size_gen 1 \
+    --latent_time 10 \
+    --initial_guess_level 250\
+    --no_encode_and_decode \
+    --action truncated \
+    --optimizer sgd \
+    --lr 1e-5 \
+    --append_exp_name test_initial_latent_time_250_SGD_physical_params_dt=0.002_FINAL \
+    --om_dt 0.002 \
+    --om_gamma 1 \
+    --om_d 1 \
+    --path_length 200 \
+    --path_batch_size 200 \
+    --steps 5000
 ```
 
-### ALANINE DIPEPTIDE
-The different noise levels used for Alanine Dipeptide can be checked in the paper, Table S4.
+## Tetrapeptides
 
-```bash
-python sample.py 
-    --model_path saved_models/alanine/fold1
-    --gen_mode langevin
-    --noise_level 8
-    --parallel_sim 100
-    --n_timesteps 1000000 
-    --save_interval 250
-    --kb consistent  
-    --dt 2e-3 
-```
+### Transition Path Sampling
 
 
-## I.i.d. Sampling commands
 
-#### CHIGNOLIN
-```bash
-python sample.py 
-    --model_path saved_models/chignolin
-    --gen_mode iid
-    --num_samples_eval 374320
-    --batch_size_gen 256
-```
-
-### TRP-CAGE
-```bash
-python sample.py 
-    --model_path saved_models/trp_cage
-    --gen_mode iid
-    --num_samples_eval 730800
-    --batch_size_gen 256
-```
-
-### BBA
-```bash
-python sample.py 
-    --model_path saved_models/bba
-    --gen_mode iid
-    --num_samples_eval 780181
-    --batch_size_gen 256
-```
-
-### VILLIN
-```bash
-python sample.py 
-    --model_path saved_models/villin
-    --gen_mode iid
-    --num_samples_eval 439535
-    --batch_size_gen 256
-```
-
-### PROTEIN G
-```bash
-python sample.py 
-    --model_path saved_models/protein_g
-    --gen_mode iid
-    --num_samples_eval 1294476
-    --batch_size_gen 128
-```
-
-
-### ALANINE DIPEPTIDE
-```bash
-python sample.py 
-    --model_path saved_models/alanine/fold1
-    --gen_mode iid
-    --num_samples_eval 400000
-    --batch_size_gen 128
-```
+### Generative Model Pretraining

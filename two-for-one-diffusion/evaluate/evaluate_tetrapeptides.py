@@ -40,7 +40,7 @@ def evaluate_tetrapeptide(
     # Activate om_diffusion environment, which has OpenMM installed to compute energies
     # This adds missing atoms, performs a small energy minimization, and computes energies
     # for the generated tetrapeptide conformations/paths
-    
+
     result = subprocess.run(
         f"PYTHONPATH={os.getcwd()} conda run -n om-diffusion python evaluate/compute_tetra_energies.py --gen_mode {gen_mode} --pdb_dir {pdbdir} --name {name} --num_paths {num_paths}",
         shell=True,
@@ -426,9 +426,10 @@ if __name__ == "__main__":
 
         pdb_id = pd.read_csv(args.split, index_col="name").index
 
-
     if args.sidechains:
-        eval_folder = f"../saved_models/tetrapeptides_all_atom/main_eval_output_{args.gen_mode}"
+        eval_folder = (
+            f"../saved_models/tetrapeptides_all_atom/main_eval_output_{args.gen_mode}"
+        )
     else:
         eval_folder = f"../saved_models/tetrapeptides/main_eval_output_{args.gen_mode}"
     if args.append_exp_name:

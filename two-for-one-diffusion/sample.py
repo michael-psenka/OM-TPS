@@ -361,7 +361,8 @@ def main(samp_args):
             join(
                 samp_args.model_path,
                 "main_eval_output" + samp_args.append_exp_name,
-                samp_args.tetra_seq,  # TODO: fix this - if we specify none then it doesn't work
+                samp_args.tetra_seq,
+                s,
             )
         )
 
@@ -387,7 +388,6 @@ def main(samp_args):
     args.model_path = samp_args.model_path
     eval_folder.mkdir(exist_ok=True, parents=True)
 
-    # writer = SummaryWriter(str(eval_folder))
     if samp_args.atom_selection == "protein":
         samp_args.atom_selection = AtomSelection.PROTEIN
     elif samp_args.atom_selection == "c-alpha":
@@ -414,10 +414,6 @@ def main(samp_args):
     norm_factor = trainset.std if args.scale_data else 1.0
 
     # Init model from args
-    # TODO: hardcoded for now, fix
-    if samp_args.atom_selection == AtomSelection.PROTEIN:
-        trainset.num_beads = 166
-        trainset.bead_onehot = torch.eye(trainset.num_beads)
     model_nn = get_model(args, trainset, device)
     # print(model_nn)
 
@@ -521,7 +517,6 @@ def generate_samples(
     else:
         protein_name = "tetrapeptide"
 
-    # TODO: clean up this stuff
     if "tetrapeptide" in protein_name:
         topology = md.load_topology(f"/data/sanjeevr/4AA_sim/{name}/{name}.pdb")
         if sidechains:
@@ -987,6 +982,7 @@ def generate_samples(
         )
 
     # Perform final evaluations (producing plots, GIFs, etc.)
+
     if "tetrapeptide" in protein_name:
         evaluate_tetrapeptide(
             name,
