@@ -36,6 +36,7 @@ def evaluate_tetrapeptide(
     """Function to evaluate the transition path for a single tetrapeptide with pdb_id `name`."""
 
     print(f"Evaluating {name}")
+    # TODO: make this a dedicated env just for energy eval
     # Activate om_diffusion environment, which has OpenMM installed to compute energies
     # This adds missing atoms, performs a small energy minimization, and computes energies
     # for the generated tetrapeptide conformations/paths
@@ -143,10 +144,9 @@ def evaluate_tetrapeptide(
             name, pdbdir, sidechains=sidechains, fixed=True
         )  # also loads iid samples based on gen mode
         gen_traj_cat = np.concatenate(gen_traj_list, axis=0)
-        # out = pickle.load(open(os.path.join(pdbdir, f"{name}_metadata.pkl"), "rb"))
-        # Load from MDGen (Bowen provided data)
+        # Load metadata from MDGen
         out = pickle.load(
-            open(f"/home/sanjeevr/mdgen/metadata/{name}_metadata.pkl", "rb")
+            open(f"mdgen/metadata/{name}_metadata.pkl", "rb")
         )
         msm = out["msm"]
         cmsm = out["cmsm"]

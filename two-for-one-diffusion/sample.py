@@ -477,21 +477,21 @@ def main(samp_args):
         else pd.read_csv(samp_args.split, index_col="name").index
     )
     for name in names:
-        try:
-            generate_samples(
-                model,
-                trainset,
-                samp_args.noise_level,
-                args,
-                device,
-                eval_folder,
-                testset,
-                name,
-                samp_args.sidechains,
-            )
-        except:
-            print(f"Failed to generate samples for {name}")
-            continue
+        # try:
+        generate_samples(
+            model,
+            trainset,
+            samp_args.noise_level,
+            args,
+            device,
+            eval_folder,
+            testset,
+            name,
+            samp_args.sidechains,
+        )
+        # except:
+        #     print(f"Failed to generate samples for {name}")
+        #     continue
 
 
 def generate_samples(
@@ -601,58 +601,14 @@ def generate_samples(
     elif "interpolate" in samp_args.gen_mode:
 
         if "tetrapeptide" in protein_name:
-            # for root, dirs, files in os.walk(args.model_path):
-            #     for file in files:
-            #         if file.endswith(f"{name}_metadata.pkl") and root != str(
-            #             eval_folder
-            #         ):
-
-            #             shutil.copy(f"{root}/{name}_metadata.pkl", eval_folder)
-            #             break
-
-            # if os.path.exists(f"{eval_folder}/{name}_metadata.pkl"):
-            # load the existing data
-            # Mystery 1: this pickle file leads to the wrong min flux paths, while the other one is fine
-            # pkl_metadata = pickle.load(open(f"{eval_folder}/{name}_metadata.pkl", "rb"))
-            # (even running the mdgen code directly doesn't give the same paths as in the paper - have reached out to Bowen/Hannes to get the original pkl metadata from their paper)
-            # Temp hack: always load the metadata directly from MDGen
+            # Load the metadata directly from MDGen results (obtained from the authors)
             pkl_metadata = pickle.load(
-                open(f"/home/sanjeevr/mdgen/metadata/{name}_metadata.pkl", "rb")
+                open(f"mdgen/metadata/{name}_metadata.pkl", "rb")
             )
             msm = pkl_metadata["msm"]
             cmsm = pkl_metadata["cmsm"]
             ref_kmeans = pkl_metadata["ref_kmeans"]
 
-            # Also use MDGen start and end indices
-            # json_metadata = json.load(open(f"/home/sanjeevr/mdgen/metadata/{name}_metadata.json", "rb"))
-            # start_idxs = np.array([path["start_idx"] for path in json_metadata])
-            # end_idxs = np.array([path["end_idx"] for path in json_metadata])
-            # start_state = json_metadata[0]["start_state"]
-            # end_state = json_metadata[0]["end_state"]
-            # else:
-            #     with temp_seed(137):
-            #         feats, ref = mdgen.mdgen.analysis.get_featurized_traj(
-            #             f"{args.data_folder}/{name}/{name}", sidechains=sidechains
-            #         )
-            #         tica, _ = mdgen.mdgen.analysis.get_tica(ref)
-            #         kmeans, ref_kmeans = mdgen.mdgen.analysis.get_kmeans(
-            #             tica.transform(ref)
-            #         )
-            #         msm, pcca, cmsm = mdgen.mdgen.analysis.get_msm(
-            #             ref_kmeans, nstates=10
-            #         )
-
-            #     pickle.dump(
-            #         {
-            #             "msm": msm,
-            #             "cmsm": cmsm,
-            #             "tica": tica,
-            #             "pcca": pcca,
-            #             "kmeans": kmeans,
-            #             "ref_kmeans": ref_kmeans,
-            #         },
-            #         open(f"{eval_folder}/{name}_metadata.pkl", "wb"),
-            #     )
             flux_mat = cmsm.transition_matrix * cmsm.pi[None, :]
             flux_mat[flux_mat < 0.0000001] = (
                 np.inf
@@ -664,9 +620,6 @@ def generate_samples(
             ref_discrete = msm.metastable_assignments[ref_kmeans]
             start_idxs = np.where(ref_discrete == start_state)[0]
             end_idxs = np.where(ref_discrete == end_state)[0]
-
-            # np.save("our_start_idxs.npy", start_idxs)
-            # np.save("our_end_idxs.npy", end_idxs)
 
             if (ref_discrete == start_state).sum() == 0 or (
                 ref_discrete == end_state
@@ -701,7 +654,6 @@ def generate_samples(
                 )
             )
 
-            # clusters = np.load(cluster_endpoints_path)
             # use pre-defined cluster centers (min flux endpoints aren't always reasonable)
             clusters = (
                 CLUSTER_ENDPOINTS[protein_name]
@@ -911,12 +863,6 @@ def generate_samples(
         print(
             f"Total number of samples to save using Langevin Dynamics: {int(samp_args.parallel_sim * samp_args.n_timesteps / samp_args.save_interval)}"
         )
-
-        # NOTE: instead of drawing initial samples from the training set (commented below),
-        # draw samples for initial states (assume dataset not available).
-
-        # dl = data.DataLoader(trainset, batch_size=eval_args.parallel_sim, shuffle=True)
-        # init_mol = next(iter(dl))[0]
 
         sampler = SamplerWrapper(model.ema_model).to(device).eval()
         if torch.cuda.device_count() > 1 and device == "cuda":
