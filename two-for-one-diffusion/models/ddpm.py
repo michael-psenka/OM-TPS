@@ -30,7 +30,6 @@ from utils import (
     TorchMD_CGProteinPriorForces,
 )
 
-# from torchmdnet.models.model import load_model as load_mlff_model
 
 KB = 0.83144626181  # This is the Boltzmann constant converted from J/K (Kg, m^2 / s^2 / K) to -> g/mol, angstroms, ps and K.
 
@@ -456,8 +455,8 @@ class GaussianDiffusion(nn.Module):
         path_length,
         latent_time,
         encode_and_decode=True,
-        mlff=False,
-        cg_prior=False,
+        mlff=False, # TODO: remove
+        cg_prior=False, # TODO: remove
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
         initial_guess_level=0,
@@ -605,65 +604,6 @@ class GaussianDiffusion(nn.Module):
         laplace_terms = []
         all_noised_xs = [noised_xs.clone().detach()]
 
-        # load the NNIP model
-        if mlff:
-            model = load_mlff_model(
-                f"mlffs/{self.protein}/model.ckpt",
-                derivative=True,
-            ).to(self.device)
-            residue_nums = np.load(
-                f"datasets/mlff_residue_numbers/{self.protein}_ca_embeddings.npy"
-            )
-            residue_nums = torch.tensor(np.array([int(i) for i in residue_nums])).to(
-                self.device
-            )
-
-            def get_force_from_mlff(x):
-                batch = (
-                    torch.arange(x.shape[0])
-                    .repeat_interleave(self.num_atoms)
-                    .to(x.device)
-                )
-                z = residue_nums.repeat(x.shape[0])
-                x = x.reshape(-1, 3) * self.norm_factor
-                force = model(z=z, pos=x, batch=batch)[1].reshape(-1, self.num_atoms, 3)
-                return force
-
-            # produce i.i.d samples
-            samples = self.sample(batch_size=num_paths * path_length) / self.norm_factor
-            samples = samples.reshape(-1, self.num_atoms, 3)
-            cosine_sims = []
-            mlff_forces = get_force_from_mlff(samples)
-            for t in tqdm(range(0, self.num_timesteps, 10)):
-                cosine_sims.append(
-                    F.cosine_similarity(
-                        mlff_forces, self.force_func(samples, t=t), dim=-1
-                    )
-                    .mean()
-                    .detach()
-                    .cpu()
-                )
-
-            plt.plot(range(0, self.num_timesteps, 10), cosine_sims)
-            plt.xlabel("Diffusion Time")
-            plt.ylabel("Cosine Similarity")
-            plt.title(
-                f"{self.protein} Cosine Similarity between MLFF and Diffusion model forces"
-            )
-            plt.savefig(f"cosine_similarity_diffusion_{self.protein}.png")
-            exit()
-
-        elif cg_prior:
-            # CG protein prior forces
-            protein_prior = TorchMD_CGProteinPriorForces(
-                yaml_file="./dynamics/cg_prior_force_field.yaml",
-                topology_file=f"./datasets/folded_pdbs/cg_{self.protein}.psf",
-                device=self.device,
-            )
-
-            def get_force_from_cg_prior(x):
-                return protein_prior(x * self.norm_factor)[1]
-
         anneal_schedule = torch.linspace(200, latent_time, om_steps // 4)
         # add a bunch latent times to the anneal schedule
         anneal_schedule = (
@@ -704,11 +644,6 @@ class GaussianDiffusion(nn.Module):
                             for x in noised_xs
                         ]
                     forces = [target - x for x, target in zip(noised_xs, targets)]
-                elif mlff:
-                    force_func = get_force_from_mlff
-                    forces = [None] * len(noised_xs)
-                elif cg_prior:
-                    force_func = torch.vmap(get_force_from_cg_prior)
                 else:
                     force_func = lambda x: self.force_func(
                         center_zero(x),

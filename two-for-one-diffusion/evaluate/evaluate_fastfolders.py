@@ -48,8 +48,6 @@ from evaluate.msm_utils import (
     compute_shannon_entropy,
 )
 
-from evaluate.compute_transition_rates import compute_transition_rates
-
 from datasets.dataset_utils_empty import (
     Molecules,
     AtomSelection,
@@ -119,7 +117,6 @@ def evaluate_fastfolders(
     n_sims=-1,
     opt_steps=0,
     window_size=3,
-    compute_rates=False,
     gif=True,
     model=None,
     num_paths=8,
@@ -551,20 +548,9 @@ def evaluate_fastfolders(
             [np.max(free_energy_profile) for free_energy_profile in free_energies]
         )
 
-    # Compute rates
-    # if compute_rates:
-    #     true_rate, predicted_rate = compute_transition_rates(
-    #         protein_name,
-    #         gen_mode,
-    #         append_exp_name,
-    #         time_horizon=-1
-    #     )
-
     # Save final metrics to a JSON file
 
     metrics = {
-        # "True Transition Rate (ns^-1)": true_rate,
-        # "Predicted Transition Rate (ns^-1)": predicted_rate,
         "Max Free Energy (kBT) Mean: ": (
             max_free_energies.mean() if max_free_energies is not None else None
         ),
@@ -797,50 +783,6 @@ def get_tic_free_energy_plots(
 
         # sample_tic_features = np.hstack((dihedrals, pwds))
         transformed_samples = tic_evaluator.tica(sample_tic_features)
-
-        # Plot dihedral angle histogram
-        # plt.figure()
-        # plt.hist(
-        #     np.ravel(dihedrals), bins=100, density=True, label="Interpolation Path"
-        # )
-        # if ref_dihedrals is not None:
-        #     plt.hist(
-        #         np.ravel(ref_dihedrals),
-        #         bins=100,
-        #         density=True,
-        #         alpha=0.5,
-        #         label="Reference",
-        #     )
-        # plt.legend()
-        # plt.title(f"Step {i}: Dihedral angular distribution function")
-
-        # plt.xlabel("Dihedral angle (radians)")
-        # plt.ylabel("Frequency")
-        # plt.ylim(0, 0.6)
-        # plt.show()
-        # file_name = join(gif_folder, f"dihedral_{i}.png")
-        # plt.savefig(file_name)
-        # plt.close()
-        # dihedral_hist_paths.append(file_name)
-
-        # Plot pairwise distance histogram
-        # plt.figure()
-        # plt.hist(np.ravel(pwds), bins=100, density=True, label="Interpolation Path")
-        # if ref_pwds is not None:
-        #     plt.hist(
-        #         np.ravel(ref_pwds), bins=100, density=True, alpha=0.5, label="Reference"
-        #     )
-        # plt.legend()
-        # plt.title(f"Step {i}: Pairwise distance distribution function")
-
-        # plt.xlabel("Pairwise distance (Angstroms)")
-        # plt.ylabel("Frequency")
-        # plt.ylim(0, 0.2)
-        # plt.show()
-        # file_name = join(gif_folder, f"pwd_{i}.png")
-        # plt.savefig(file_name)
-        # plt.close()
-        # pwd_hist_paths.append(file_name)
 
         # Find the bins of the samples
         bins_x = np.digitize(transformed_samples[:, 0], tic_evaluator.bin_edges_x)
@@ -1154,9 +1096,7 @@ def dynamics_analysis(
     Returns the transition probability matrix and the cluster centers.
     """
 
-    # TODO: pass in folders here too
     # Load data
-
     all_atom_append = "_all_atom" if atom_selection == AtomSelection.PROTEIN else ""
 
     if num_clusters is None:
@@ -1195,9 +1135,7 @@ def dynamics_analysis(
     sample_tic_features = tic_evaluator.get_tic_features(
         sampled_mol, tic_evaluator.folded, separate=False
     )
-    # if atom_selection == AtomSelection.A_CARBON:
-    #     dihedrals, pwds = sample_tic_features
-    #     sample_tic_features = np.hstack((dihedrals, pwds))
+   
     transformed_samples = tic_evaluator.tica(sample_tic_features)
 
     if gt_cluster_assignments is None:
@@ -1257,22 +1195,7 @@ def dynamics_analysis(
                 kmeans_cluster_centers,
             )
 
-        # if atom_selection == AtomSelection.A_CARBON
-        #     # Save the dihedrals and pairwise distances for the reference simulation
-        #     np.save(
-        #         os.path.join(
-        #             reference_folder, f"saved_dihedrals_{protein_name.upper()}.npy"
-        #         ),
-        #         dihedrals,
-        #     )
-
-        #     np.save(
-        #         os.path.join(reference_folder, f"saved_pwds_{protein_name.upper()}.npy"),
-        #         pwds,
-        #     )
-
-    return count_matrix, kmeans_cluster_centers  # , dihedrals, pwds
-
+    return count_matrix, kmeans_cluster_centers
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -1413,7 +1336,7 @@ if __name__ == "__main__":
     evaluate_fastfolders(
         args.protein_name,
         args.gen_mode,
-        args.append_exp_name,  # TODO: add another argument for saving to new_append (so we don't overwrite)
+        args.append_exp_name, 
         checkpoint_folder,
         args.reference_folder,
         args.pdb_folder,

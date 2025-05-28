@@ -1,3 +1,5 @@
+# TODO: replace these with our sampling commands
+
 # Sammpling commands
 This file contains the sampling commands used for each protein to generate the i.i.d. samples and Langevin dynamics results reported in the [paper](https://pubs.acs.org/doi/full/10.1021/acs.jctc.3c00702):
 
