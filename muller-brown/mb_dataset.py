@@ -217,7 +217,7 @@ class MBDataset(Dataset):
 
     def __getitem__(self, idx):
         pos = torch.Tensor(self.all_pos[idx][:, :2]).squeeze()
-        if hasattr(self, 'all_force'):
+        if hasattr(self, "all_force"):
             force = torch.Tensor(self.all_force[idx][:, :2]).squeeze()
             return pos, force
         return pos

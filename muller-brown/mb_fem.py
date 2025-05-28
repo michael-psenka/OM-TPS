@@ -1,11 +1,19 @@
-from __future__ import print_function
 from fenics import *
 from mshr import *
 import matplotlib.pyplot as plt
 import numpy as np
 from mb_calculator import MullerBrownPotential
+import os
+
+"""Compute the committor function of 2D MB as the solution of the Backward Kolmogorov equation using numerical quadrature
+Adapted from https://github.com/muhammadhasyim/tps-torch
+"""
 
 if __name__ == "__main__":
+
+    # Create output directory if it doesn't exist
+    os.makedirs("data/committor", exist_ok=True)
+    os.makedirs("data/committor/poisson", exist_ok=True)
 
     beta = Constant("1")  # inverse kB*T
     react_radii = 0.5
@@ -254,8 +262,8 @@ if __name__ == "__main__":
 
     vertex_values = u.compute_vertex_values(mesh)
     coordinates = mesh.coordinates()
-    np.savetxt("vertex_values.txt", vertex_values)
-    np.savetxt("vertex_coords.txt", coordinates)
+    np.savetxt("data/committor/vertex_values.txt", vertex_values)
+    np.savetxt("data/committor/vertex_coords.txt", coordinates)
 
     # Evaluate u at points
     # p = Point(-0.6,0.5)
@@ -267,7 +275,7 @@ if __name__ == "__main__":
     # print(cost)
 
     # Save solution to file in VTK format
-    vtkfile = File("poisson/solution.pvd")
+    vtkfile = File("data/committor/poisson/solution.pvd")
     vtkfile << u
 
     # Evaluate points on structured grid
@@ -284,17 +292,17 @@ if __name__ == "__main__":
             test = Gu(p)
             grad_2_zz[i][j] = test[0] * test[0] + test[1] * test[1]
 
-    np.savetxt("vertex_values_struct.txt", vertex_values)
-    np.savetxt("vertex_coords_struct.txt", coordinates)
-    np.savetxt("xx_structured.txt", xx)
-    np.savetxt("yy_structured.txt", yy)
-    np.savetxt("zz_structured.txt", zz)
-    with open("vertex_values_struct.txt", "w") as outf:
+    np.savetxt("data/committor/vertex_values_struct.txt", vertex_values)
+    np.savetxt("data/committor/vertex_coords_struct.txt", coordinates)
+    np.savetxt("data/committor/xx_structured.txt", xx)
+    np.savetxt("data/committor/yy_structured.txt", yy)
+    np.savetxt("data/committor/fem_committor.txt", zz)
+    with open("data/committor/vertex_values_struct.txt", "w") as outf:
         for i in range(n_struct):
             for j in range(n_struct):
                 outf.write("{:.6g}\n".format(zz[i][j]))
 
-    with open("vertex_coords_struct.txt", "w") as outf:
+    with open("data/committor/vertex_coords_struct.txt", "w") as outf:
         for i in range(n_struct):
             for j in range(n_struct):
                 outf.write("{:.6g} {:.6g}\n".format(xx[i][j], yy[i][j]))
@@ -305,9 +313,9 @@ if __name__ == "__main__":
         calculator.get_energy(grid_points).reshape(n_struct, n_struct).detach().numpy()
     )
     min_energy = np.min(energies)
-    np.savetxt("energies_structured.txt", grad_2_zz)
+    np.savetxt("data/committor/energies_structured.txt", grad_2_zz)
     np.savetxt(
-        "energies_factor_structured.txt",
+        "data/committor/energies_factor_structured.txt",
         grad_2_zz * np.exp(-beta.values().item() * energies),
     )
 
@@ -318,7 +326,10 @@ if __name__ == "__main__":
         x=points_y,
     )  # Integrate over y
     integral_xy = simpson(integral_y, x=points_x)  # Integrate over y
-    print("BKE Loss (Computed via Numerical Integration): ", integral_xy)
+    print(
+        "BKE Loss (True Transition Rate) (Computed via Numerical Integration): ",
+        integral_xy,
+    )
 
     # Evaluate weighted gradient
     # points = np.zeros((5,2))
@@ -338,7 +349,7 @@ if __name__ == "__main__":
     # Pick out values of quantity to minimize that are of high interest
     values = grad_2_zz * np.exp(-beta.values().item() * energies) > 20
     values = values.astype(int)
-    np.savetxt("values_of_interest.txt", values, fmt="%d")
+    np.savetxt("data/committor/values_of_interest.txt", values, fmt="%d")
 
     # fig, ax = plt.subplots(1,1, figsize = (7.0,2.0), dpi=600)
     h = plt.contourf(xx, yy, energies, levels=[-15 + i for i in range(16)])
@@ -354,7 +365,7 @@ if __name__ == "__main__":
     plt.clabel(CS, fontsize=10, inline=1)
     plt.tick_params(axis="both", which="major", labelsize=9)
     plt.tick_params(axis="both", which="minor", labelsize=9)
-    plt.savefig("committor_fem.pdf", bbox_inches="tight")
+    plt.savefig("data/committor/committor_fem.pdf", bbox_inches="tight")
     plt.close()
 
     # plot energies
@@ -364,5 +375,5 @@ if __name__ == "__main__":
     plt.colorbar()
     plt.tick_params(axis="both", which="major", labelsize=9)
     plt.tick_params(axis="both", which="minor", labelsize=9)
-    plt.savefig("energies.pdf", bbox_inches="tight")
+    plt.savefig("data/committor/energies.pdf", bbox_inches="tight")
     plt.close()
