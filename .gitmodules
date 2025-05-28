@@ -1,4 +1,0 @@
-[submodule "two-for-one-diffusion/torchmd-net"]
-	path = two-for-one-diffusion/torchmd-net
-	url = https://github.com/torchmd/torchmd-net
-	ignore = dirty

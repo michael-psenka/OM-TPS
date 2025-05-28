@@ -30,8 +30,6 @@ from utils import (
     compute_batched_forces,
 )
 
-# from torchmdnet.models.model import load_model as load_mlff_model
-
 # flow matching imports
 from flow_matching.path.scheduler import CondOTScheduler
 from flow_matching.path import AffineProbPath
