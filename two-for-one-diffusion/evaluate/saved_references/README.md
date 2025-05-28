@@ -1,2 +1,2 @@
 # Saved references
-This folder contains pre-saved reference distributions and TIC models that can be used in [evaluation](../evaluate/) such that samples can be evaluated in the absence of reference data.
+This folder contains pre-saved reference distributions, TIC models, MSM cluster info (endpoint coordinates, transition matrices, etc.) that can be used in evaluation such that reference data is not explicitly needed.

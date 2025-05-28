@@ -1,2 +1,2 @@
 # Saved models
-In this folder, we provide pretrained models for all test cases: alanine dipeptide (4 folds) and fast-folding proteins. Thes emodels can be used for [sampling](../sample.py).
+In this folder, we provide pretrained diffusion and flow matching models for all test cases: coarse-grained fast-folding proteins and all-atom tetrapeptides. These models can be used for [sampling](../sample.py).
