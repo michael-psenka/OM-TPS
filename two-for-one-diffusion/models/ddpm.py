@@ -455,8 +455,6 @@ class GaussianDiffusion(nn.Module):
         path_length,
         latent_time,
         encode_and_decode=True,
-        mlff=False, # TODO: remove
-        cg_prior=False, # TODO: remove
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
         initial_guess_level=0,
@@ -468,10 +466,7 @@ class GaussianDiffusion(nn.Module):
         D=0.01,
         path_batch_size=-1,
         anneal=False,
-        sample_latent_time=False,
         cosine_scheduler=False,
-        subsample_points_percent=None,
-        subsample_dimensions_percent=None,
         add_noise=False,
         truncated_gradient=False,
         temperature=1.0,
@@ -625,13 +620,6 @@ class GaussianDiffusion(nn.Module):
             for i in pbar:
                 if anneal:
                     diff_time = anneal_schedule[i].item()
-                elif sample_latent_time:
-                    # sample from a cosine decay distribution (probabilities decaying from latent_time to T)
-                    probs = cosine_beta_schedule(self.num_timesteps).flip(dims=[0])[
-                        latent_time:
-                    ]
-                    probs = probs / probs.sum()
-                    diff_time = torch.multinomial(probs, 1).item() + latent_time
                 else:
                     diff_time = latent_time
 
@@ -650,68 +638,6 @@ class GaussianDiffusion(nn.Module):
                         diff_time,
                         z=z,
                     )
-
-                    # Subsample points
-                    num_points = path_length
-                    # TODO: fix this - subsampling yields shape errors for tetrapeptide interpolations
-                    subsample_points_percent = None
-                    subsample_dimensions_percent = None
-
-                    if subsample_points_percent is not None:
-                        num_points = int(subsample_points_percent * path_length)
-
-                        # Generate unique indices for each path using torch.randperm
-                        indices_even = torch.stack(
-                            [
-                                torch.arange(0, path_length, 2)[
-                                    torch.randperm(int(path_length / 2))
-                                ]
-                                for _ in range(num_paths)
-                            ]
-                        )
-
-                        indices_odd = torch.stack(
-                            [
-                                torch.arange(1, path_length - 1, 2)[
-                                    torch.randperm(int(path_length / 2) - 1)
-                                ]
-                                for _ in range(num_paths)
-                            ]
-                        )
-
-                        # Compute the next_indices
-                        next_indices_even = indices_even + 1
-                        next_indices_odd = indices_odd + 1
-
-                        # Interleave indices and next_indices
-                        indices_even = torch.stack(
-                            (indices_even, next_indices_even), dim=-1
-                        ).view(num_paths, -1)[:, :num_points]
-                        indices_odd = torch.stack(
-                            (indices_odd, next_indices_odd), dim=-1
-                        ).view(num_paths, -1)[:, :num_points]
-                        indices = torch.cat((indices_even, indices_odd), dim=-1)
-
-                        indices = (
-                            indices.unsqueeze(-1)
-                            .unsqueeze(-1)
-                            .expand(-1, -1, self.num_atoms, 3)
-                            .to(self.device)
-                        )
-
-                        indices_even = (
-                            indices_even.unsqueeze(-1)
-                            .unsqueeze(-1)
-                            .expand(-1, -1, self.num_atoms, 3)
-                            .to(self.device)
-                        )
-
-                        noised_xs_input = noised_xs.gather(1, indices)
-                        # don't replicate indices for force calculation
-                        noised_xs_input_unique = noised_xs.gather(1, indices_even)
-                    else:
-                        noised_xs_input = noised_xs
-                        noised_xs_input_unique = noised_xs
 
                 # Initialize gradient accumulator
                 optimizer.zero_grad()

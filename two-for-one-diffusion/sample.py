@@ -142,7 +142,6 @@ parser.add_argument(
     help="whether to use the model trained on data with transitions removed",
 )
 
-# i.i.d. generation arguments
 parser.add_argument(
     "--num_samples_eval",
     type=int,
@@ -151,12 +150,6 @@ parser.add_argument(
 )
 parser.add_argument(
     "--batch_size_gen", type=int, default=256, help="batch size for evaluation"
-)
-
-parser.add_argument(
-    "--post_om_md_simulate",
-    action="store_true",
-    help="whether to perform MD simulations after OM optimization",
 )
 
 # Langevin simulation arguments
@@ -226,25 +219,6 @@ parser.add_argument(
     "--anneal",
     action="store_true",
     help="whether to anneal temperature during interpolation",
-)
-
-parser.add_argument(
-    "--sample_latent_time",
-    action="store_true",
-    help="whether to randomly sample latent time using cosine decay schedule during om interpolation",
-)
-
-parser.add_argument(
-    "--subsample_points_percent",
-    type=float,
-    help="fraction of points along path to keep for optimization",
-    default=1,
-)
-parser.add_argument(
-    "--subsample_dimensions_percent",
-    type=float,
-    help="fraction of dimensions along path to keep for optimization",
-    default=1,
 )
 
 parser.add_argument(
@@ -322,18 +296,6 @@ parser.add_argument(
     action="store_true",
     help="Instead of taking gradient through the diffusion model forces, just follow the forces",
 )
-
-parser.add_argument(
-    "--mlff",
-    action="store_true",
-    help="Use a pretrained machine learning force field (MLFF) to compute forces instead of the diffusion model",
-)
-parser.add_argument(
-    "--cg_prior",
-    action="store_true",
-    help="Use TorchMD CG prior to compute forces instead of the diffusion model (only for coarse-grained models)",
-)
-
 
 samp_args = parser.parse_args()
 
@@ -515,21 +477,21 @@ def main(samp_args):
         else pd.read_csv(samp_args.split, index_col="name").index
     )
     for name in names:
-        # try:
-        generate_samples(
-            model,
-            trainset,
-            samp_args.noise_level,
-            args,
-            device,
-            eval_folder,
-            testset,
-            name,
-            samp_args.sidechains,
-        )
-        # except:
-        #     print(f"Failed to generate samples for {name}")
-        #     continue
+        try:
+            generate_samples(
+                model,
+                trainset,
+                samp_args.noise_level,
+                args,
+                device,
+                eval_folder,
+                testset,
+                name,
+                samp_args.sidechains,
+            )
+        except:
+            print(f"Failed to generate samples for {name}")
+            continue
 
 
 
@@ -869,8 +831,6 @@ def generate_samples(
                         else slerp
                     ),
                     initial_guess_level=samp_args.initial_guess_level,
-                    mlff=samp_args.mlff,
-                    cg_prior=samp_args.cg_prior,
                     action_cls=action_cls,
                     om_steps=samp_args.steps,
                     optimizer=optimizer,
@@ -880,10 +840,7 @@ def generate_samples(
                     D=samp_args.om_d / (trainset.std if args.scale_data else 1.0) ** 2,
                     path_batch_size=samp_args.path_batch_size,
                     anneal=samp_args.anneal,
-                    sample_latent_time=samp_args.sample_latent_time,
                     cosine_scheduler=samp_args.cosine_scheduler,
-                    subsample_points_percent=samp_args.subsample_points_percent,
-                    subsample_dimensions_percent=samp_args.subsample_dimensions_percent,
                     add_noise=samp_args.add_noise,
                     truncated_gradient=samp_args.truncated_gradient,
                     temperature=samp_args.interpolation_temp,
@@ -925,35 +882,6 @@ def generate_samples(
         )
         print("done!")
         sampled_mol = output["sampled_mol"]
-
-        if (
-            samp_args.post_om_md_simulate
-        ):  # initiate MD simulations from the interpolated path
-            print(
-                f"Initiating Langevin MD simulations from transition paths. Total steps: {int(samp_args.n_timesteps)}"
-            )
-            masses = samp_args.masses
-            if masses is None:
-                if "alanine" in args.mol:
-                    masses = [12.8] * trainset.num_beads
-                else:
-                    masses = [12.0] * trainset.num_beads
-
-            langevin_sampler = LangevinDiffusion(
-                model.ema_model,
-                sampled_mol,
-                samp_args.n_timesteps,
-                save_interval=samp_args.save_interval,
-                t=noise_level,
-                diffusion_steps=args.diffusion_steps,
-                temp_data=samp_args.temp_data,
-                temp_sim=samp_args.temp_sim,
-                dt=samp_args.dt,
-                masses=masses,
-                friction=samp_args.friction,
-                kb=samp_args.kb,
-            )
-            md_sampled_mol = langevin_sampler.sample()
 
         if "actions" in output.keys():
             actions = output["actions"]

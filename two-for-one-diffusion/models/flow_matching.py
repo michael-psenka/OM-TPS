@@ -407,11 +407,9 @@ class FlowMatching(nn.Module):
         path_length,
         latent_time,
         encode_and_decode=True,
-        mlff=False,
         action_cls=TruncatedAction,
         initial_guess_fn=torch.lerp,
         initial_guess_level=0,
-        initiate_with_iid=False,
         om_steps=100,
         optimizer=torch.optim.Adam,
         lr=2e-1,
@@ -420,10 +418,7 @@ class FlowMatching(nn.Module):
         D=0.01,
         path_batch_size=-1,
         anneal=False,
-        sample_latent_time=False,
         cosine_scheduler=False,
-        subsample_points_percent=None,
-        subsample_dimensions_percent=None,
         add_noise=False,
         truncated_gradient=False,
         temperature=1.0,
@@ -436,11 +431,9 @@ class FlowMatching(nn.Module):
             path_length: int, length of the path to interpolate
             latent_time: float, time at which to interpolate
             encode_and_decode: bool, whether to encode and decode the path
-            mlff: bool, whether to use MLFF model for force calculation
             action_cls: class, action class to use for optimization
             initial_guess_fn: function, function to use for initial guess
             initial_guess_level: int, level of denoising to use for initial guess
-            initiate_with_iid: bool, whether to initiate the path with iid samples
             om_steps: int, number of optimization steps
             lr: float, learning rate for optimization
             dt: float, time step for optimization
@@ -482,61 +475,28 @@ class FlowMatching(nn.Module):
         original_x2 = x2.clone()
 
         with torch.no_grad():
-            if initiate_with_iid:
-                # produce i.i.d samples
-                noised_xs = (
-                    self.sample(batch_size=num_paths * path_length) / self.norm_factor
-                )
-
-                noised_xs = noised_xs.reshape(path_length, num_paths, n_atoms, 3)
-
-                # align all samples
-                dists = torch.zeros((path_length, num_paths))
-                for i in range(path_length):
-                    for j in range(num_paths):
-                        noised_xs[i, j] = torch.tensor(
-                            kabsch_rotate(noised_xs[i, j].cpu(), x1[j].cpu())
-                        ).to(x1.device)
-                        dists[i, j] = torch.tensor(
-                            kabsch_rmsd(
-                                noised_xs[i, j].cpu().numpy(), x1[j].cpu().numpy()
-                            )
-                        )
-
-                # re-order the samples by distance to x1
-                sorted_idxs = torch.argsort(dists, dim=0).to(self.device)
-                for i in range(num_paths):
-                    noised_xs[:, i] = noised_xs[:, i][sorted_idxs[:, i]]
-                # sorted_idxs = sorted_idxs.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, n_atoms, 3)
-                # batch_indices = torch.arange(path_length).unsqueeze(1).unsqueeze(-1).unsqueeze(-1).expand(-1, num_paths, num_atoms, 3)  # Shape [200, 8, 28, 3]
-
-                # import pdb; pdb.set_trace()
-                # noised_xs = noised_xs.gather(2, sorted_idxs)
-                # noised_xs[0], noised_xs[-1] = original_x1, original_x2
-
+            if encode_and_decode:
+                noised_x1 = self.q_sample(x1, latent_time)
+                noised_x2 = self.q_sample(x2, latent_time)
+            elif initial_guess_level != 0:
+                noised_x1 = self.q_sample(x1, initial_guess_level)
+                noised_x2 = self.q_sample(x2, initial_guess_level)
             else:
-                if encode_and_decode:
-                    noised_x1 = self.q_sample(x1, latent_time)
-                    noised_x2 = self.q_sample(x2, latent_time)
-                elif initial_guess_level != 0:
-                    noised_x1 = self.q_sample(x1, initial_guess_level)
-                    noised_x2 = self.q_sample(x2, initial_guess_level)
-                else:
-                    noised_x1 = x1
-                    noised_x2 = x2
+                noised_x1 = x1
+                noised_x2 = x2
 
-                noised_x1 = center_zero(noised_x1)
-                noised_x2 = center_zero(noised_x2)
+            noised_x1 = center_zero(noised_x1)
+            noised_x2 = center_zero(noised_x2)
 
-                # linear interpolation of noised_x1 and noised_x2
-                noised_xs = torch.stack(
-                    [
-                        center_zero(
-                            initial_guess_fn(noised_x1.cpu(), noised_x2.cpu(), alpha)
-                        )
-                        for alpha in torch.linspace(0, 1, path_length)
-                    ]
-                ).to(self.device)
+            # linear interpolation of noised_x1 and noised_x2
+            noised_xs = torch.stack(
+                [
+                    center_zero(
+                        initial_guess_fn(noised_x1.cpu(), noised_x2.cpu(), alpha)
+                    )
+                    for alpha in torch.linspace(0, 1, path_length)
+                ]
+            ).to(self.device)
 
         if initial_guess_level != 0:
             # denoise to data space before optimization (in batched fashion)
@@ -572,7 +532,6 @@ class FlowMatching(nn.Module):
             (1, 0, 2, 3)
         )  # make batch dimension come first [num_paths, path_length, n_atoms, 3]
 
-        # noised_xs = torch.load("bba_diffusion_ics.pt").to(self.device)
 
         if optimizer == torch.optim.SGD:
             optimizer = optimizer([noised_xs], lr=lr, momentum=0.9)
@@ -592,75 +551,6 @@ class FlowMatching(nn.Module):
         laplace_terms = []
         all_noised_xs = [noised_xs.clone().detach()]
 
-        # load the NNIP model
-        if mlff:
-            model = load_mlff_model(
-                f"mlffs/{self.protein}/model.ckpt",
-                derivative=True,
-            ).to(self.device)
-            residue_nums = np.load(
-                f"datasets/mlff_residue_numbers/{self.protein}_ca_embeddings.npy"
-            )
-            residue_nums = torch.tensor(np.array([int(i) for i in residue_nums])).to(
-                self.device
-            )
-
-            def get_force_from_mlff(x):
-                batch = (
-                    torch.arange(x.shape[0])
-                    .repeat_interleave(self.num_atoms)
-                    .to(x.device)
-                )
-                z = residue_nums.repeat(x.shape[0])
-                x = x.reshape(-1, 3) * self.norm_factor
-                force = model(z=z, pos=x, batch=batch)[1].reshape(-1, self.num_atoms, 3)
-                return force
-
-            samples = noised_xs.reshape(-1, self.num_atoms, 3)
-            cosine_sims = []
-            mlff_forces = get_force_from_mlff(samples)
-            for t in tqdm(np.linspace(0, 1, 100)):
-                cosine_sims.append(
-                    F.cosine_similarity(
-                        mlff_forces, self.force_func(samples, t=t), dim=-1
-                    )
-                    .mean()
-                    .detach()
-                    .cpu()
-                )
-
-            # Find the t value where cosine similarity peaks
-            cosine_sims = np.array(cosine_sims)
-            max_index = np.argmax(cosine_sims)
-            t_values = np.linspace(0, 1, 100)
-            peak_t = t_values[max_index]
-            peak_cosine_sim = cosine_sims[max_index]
-            plt.axvline(
-                x=1 - peak_t,
-                color="red",
-                linestyle="--",
-                label=f"Peak t = {peak_t:.2f}",
-            )
-            plt.text(
-                1 - peak_t,
-                peak_cosine_sim,
-                f"{1-peak_t:.2f}",
-                color="red",
-                ha="right",
-                va="bottom",
-            )
-
-            plt.plot(1 - np.linspace(0, 1, 100), cosine_sims)
-            plt.xlabel("Flow Time")
-            plt.ylabel("Cosine Similarity")
-            plt.title(
-                f"{self.protein} Cosine Similarity between MLFF and Flow Matching forces"
-            )
-            plt.savefig(f"cosine_similarity_flow_{self.protein}.png")
-            import pdb
-
-            pdb.set_trace()
-            exit()
 
         anneal_schedule = torch.linspace(200, latent_time, om_steps // 4)
         # add a bunch latent times to the anneal schedule
@@ -683,19 +573,8 @@ class FlowMatching(nn.Module):
             changed = False
             for i in pbar:
                 if anneal:
-                    # diff_time = max(
-                    #     0,
-                    #     self.num_timesteps - int(self.num_timesteps / om_steps) * i - 1,
-                    # )  # anneal the time from T to 0
                     diff_time = anneal_schedule[i].item()
 
-                elif sample_latent_time:
-                    # sample from a cosine decay distribution (probabilities decaying from latent_time to T)
-                    probs = cosine_beta_schedule(self.num_timesteps).flip(dims=[0])[
-                        latent_time:
-                    ]
-                    probs = probs / probs.sum()
-                    diff_time = torch.multinomial(probs, 1).item() + latent_time
                 else:
                     diff_time = latent_time
 
@@ -710,72 +589,9 @@ class FlowMatching(nn.Module):
                         ]
                     forces = [target - x for x, target in zip(noised_xs, targets)]
 
-                elif mlff:
-                    force_func = get_force_from_mlff
-                    forces = [None] * len(noised_xs)
                 else:
                     force_func = lambda x: self.force_func(center_zero(x), diff_time, z)
 
-                    # Subsample points
-                    num_points = path_length
-                    # TODO: fix this - subsampling yields shape errors for tetrapeptide interpolations
-                    subsample_points_percent = None
-                    subsample_dimensions_percent = None
-                    if subsample_points_percent is not None:
-                        num_points = int(subsample_points_percent * path_length)
-
-                        # Generate unique indices for each path using torch.randperm
-                        indices_even = torch.stack(
-                            [
-                                torch.arange(0, path_length, 2)[
-                                    torch.randperm(int(path_length / 2))
-                                ]
-                                for _ in range(num_paths)
-                            ]
-                        )
-
-                        indices_odd = torch.stack(
-                            [
-                                torch.arange(1, path_length - 1, 2)[
-                                    torch.randperm(int(path_length / 2) - 1)
-                                ]
-                                for _ in range(num_paths)
-                            ]
-                        )
-
-                        # Compute the next_indices
-                        next_indices_even = indices_even + 1
-                        next_indices_odd = indices_odd + 1
-
-                        # Interleave indices and next_indices
-                        indices_even = torch.stack(
-                            (indices_even, next_indices_even), dim=-1
-                        ).view(num_paths, -1)[:, :num_points]
-                        indices_odd = torch.stack(
-                            (indices_odd, next_indices_odd), dim=-1
-                        ).view(num_paths, -1)[:, :num_points]
-                        indices = torch.cat((indices_even, indices_odd), dim=-1)
-
-                        indices = (
-                            indices.unsqueeze(-1)
-                            .unsqueeze(-1)
-                            .expand(-1, -1, self.num_atoms, 3)
-                            .to(self.device)
-                        )
-
-                        indices_even = (
-                            indices_even.unsqueeze(-1)
-                            .unsqueeze(-1)
-                            .expand(-1, -1, self.num_atoms, 3)
-                            .to(self.device)
-                        )
-
-                        noised_xs_input = noised_xs.gather(1, indices)
-                        # don't replicate indices for force calculation
-                        noised_xs_input_unique = noised_xs.gather(1, indices_even)
-                    else:
-                        noised_xs_input = noised_xs
-                        noised_xs_input_unique = noised_xs
 
                 # Initialize gradient accumulator
                 optimizer.zero_grad()
@@ -917,19 +733,6 @@ class FlowMatching(nn.Module):
                     f"OM Action: {total_action}, Path Contribution: {round(path_contribution*100, 3)}%, Force Contribution: {round(force_contribution * 100, 3)}%, Laplace Contribution: {round(laplace_contribution * 100, 3)}%"
                 )
 
-                # if path_contribution > 0.99 and i > 50 and not changed:
-                #     print(
-                #         "Path contribution is too high, decreasing dt to upweight the path loss"
-                #     )
-                #     dt /= 10  # decrease the time step to upweight the path term
-                #     changed = True
-                # elif force_contribution > 0.99 and i > 50 and not changed:
-                #     print(
-                #         "Force contribution is too high, increasing dt to upweight the force loss"
-                #     )
-                #     dt *= 10  # increase the time step to upweight the force term
-                #     changed = True
-
                 if self.log:
                     wandb.log(
                         {
@@ -1050,8 +853,6 @@ class FlowMatching(nn.Module):
             padding_idx = z == 0
             loss = loss[~padding_idx]
 
-        # loss = reduce(loss, "b ... -> b (...)", "mean")
-
         return loss.mean()
 
     def forward(self, mol, *args, t_diff_range=None, **kwargs):
@@ -1071,7 +872,7 @@ class FlowMatching(nn.Module):
         ), f"Molecule shape must be {(num_atoms, dims)}"
 
         t = torch.multinomial(self.p2_loss_weight, b, replacement=True).long()
-        # self.assert_normal_kl(
-        #     x_start=mol, t=torch.full((b,), T, device=device, dtype=torch.long)
-        # )
+        self.assert_normal_kl(
+            x_start=mol, t=torch.full((b,), T, device=device, dtype=torch.long)
+        )
         return self.p_losses(mol, t, *args, **kwargs)
