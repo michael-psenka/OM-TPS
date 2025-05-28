@@ -7,7 +7,6 @@ from tqdm import tqdm
 import numpy as np
 import os
 import mdtraj as md
-import matplotlib.pyplot as plt
 import io
 import matplotlib.pyplot as plt
 from openmm.app import PDBFile, ForceField, Modeller, Simulation, NoCutoff, HBonds

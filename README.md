@@ -1,41 +1,54 @@
-### Quick start on OM interpolation/training with fast folding proteins
+# [ICML 2025] Action-Minimization Meets Generative Modeling: Efficient Transition Path Sampling with the Onsager-Machlup Functional
+<p align="center">
+  <a href="https://arxiv.org/abs/2504.18506">
+    <img src="https://img.shields.io/badge/arXiv-b31b1b?style=for-the-badge&logo=arxiv" alt="arXiv"/>
+  </a>
+</p>
 
-Install clean conda env with python 3.9, then run:
 
+Official implementation of **"Action-Minimization Meets Generative Modeling: Efficient Transition Path Sampling with the Onsager-Machlup Functional"**, by Sanjeev Raja, Martin Šípka, Michael Psenka, Tobias Kreiman, Michal Pavelka, and Aditi S. Krishnapriyan. 
+
+<p align="center">
+<img src="assets/conceptual_figure.png" alt=""/>
+</p>
+<p align="center">
+</p>
+
+We introduce a method to zero-shot repurpose pretrained generative models of atomistic conformational ensembles to produce dynamical transition pathways, by interpreting candidate paths as a realization of an SDE induced by the learned score function of the generative model. Our approach is compatible with any diffusion or flow matching generative model that can produce i.i.d conformational samples of a molecular system.
+
+## Environment Setup
+
+Create a primary conda environment:
+```bash
+mamba create -n om-tps python=3.9
 pip install numpy==1.21.2 pandas==1.5.3
 pip install torch==1.12.1+cu113 -f https://download.pytorch.org/whl/torch_stable.html
 pip install mdtraj==1.9.9 biopython==1.79
 pip install wandb==0.18.7 dm-tree einops torchdiffeq fair-esm pyEMMA
-pip install ase torch-geometric rmsd gsd black flow_matching scienceplots ema-pytorch tensorboard jupyter
+pip install ase torch-geometric rmsd tqdm gsd black flow_matching scienceplots ema-pytorch tensorboard jupyter
+pip install fenics
+mamba install conda-forge::mshr
 pip install matplotlib==3.7.2 numpy==1.21.2
+```
 
-Anytime you install a new package, make sure to revert to numpy==1.21.2 (for pyemma compatibility)
+**Note:** Anytime you install a new package that causes numpy to be upgraded, make sure to revert to numpy==1.21.2 (for compatibility with pyemma)
+
+Create a separate environment for energy evaluations with OpenMM (not compatible with the above environment due to version sensitivity):
+```bash
+mamba create -n openmm-env python=3.9
+pip install numpy==1.21.2 pandas==1.5.3 rmsd mdtraj matplotlib
+pip install torch==1.12.1+cu113 -f https://download.pytorch.org/whl/torch_stable.html
+mamba install conda-forge::pdbfixer
+mamba install conda-forge::openmm
+```
 
 
-### OM optimization sample command:
-Run ./sample.sh to run the main driver script (sample.py ). Here's a sample command:
-python sample.py \
-    --model_path saved_models/trp_cage \
-    --gen_mode om_interpolate \
-    --atom_selection c-alpha \
-    --num_samples_eval 4 \ # produces 4 paths
-    --batch_size_gen 1 \ # 1 path at a time
-    --latent_time 15 \ # $\tau_opt passed into the score function (theoretically should be 0)
-    --initial_guess_level 250\ # latent level where we noise/interpolate/denoise for the initial guess
-    --subsample_points_percent 1.0 \ # ignored
-    --subsample_dimensions_percent 1.0 \ #ignored
-    --no_encode_and_decode \ # don't do optimization in the latent space, do in data space
-    --action truncated \ # truncated action (no divergence term)
-    --optimizer adam \
-    --lr 2e-1 \ # LR for OM opt
-    --append_exp_name test_initial_latent_time_250_physical_params_dt=0.001 \ # experiment name
-    --om_dt 0.001 \ # dt for OM Action
-    --om_gamma 1 \ # gamma for OM action
-    --path_length 200 \ # number of waypoints on path
-    --path_batch_size 200 \ # path minibatching (for memory)
-    --steps 5000 # number of gradient steps
+## General Code Structure
+The ```muller-brown/``` directory contains code to reproduce the results from the paper on the 2D Muller-Brown potential. The ```two-for-one-diffusion/``` directory contains code to reproduce the results from the paper on D.E.Shaw fast folding proteins and tetrapeptides. See the ```README.md``` in these directories for specific instructions on running the method.
 
-## Training:
+
+
+<!-- ## Training:
 Run the following:
 python main_train.py \
     --mol trp_cage \ # change to your protein of interest
@@ -46,4 +59,20 @@ python main_train.py \
     --hidden_features_gnn 64 \
     --atom_selection c-alpha \ # coarse-graining
     --learning_rate 4e-4 \
-    --min_lr_cosine_anneal 0 \
+    --min_lr_cosine_anneal 0 \ -->
+
+
+
+## Citation
+If you use this code in your research, please cite our paper.
+
+```bibtex
+@misc{raja2025actionminimizationmeetsgenerativemodeling,
+      title={Action-Minimization Meets Generative Modeling: Efficient Transition Path Sampling with the Onsager-Machlup Functional}, 
+      author={Sanjeev Raja and Martin Šípka and Michael Psenka and Tobias Kreiman and Michal Pavelka and Aditi S. Krishnapriyan},
+      year={2025},
+      eprint={2504.18506},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2504.18506}, 
+}

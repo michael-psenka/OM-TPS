@@ -36,13 +36,12 @@ def evaluate_tetrapeptide(
     """Function to evaluate the transition path for a single tetrapeptide with pdb_id `name`."""
 
     print(f"Evaluating {name}")
-    # TODO: make this a dedicated env just for energy eval
-    # Activate om_diffusion environment, which has OpenMM installed to compute energies
+    # Activate openmm-env environment, which has OpenMM installed to compute energies
     # This adds missing atoms, performs a small energy minimization, and computes energies
     # for the generated tetrapeptide conformations/paths
 
     result = subprocess.run(
-        f"PYTHONPATH={os.getcwd()} conda run -n om-diffusion python evaluate/compute_tetra_energies.py --gen_mode {gen_mode} --pdb_dir {pdbdir} --name {name} --num_paths {num_paths}",
+        f"PYTHONPATH={os.getcwd()} conda run -n openmm-env python evaluate/compute_tetra_energies.py --gen_mode {gen_mode} --pdb_dir {pdbdir} --name {name} --num_paths {num_paths}",
         shell=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
