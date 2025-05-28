@@ -442,6 +442,3 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
-
-# hotfix TODO need to fix, ignore mdgen
-two-for-one-diffusion/mdgen
