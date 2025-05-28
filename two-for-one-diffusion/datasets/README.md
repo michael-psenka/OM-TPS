@@ -1,2 +1,0 @@
-# Datasets
-This folder contains [dataset_utils_empty.py](./dataset_utils_empty.py), a file with data processing tools. Empty datasets are returned when there is no reference data available. Sample evaluation is then still possible using the [saved references](../saved_references/).
