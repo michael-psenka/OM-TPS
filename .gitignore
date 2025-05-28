@@ -37,8 +37,10 @@ alphaflow/
 *pdf
 *vtu
 *.npy
+*.sh
 *pvd
 train_diffusion_mb.py
+__init__.py
 
 # Two for One stuff:
 
