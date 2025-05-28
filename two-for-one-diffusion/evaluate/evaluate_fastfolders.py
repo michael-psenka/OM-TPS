@@ -704,7 +704,9 @@ def get_tic_free_energy_plots(
     )
     if os.path.exists(committor_state_dict_file):
         committor_model = CommittorNN(model)
-        state_dict = torch.load(committor_state_dict_file, map_location=device, weights_only = False)
+        state_dict = torch.load(
+            committor_state_dict_file, map_location=device, weights_only=False
+        )
 
         committor_model.load_state_dict(state_dict.state_dict())
         committor_model.to(device)
@@ -856,7 +858,7 @@ def get_tic_free_energy_plots(
             else torch.device("cpu")
         )
         transition_rates = None
-        committor_model = None # don't do rate stuff now
+        committor_model = None  # don't do rate stuff now
         if committor_model is not None:
             norm_grads = []
             pred_probs = []
@@ -1135,7 +1137,7 @@ def dynamics_analysis(
     sample_tic_features = tic_evaluator.get_tic_features(
         sampled_mol, tic_evaluator.folded, separate=False
     )
-   
+
     transformed_samples = tic_evaluator.tica(sample_tic_features)
 
     if gt_cluster_assignments is None:
@@ -1196,6 +1198,7 @@ def dynamics_analysis(
             )
 
     return count_matrix, kmeans_cluster_centers
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -1336,7 +1339,7 @@ if __name__ == "__main__":
     evaluate_fastfolders(
         args.protein_name,
         args.gen_mode,
-        args.append_exp_name, 
+        args.append_exp_name,
         checkpoint_folder,
         args.reference_folder,
         args.pdb_folder,

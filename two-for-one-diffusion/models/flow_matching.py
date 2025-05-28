@@ -532,7 +532,6 @@ class FlowMatching(nn.Module):
             (1, 0, 2, 3)
         )  # make batch dimension come first [num_paths, path_length, n_atoms, 3]
 
-
         if optimizer == torch.optim.SGD:
             optimizer = optimizer([noised_xs], lr=lr, momentum=0.9)
         else:
@@ -550,7 +549,6 @@ class FlowMatching(nn.Module):
         force_terms = []
         laplace_terms = []
         all_noised_xs = [noised_xs.clone().detach()]
-
 
         anneal_schedule = torch.linspace(200, latent_time, om_steps // 4)
         # add a bunch latent times to the anneal schedule
@@ -591,7 +589,6 @@ class FlowMatching(nn.Module):
 
                 else:
                     force_func = lambda x: self.force_func(center_zero(x), diff_time, z)
-
 
                 # Initialize gradient accumulator
                 optimizer.zero_grad()
@@ -655,7 +652,7 @@ class FlowMatching(nn.Module):
                     batch_first_term, batch_second_term, batch_third_term = action_func(
                         path_batch,
                         batch_forces,
-                        mask = (z != 0) if z is not None else None
+                        mask=(z != 0) if z is not None else None,
                     )
 
                     # Take mean across batch dimension

@@ -494,7 +494,6 @@ def main(samp_args):
             continue
 
 
-
 def generate_samples(
     model,
     trainset,
@@ -525,7 +524,6 @@ def generate_samples(
         if sidechains:
             bonds = [(bond[0].index, bond[1].index) for bond in topology.bonds]
             bonds = np.array(bonds)
-        
 
     # TODO: clean up this stuff
     if "tetrapeptide" in protein_name:
@@ -548,7 +546,7 @@ def generate_samples(
             bonds = bonds[bonds[:, 0] < n_atoms]
             bonds = bonds[bonds[:, 1] < n_atoms]
     else:
-    
+
         all_atom_append = (
             "_all_atom" if samp_args.atom_selection == AtomSelection.PROTEIN else ""
         )

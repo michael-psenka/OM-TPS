@@ -35,11 +35,15 @@ class TruncatedAction(torch.nn.Module):
         else:
             mask = torch.ones_like(path_term).bool()
 
-        return path_term[mask].sum(), force_term[mask].sum(), torch.tensor(0).to(torch.float32)
+        return (
+            path_term[mask].sum(),
+            force_term[mask].sum(),
+            torch.tensor(0).to(torch.float32),
+        )
 
 
 class S2Action(torch.nn.Module):
-    #TODO: remove this class since we always use HutchinsonAction anyways
+    # TODO: remove this class since we always use HutchinsonAction anyways
     """Action with Hessian"""
 
     def __init__(self, force_func, dt, gamma, laplace_func, D=None):
@@ -140,13 +144,12 @@ class HutchinsonAction(torch.nn.Module):
         Args: path of shape [B, P, N, 3], forces of shape [B, P, N, 3]
         """
         num_atoms = path.shape[-2]
-        
+
         f_n, laplace = self.force_and_laplace(
             path[:, :-1],
             forces,
             subsample_dimensions,
         )
-
 
         first_term = torch.square((path[:, 1:] - path[:, :-1])) / (2 * self.dt)
 
@@ -160,8 +163,5 @@ class HutchinsonAction(torch.nn.Module):
         else:
             mask = torch.ones_like(first_term).bool()
 
-
         # Result is the action and is expected to have shape [batch, 1]
         return first_term[mask].sum(), second_term[mask].sum(), third_term[mask].sum()
-
-

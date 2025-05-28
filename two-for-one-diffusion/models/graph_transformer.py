@@ -117,7 +117,7 @@ class GraphTransformer(nn.Module):
             edge_attr = self.edge_embedding(edge_attr)
 
             padding_idx = None
-            
+
             if z is not None:
                 z = z.to(self.device)
                 if len(z.shape) == 1:

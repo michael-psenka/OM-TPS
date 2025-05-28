@@ -701,7 +701,7 @@ class GaussianDiffusion(nn.Module):
                     batch_first_term, batch_second_term, batch_third_term = action_func(
                         path_batch,
                         batch_forces,
-                        mask = (z != 0) if z is not None else None
+                        mask=(z != 0) if z is not None else None,
                     )
 
                     # Take mean across batch dimension
