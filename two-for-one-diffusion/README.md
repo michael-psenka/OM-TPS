@@ -1,28 +1,51 @@
 # Fast Folding Proteins and Tetrapeptides
 
-
 ## Requirements
+Make sure the ```om-tps``` conda environment is set up as described [here](../README.md)
+
+### Data
+This repo is designed to work without access to the original training data, particularly for the fast-folding proteins. We provide all the necessary files for running and evaluating transition path sampling. If you would like to access the original fast-folding protein training data (e.g. to train your own models), you can reach out directly to [D.E.Shaw](Christine.Ueda@deshawresearch.com).
+
+To download the tetrapeptide data, run these commands from this directory: TODO
 
 ***
 
-## Sampling and evaluation
+## Transition path sampling
 ### Pretrained models 
-Trained models per protein can be found in the [saved_models](./saved_models/) folder. 
+Pretrained models per protein can be found in the [saved_models](./saved_models/) folder. The diffusion models trained on fast-folding proteins are taken directly from [Two for One](https://github.com/microsoft/two-for-one-diffusion), while the flow matching models and all-atom tetrapeptide models are trained ourselves using ```main_train.py```.
 
 
-For each protein, we provide a ```model-best.pt``` file with the checkpoint corresponding to the best validation loss as well as an ```args.pickle``` file containing the arguments used for that run.
+For each protein, we provide a ```model-best.pt``` and```model-best-flow.pt``` file with the checkpoint corresponding to the best validation loss for diffusion and flow matching respectively, as well as an ```args.pickle``` and ```args-flow.pickle``` file containing the arguments used for that run.
 
 ### Sampling
-Sampling for each protein can be done in either the i.i.d. setting or the dynamics setting using the [sample script](./sample.py). As an example, we show simple commands for obtaining chignolin samples in both settings. We refer to ```python sample.py --help``` for more sampling options and an explanation of all individual arguments. 
-
-
-
-## Training the diffusion model
-The DFF model was trained from scratch using the [training script](./main_train.py). The underlying code for the DDPM and graph transformer can be found in the [models folder](./models/). For training options, please check:
+Transition path sampling for each protein can be done using the [sample script](./sample.py). Here is an example of how to sample 32 transition paths of the BBA protein using OM optimization:
 
 ```bash
-python main_train.py --help
+python sample.py \
+    --model_path saved_models/bba \
+    --gen_mode om_interpolate \
+    --atom_selection c-alpha \
+    --num_samples_eval 32 \
+    --batch_size_gen 2 \
+    --latent_time 20 \
+    --initial_guess_level 250\
+    --no_encode_and_decode \
+    --action hutch \
+    --optimizer sgd \
+    --lr 1e-5 \
+    --append_exp_name test_initial_latent_time_250_hutch_minus_SGD_32paths_physical_params_FINAL \
+    --om_dt 0.001 \
+    --om_gamma 1 \
+    --om_d 1 \
+    --path_length 200 \
+    --path_batch_size 200 \
+    --steps 5000
 ```
+
+Refer to ```python sample.py --help``` for more sampling options and an explanation of all individual arguments. Exact commands to reproduce results in the paper can be found [here](./evaluate/sampling_commands.md).
+
+### Evaluation
+Running the above sampling script will produce a folder in ```saved_models/``` with all evaluation metrics reported in the paper. Evaluation can also be run in a standalone fashion for [fast-folding proteins](./evaluate/evaluate_fastfolders.py) and [tetrapeptides](./evaluate/evaluate_tetrapeptides.py).
 
 ***
 
