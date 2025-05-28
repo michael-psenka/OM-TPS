@@ -145,9 +145,7 @@ def evaluate_tetrapeptide(
         )  # also loads iid samples based on gen mode
         gen_traj_cat = np.concatenate(gen_traj_list, axis=0)
         # Load metadata from MDGen
-        out = pickle.load(
-            open(f"mdgen/metadata/{name}_metadata.pkl", "rb")
-        )
+        out = pickle.load(open(f"mdgen/metadata/{name}_metadata.pkl", "rb"))
         msm = out["msm"]
         cmsm = out["cmsm"]
         kmeans = out["kmeans"]

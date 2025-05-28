@@ -520,7 +520,6 @@ def generate_samples(
 
     else:
         protein_name = "tetrapeptide"
-        
 
     # TODO: clean up this stuff
     if "tetrapeptide" in protein_name:
@@ -546,7 +545,7 @@ def generate_samples(
             if z[i] != 0:
                 masses[i] = samp_args.masses[count]
                 count += 1
-        
+
     else:
 
         all_atom_append = (
@@ -765,13 +764,13 @@ def generate_samples(
                 optimizer = torch.optim.SGD
             else:
                 raise Exception("Invalid argument 'optimizer'")
-            
+
             if masses is None:
                 if "alanine" in args.mol:
                     masses = [12.8] * trainset.num_beads
                 else:
                     masses = [12.0] * trainset.num_beads
-            
+
             interpolator = (
                 OMInterpolatorWrapper(
                     model.ema_model,
