@@ -232,7 +232,15 @@ class DihedralEnergiesEvaluator:
             )
         return dihedral_mse, dihedral_js, kl_1, kl_2
 
-    def _plot_freeE_2d(self, probs, file_name, plot_title="", save_plot=True):
+    def _plot_freeE_2d(
+        self,
+        probs,
+        file_name,
+        endpoints=None,
+        optimized_path=None,
+        plot_title="",
+        save_plot=True,
+    ):
         """
         Plot dihedral free energy and save plot.
         """
@@ -241,15 +249,38 @@ class DihedralEnergiesEvaluator:
         plot_free_E_2d(
             probs,
             ax,
-            unit_conv=K_BT_IN_KCAL_PER_MOL,
+            # unit_conv=K_BT_IN_KCAL_PER_MOL,
             cax=None,
             title=plot_title,
             n_bins=self.n_bins,
         )
         plt.xticks([-math.pi, 0, math.pi], ["-π", "0", "π"])
         plt.yticks([-math.pi, 0, math.pi], ["-π", "0", "π"])
+        plt.xlim(-math.pi, math.pi)
+        plt.ylim(-math.pi, math.pi)
         plt.xlabel("ϕ")
         plt.ylabel("ψ")
+        if optimized_path is not None:
+            plt.scatter(
+                optimized_path[:, 0],
+                optimized_path[:, 1],
+                color="gray",
+                linewidth=2,
+                linestyle="-",
+                zorder=2,
+            )
+        if endpoints is not None:
+            endpoints = endpoints.reshape(-1, 2)
+            for i, point in enumerate(endpoints):
+                plt.scatter(
+                    point[0],
+                    point[1],
+                    marker="X",
+                    c="blue" if i % 2 == 0 else "red",
+                    s=150,
+                    linewidth=0,
+                    zorder=3,
+                )
         if save_plot:
             plt.savefig(file_name)
         plt.show()
