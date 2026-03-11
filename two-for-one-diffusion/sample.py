@@ -337,6 +337,8 @@ def main(samp_args):
         samp_args.temp_sim = samp_args.temp_sim
 
     basic_append = f"_{samp_args.gen_mode}"
+    if samp_args.append_exp_name is None:
+        samp_args.append_exp_name = ""
     transition_removed_append = (
         "_transition_data_removed" if samp_args.transition_data_removed else ""
     )
@@ -351,7 +353,7 @@ def main(samp_args):
 
     samp_args.append_exp_name = (
         basic_append
-        if samp_args.append_exp_name is None
+        if not samp_args.append_exp_name
         else f"{basic_append}_{samp_args.append_exp_name}"
     )
 
@@ -558,7 +560,7 @@ def generate_samples(
 
         # set atomic numbers for all-atom proteins
         z = (
-            [atom.element.number for atom in list(topology.atoms)]
+            torch.tensor([atom.element.number for atom in list(topology.atoms)])
             if samp_args.atom_selection == AtomSelection.PROTEIN
             else None
         )
