@@ -1302,6 +1302,10 @@ def sample_interpolations_from_model(
     """
     Sample interpolations from the model.
     """
+    # Store z on the interpolator so DataParallel doesn't split it
+    unwrapped = interpolator.module if hasattr(interpolator, 'module') else interpolator
+    unwrapped.set_z(z)
+
     num_paths = endpoint_1_samples.shape[0] // torch.cuda.device_count()
     print(
         f"Generating {num_paths} interpolation paths per GPU. This may take some time."
@@ -1314,7 +1318,7 @@ def sample_interpolations_from_model(
     endpoint_1_split = endpoint_1_samples.split(batch_size)
     endpoint_2_split = endpoint_2_samples.split(batch_size)
     for i, (x1, x2) in enumerate(zip(endpoint_1_split, endpoint_2_split)):
-        output = interpolator(x1, x2, z)
+        output = interpolator(x1, x2)
         all_path_list.append(output["final_path"])
 
         if "all_paths" in output.keys():
@@ -1348,7 +1352,7 @@ def sample_interpolations_from_model(
             }
         )
 
-    print(f"{int(len(all_path) / interpolator.path_length)} paths generated")
+    print(f"{int(len(all_path) / unwrapped.path_length)} paths generated")
 
     return output
 
