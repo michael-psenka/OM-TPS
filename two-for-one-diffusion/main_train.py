@@ -391,12 +391,7 @@ if __name__ == "__main__":
         tetra_atom_selection=args.atom_selection,
     )
 
-    # temp hard coding
-    norm_factor = (
-        3.6533 if args.mol == "chignolin" else 5.094
-    )  # trainset.std if args.scale_data else 1.0  # 3.6533
-    if args.mol == "alanine_dipeptide":
-        norm_factor = trainset.std if args.scale_data else 1.0
+    norm_factor = trainset.std if args.scale_data else 1.0
 
     # Set device
     # Note: Code does not work for cpu in current form
@@ -436,7 +431,8 @@ if __name__ == "__main__":
             topology = md.load_topology(f"./datasets/folded_pdbs/ala2_cg.pdb") # CG
         else:
             topology = md.load_topology(f"./datasets/folded_pdbs/ala2.pdb") # All atom
-
+    elif "tetrapeptides" in args.mol:
+        topology = trainset.topoloy if hasattr(trainset, "topology") else None
     else:
         topology = md.load_topology(
             f"./datasets/folded_pdbs/{Molecules[args.mol.upper()].value}-0-{args.atom_selection.value}.pdb"
