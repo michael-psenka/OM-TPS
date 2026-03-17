@@ -116,6 +116,8 @@ def evaluate_ala2(
             original_path_history = deepcopy(path_history)
             path_history = path_history[:, :, [4, 6, 8, 14, 16]]
 
+        loop = path_history
+
         # Sample at most 100 evenly spaced steps for the GIF
         if len(loop) > 100:
             indices = np.linspace(0, len(loop) - 1, 100, dtype=int)
@@ -167,7 +169,6 @@ def evaluate_ala2(
             plt.xlabel("Path Step")
             plt.ylabel("Potential Energy (kcal/mol)")
             plt.title(f"Step {i}: Transition energy profile: Alanine Dipeptide")
-            plt.show()
             file_name = join(gif_folder, f"energy_{i}.png")
             plt.savefig(file_name)
             plt.close()

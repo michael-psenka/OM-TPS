@@ -672,7 +672,7 @@ def generate_samples(
                     )
                 )
                 cluster_coords = np.load(cluster_centers_path)
-                gt_traj_path = "/data/sanjeevr/Ala2Train/trajectories600.0K.pt"
+                gt_traj_path = "/data/sanjeevr/Ala2Train/trajectories1000.0K.pt"
 
                 if os.path.exists(gt_traj_path):
                     gt_traj = (

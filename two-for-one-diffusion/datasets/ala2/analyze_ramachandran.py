@@ -9,7 +9,7 @@ from utils import get_psi_angle, get_phi_angle
 
 def main():
     parser = argparse.ArgumentParser(description="Analyze Ramachandran angles from trajectory")
-    parser.add_argument("--trajectory", type=str, default="langevin_trajectories/trajectories600.0K.pt", help="Path to trajectory file")
+    parser.add_argument("--trajectory", type=str, default="langevin_trajectories/trajectories1000.0K.pt", help="Path to trajectory file")
     parser.add_argument("--output", type=str, default="ramachandran.png", help="Output plot filename")
     args = parser.parse_args()
 
